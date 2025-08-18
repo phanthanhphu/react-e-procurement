@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, message, Card, Row, Col } from 'antd';
+import { Button, Space, message, Card, Row, Col } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -120,10 +120,46 @@ const GroupRequestPage = () => {
 
   return (
     <div style={{ padding: '30px 50px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      <h2 style={{ textAlign: 'center', fontSize: '28px', fontWeight: 700, marginBottom: '20px', color: '#1e3a8a' }}>
-        Request Group Management
+      {/* Title section */}
+      <h2 style={{
+        textAlign: 'left',  // Canh trái tiêu đề
+        fontSize: '1rem',  // Adjusted to 1rem (16px)
+        fontWeight: 600,
+        marginBottom: '12px',  // Margin-bottom as per the CSS
+        color: '#1976d2',  // The color #1976d2
+        lineHeight: 1.5,  // Line height as specified
+        fontFamily: 'Inter, sans-serif',  // Assuming 'Inter' is available or added as a web font
+      }}>
+        Supplier Group Management
       </h2>
 
+      {/* Add Button: Now placed above the search bar */}
+      <div style={{ marginBottom: '20px', textAlign: 'right' }}>
+        <Button 
+          type="primary" 
+          icon={<PlusOutlined />} 
+          onClick={() => setIsAddModalVisible(true)}
+          style={{
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            borderColor: '#0288d1',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: '14px',
+            borderRadius: '10px',
+            padding: '8px 20px',
+            boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+            '&:hover': {
+              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+            }
+          }}
+        >
+          Add New Request Group
+        </Button>
+      </div>
+
+
+      {/* Search bar section */}
       <GroupSearchBar
         nameFilter={nameFilter}
         statusFilter={statusFilter}
@@ -137,40 +173,21 @@ const GroupRequestPage = () => {
         handleReset={handleReset}
       />
 
-      <div style={{ marginBottom: '20px', textAlign: 'right' }}>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          onClick={() => setIsAddModalVisible(true)}
-          style={{
-            background: 'linear-gradient(135deg, #4fc3f7, #0288d1)',
-            borderColor: '#0288d1',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: '14px',
-            borderRadius: '10px',
-            padding: '8px 20px',
-          }}
-        >
-          Add New Request Group
-        </Button>
-      </div>
-
-      {/* Display Groups as Cards with 10 per row */}
+      {/* Display Groups as Cards */}
       <Row gutter={[12, 12]} wrap>
         {filteredData.map((group) => (
           <Col flex="10%" key={group.id}>
             <Card
               bordered={false}
               size="small"
-              style={{ 
-                borderRadius: '10px', 
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)', 
-                textAlign: 'center', 
-                height: '100%', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                justifyContent: 'space-between' 
+              style={{
+                borderRadius: '10px',
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                textAlign: 'center',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between'
               }}
             >
               {/* Header: Title + Edit/Delete */}
@@ -181,13 +198,25 @@ const GroupRequestPage = () => {
                     size="small"
                     icon={<EditOutlined />}
                     onClick={() => { setCurrentItem(group); setIsEditModalVisible(true); }}
-                    style={{ backgroundColor: '#81c784', borderColor: '#388e3c', color: '#fff' }}
+                    style={{
+                      backgroundColor: '#81c784',
+                      borderColor: '#388e3c',
+                      color: '#fff',
+                      fontWeight: 500,
+                      fontSize: '0.75rem',
+                    }}
                   />
                   <Button
                     size="small"
                     icon={<DeleteOutlined />}
                     onClick={() => handleDelete(group.id)}
-                    style={{ backgroundColor: '#e57373', borderColor: '#c62828', color: '#fff' }}
+                    style={{
+                      backgroundColor: '#e57373',
+                      borderColor: '#c62828',
+                      color: '#fff',
+                      fontWeight: 500,
+                      fontSize: '0.75rem',
+                    }}
                   />
                 </div>
               </div>
@@ -205,7 +234,14 @@ const GroupRequestPage = () => {
                   size="small"
                   icon={<EyeOutlined />}
                   onClick={() => navigate(`/dashboard/summary/${group.id}`)}
-                  style={{ width: '100%', backgroundColor: '#64b5f6', borderColor: '#1976d2', color: '#fff' }}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#64b5f6',
+                    borderColor: '#1976d2',
+                    color: '#fff',
+                    fontWeight: 500,
+                    fontSize: '0.75rem',
+                  }}
                 >
                   View Summary
                 </Button>

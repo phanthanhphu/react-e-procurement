@@ -28,18 +28,18 @@ import { API_BASE_URL } from '../../config';
 
 const headers = [
   { label: 'No', key: 'no' },
-  { label: 'English name', key: 'englishName' },
-  { label: 'Vietnamese name', key: 'vietnameseName' },
-  { label: 'Old sap', key: 'oldSapCode' },
-  { label: 'New sap', key: 'newSapCode' },
-  { label: 'Unit', key: 'unit' },
+  { label: 'Item Description (EN)', key: 'englishName' },
+  { label: 'Item Description (VN)', key: 'vietnameseName' },
+  { label: 'Old SAP Code', key: 'oldSapCode' }, 
+  { label: 'SAP Code in New SAP', key: 'newSapCode' },
+  { label: 'Order Unit', key: 'unit' }, 
   { label: 'Dept qty', key: 'departmentRequestQty' },
   { label: 'Total qty', key: 'totalRequestQty' },
   { label: 'Supplier', key: 'supplierName' },
   { label: 'Sup. price', key: 'supplierPrice' },
   { label: 'Total price', key: 'totalPrice' },
   { label: 'Stock', key: 'stock' },
-  { label: 'Purch. suggest', key: 'purchasingSuggest' },
+  { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
   { label: 'Reason', key: 'reason' },
   { label: 'Remark', key: 'remark' },
   { label: 'Actions', key: 'actions' },
@@ -357,17 +357,18 @@ export default function SummaryPage() {
                           {supplierProduct.name}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct.price.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
+                          {supplierProduct.price.toLocaleString('vi-VN', {
+                            style: 'currency',
+                            currency: 'VND',
                           })}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </TableCell>
+                  <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
+                    {totalPrice.toLocaleString('vi-VN', {
+                      style: 'currency',
+                      currency: 'VND',
+                    })}
+                  </TableCell>
+
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.stock}
                         </TableCell>

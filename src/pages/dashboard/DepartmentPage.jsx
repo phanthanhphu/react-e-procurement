@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Grid, Typography, IconButton, Stack, Dialog, DialogActions,
-  DialogContent, DialogTitle, Button
+  Grid,
+  Typography,
+  IconButton,
+  Stack,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+  TextField,
+  Paper,
+  useTheme,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -10,10 +24,94 @@ import factoryImage from '../../assets/svg/logos/factory_1.png';
 
 const API_URL = 'http://10.232.100.50:8080/api/departments';
 
+function DepartmentSearch({ onSearch, onReset }) {
+  const [searchName, setSearchName] = useState('');
+  const theme = useTheme();
+
+  const handleSearchClick = () => {
+    onSearch?.(searchName.trim());
+  };
+
+  const handleReset = () => {
+    setSearchName('');
+    onReset?.();
+  };
+
+  return (
+    <Paper
+      elevation={3}
+      sx={{
+        p: 2,
+        mb: 3,
+        background: 'linear-gradient(to right, #f7faff, #ffffff)',
+        borderRadius: 3,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        border: `1px solid ${theme.palette.divider}`,
+        overflowX: 'auto',
+      }}
+    >
+      {/* Table bao quanh input và nút */}
+      <Table sx={{ minWidth: 300 }}>
+        <TableBody>
+          <TableRow>
+            <TableCell sx={{ width: '70%', borderBottom: 'none', paddingRight: 1 }}>
+              <TextField
+                fullWidth
+                label="Department Name"
+                variant="outlined"
+                size="small"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+              />
+            </TableCell>
+            <TableCell sx={{ width: '30%', borderBottom: 'none', paddingLeft: 1 }}>
+              <Grid container spacing={1} justifyContent="flex-start" alignItems="center">
+                <Grid item>
+                  <Button
+                    variant="contained"
+                    onClick={handleSearchClick}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+                      color: '#fff',
+                      px: 3,
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    Search
+                  </Button>
+                </Grid>
+                <Grid item>
+                  <Button
+                    variant="outlined"
+                    onClick={handleReset}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      px: 3,
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      color: theme.palette.grey[800],
+                      borderColor: theme.palette.grey[400],
+                    }}
+                  >
+                    Reset
+                  </Button>
+                </Grid>
+              </Grid>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </Paper>
+  );
+}
+
 export default function DepartmentManagement() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -25,14 +123,6 @@ export default function DepartmentManagement() {
   useEffect(() => {
     fetchDepartments();
   }, []);
-
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      searchDepartmentsByName(searchTerm);
-    }, 500); // Debounce 500ms
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
 
   const fetchDepartments = async () => {
     setLoading(true);
@@ -81,6 +171,10 @@ export default function DepartmentManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = (term) => {
+    searchDepartmentsByName(term);
   };
 
   const handleAdd = async () => {
@@ -151,72 +245,48 @@ export default function DepartmentManagement() {
         variant="h4"
         gutterBottom
         style={{
-          textAlign: 'center',
-          fontFamily: 'Poppins, sans-serif',
-          fontWeight: 700,
-          color: '#1e3a8a',
+          textAlign: 'left',
+          fontSize: '1rem',
+          fontWeight: 600,
+          marginBottom: '12px',
+          color: '#1976d2',
+          lineHeight: 1.5,
+          fontFamily: 'Inter, sans-serif',
         }}
       >
         Department Management
       </Typography>
 
-      {/* Search and Add button in the same row */}
-      <Grid container spacing={3} justifyContent="center" alignItems="center">
-        {/* Search Box */}
-        <Grid item xs={12} sm={6} md={8}>
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search department by name..."
-              style={{
-                width: '100%',
-                padding: '10px 16px',
-                fontSize: '16px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                outline: 'none',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-            />
-          </div>
-        </Grid>
-
-        {/* Button Add */}
-        <Grid item xs={12} sm={6} md={4}>
-          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setAddDialogOpen(true)}
-              style={{
-                background: 'linear-gradient(135deg, #a5d6a7 0%, #66bb6a 100%)',
-                color: '#fff',
-                padding: '10px 24px',
-                fontSize: '16px',
-                borderRadius: '12px',
-                fontWeight: 500,
-                fontFamily: 'Poppins, sans-serif',
-              }}
-            >
-              Add Department
-            </Button>
-          </div>
-        </Grid>
+      {/* Nút Add Department trên cùng, nằm bên phải */}
+      <Grid container justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setAddDialogOpen(true)}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            color: '#fff',
+            px: 3,
+            borderRadius: '8px',
+            fontSize: '0.875rem',
+          }}
+        >
+          Add Department
+        </Button>
       </Grid>
 
+      {/* Tìm kiếm rộng bằng bảng */}
+      <DepartmentSearch onSearch={handleSearch} onReset={fetchDepartments} />
+
+      {/* Department Cards */}
       <Grid container spacing={3} justifyContent="center">
         {loading ? (
           <Typography
             variant="h6"
             align="center"
-            style={{
-              width: '100%',
-              color: '#9ca3af',
-              fontStyle: 'italic',
-              marginTop: '20px',
-            }}
+            style={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', marginTop: '20px' }}
           >
             Loading departments...
           </Typography>
@@ -224,12 +294,7 @@ export default function DepartmentManagement() {
           <Typography
             variant="h6"
             align="center"
-            style={{
-              width: '100%',
-              color: '#9ca3af',
-              fontStyle: 'italic',
-              marginTop: '20px',
-            }}
+            style={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', marginTop: '20px' }}
           >
             No departments found.
           </Typography>
@@ -272,21 +337,13 @@ export default function DepartmentManagement() {
                     backgroundColor: '#f0f9ff',
                   }}
                 />
-                <Typography
-                  variant="h6"
-                  style={{
-                    fontWeight: 600,
-                    fontFamily: 'Poppins, sans-serif',
-                    color: '#374151',
-                  }}
-                >
+                <Typography variant="h6" style={{ fontWeight: 600, fontFamily: 'Poppins, sans-serif', color: '#374151' }}>
                   {department.name}
                 </Typography>
-
                 <Stack direction="row" spacing={2} justifyContent="center" marginTop="auto">
                   <IconButton
                     onClick={() => handleEdit(department)}
-                    style={{
+                    sx={{
                       background: 'linear-gradient(135deg, #90caf9 0%, #42a5f5 100%)',
                       color: '#fff',
                       borderRadius: '50%',
@@ -297,7 +354,7 @@ export default function DepartmentManagement() {
                   </IconButton>
                   <IconButton
                     onClick={() => handleDelete(department)}
-                    style={{
+                    sx={{
                       background: 'linear-gradient(135deg, #ef9a9a 0%, #e57373 100%)',
                       color: '#fff',
                       borderRadius: '50%',
@@ -313,11 +370,11 @@ export default function DepartmentManagement() {
         )}
       </Grid>
 
-      {/* Dialog: Edit */}
+      {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={handleCancelEdit}>
         <DialogTitle>Edit Department</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" style={{ marginBottom: '10px', color: '#374151' }}>
+          <Typography variant="body2" sx={{ mb: 1, color: '#374151' }}>
             Update the department name:
           </Typography>
           <input
@@ -336,50 +393,81 @@ export default function DepartmentManagement() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelEdit} color="primary">Cancel</Button>
-          <Button onClick={handleUpdate} variant="contained" color="primary">Save</Button>
+          <Button onClick={handleCancelEdit} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleUpdate} variant="contained" color="primary">
+            Save
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog: Delete */}
+      {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
         <DialogTitle>Delete Department</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" style={{ color: '#374151' }}>
+          <Typography variant="body1" sx={{ color: '#374151' }}>
             Are you sure you want to delete this department?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary">Cancel</Button>
-          <Button onClick={handleConfirmDelete} variant="contained" color="error">Delete</Button>
+          <Button onClick={handleCancelDelete} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} variant="contained" color="error">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog: Add */}
+      {/* Add Dialog */}
       <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)}>
         <DialogTitle>Add New Department</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" style={{ marginBottom: '10px', color: '#374151' }}>
+          <Typography variant="body2" sx={{ mb: 1, color: '#374151' }}>
             Enter the new department name:
           </Typography>
-          <input
-            type="text"
+          <TextField
+            fullWidth
+            variant="outlined"
+            size="small"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="New department name"
-            style={{
-              width: '100%',
-              padding: '12px',
-              fontSize: '16px',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              outline: 'none',
-            }}
+            sx={{ mb: 2 }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddDialogOpen(false)} color="primary">Cancel</Button>
-          <Button onClick={handleAdd} variant="contained" color="success">Add</Button>
+          <Button
+            onClick={() => setAddDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 500,
+              borderRadius: '8px',
+              px: 3,
+              fontSize: '0.875rem',
+              color: (theme) => theme.palette.grey[800],
+              borderColor: (theme) => theme.palette.grey[400],
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAdd}
+            variant="contained"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 500,
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              px: 3,
+              borderRadius: '8px',
+              fontSize: '0.875rem',
+            }}
+          >
+            Add
+          </Button>
         </DialogActions>
       </Dialog>
     </div>
