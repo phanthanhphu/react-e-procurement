@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Table, Space, message } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, message, Card, Row, Col } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 
@@ -46,12 +46,10 @@ const deleteGroup = async (id) => {
 const GroupRequestPage = () => {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
-
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
-
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -120,89 +118,6 @@ const GroupRequestPage = () => {
     setFilteredData(data);
   };
 
-  const columns = [
-    {
-      title: 'No.',
-      key: 'index',
-      render: (text, record, index) => index + 1,
-      width: '60px',
-      align: 'center',
-      className: 'table-column-header',
-    },
-    {
-      title: 'Request Group Name',
-      dataIndex: 'name',
-      key: 'name',
-      className: 'table-column-header',
-    },
-    {
-      title: 'Request Status',
-      dataIndex: 'status',
-      key: 'status',
-      className: 'table-column-header',
-    },
-    {
-      title: 'Created By (User)',
-      dataIndex: 'createdBy',
-      key: 'createdBy',
-      className: 'table-column-header',
-    },
-    {
-      title: 'Created Date',
-      dataIndex: 'createdDate',
-      key: 'createdDate',
-      render: (text) => text ? dayjs(text).format('YYYY-MM-DD') : '',
-      className: 'table-column-header',
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (text, record) => (
-        <Space style={{ justifyContent: 'center', width: '100%' }}>
-          <Button 
-            icon={<EditOutlined />} 
-            onClick={() => { setCurrentItem(record); setIsEditModalVisible(true); }} 
-            style={{ 
-              background: 'linear-gradient(135deg, #81c784, #388e3c)',
-              borderColor: '#388e3c', 
-              color: '#fff',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '6px',
-            }}
-          />
-          <Button 
-            icon={<DeleteOutlined />} 
-            onClick={() => handleDelete(record.id)} 
-            danger
-            style={{
-              background: 'linear-gradient(135deg, #e57373, #c62828)',
-              borderColor: '#c62828',
-              color: 'white',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '6px',
-            }}
-          />
-          <Button 
-            onClick={() => navigate(`/dashboard/summary/${record.id}`)}
-            style={{ 
-              background: 'linear-gradient(135deg, #64b5f6, #1976d2)', 
-              borderColor: '#1976d2', 
-              color: 'white',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '6px',
-            }}
-          >
-            View Summary
-          </Button>
-        </Space>
-      ),
-      align: 'center',
-    },
-  ];
-
   return (
     <div style={{ padding: '30px 50px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       <h2 style={{ textAlign: 'center', fontSize: '28px', fontWeight: 700, marginBottom: '20px', color: '#1e3a8a' }}>
@@ -241,15 +156,64 @@ const GroupRequestPage = () => {
         </Button>
       </div>
 
-      <Table 
-        columns={columns} 
-        dataSource={filteredData} 
-        rowKey="id" 
-        pagination={{ pageSize: 10 }} 
-        bordered
-        size="middle"
-        style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden' }}
-      />
+      {/* Display Groups as Cards with 10 per row */}
+      <Row gutter={[12, 12]} wrap>
+        {filteredData.map((group) => (
+          <Col flex="10%" key={group.id}>
+            <Card
+              bordered={false}
+              size="small"
+              style={{ 
+                borderRadius: '10px', 
+                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)', 
+                textAlign: 'center', 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                justifyContent: 'space-between' 
+              }}
+            >
+              {/* Header: Title + Edit/Delete */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>{group.name}</span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => { setCurrentItem(group); setIsEditModalVisible(true); }}
+                    style={{ backgroundColor: '#81c784', borderColor: '#388e3c', color: '#fff' }}
+                  />
+                  <Button
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(group.id)}
+                    style={{ backgroundColor: '#e57373', borderColor: '#c62828', color: '#fff' }}
+                  />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div style={{ fontSize: '12px', textAlign: 'left', marginTop: '8px', flexGrow: 1 }}>
+                <p style={{ margin: '2px 0' }}><strong>Status:</strong> {group.status}</p>
+                <p style={{ margin: '2px 0' }}><strong>Created By:</strong> {group.createdBy}</p>
+                <p style={{ margin: '2px 0' }}><strong>Date:</strong> {dayjs(group.createdDate).format('YYYY-MM-DD')}</p>
+              </div>
+
+              {/* Footer: View Summary */}
+              <div style={{ marginTop: '8px' }}>
+                <Button
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => navigate(`/dashboard/summary/${group.id}`)}
+                  style={{ width: '100%', backgroundColor: '#64b5f6', borderColor: '#1976d2', color: '#fff' }}
+                >
+                  View Summary
+                </Button>
+              </div>
+            </Card>
+          </Col>
+        ))}
+      </Row>
 
       {/* Modals */}
       <AddGroupModal 

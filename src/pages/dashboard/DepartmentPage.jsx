@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react';
 import {
   Grid, Typography, IconButton, Stack, Dialog, DialogActions,
   DialogContent, DialogTitle, Button
@@ -160,44 +160,51 @@ export default function DepartmentManagement() {
         Department Management
       </Typography>
 
-      {/* Search Box */}
-      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search department by name..."
-          style={{
-            width: '300px',
-            padding: '10px 16px',
-            fontSize: '16px',
-            border: '1px solid #cbd5e1',
-            borderRadius: '8px',
-            outline: 'none',
-            fontFamily: 'Poppins, sans-serif',
-          }}
-        />
-      </div>
+      {/* Search and Add button in the same row */}
+      <Grid container spacing={3} justifyContent="center" alignItems="center">
+        {/* Search Box */}
+        <Grid item xs={12} sm={6} md={8}>
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search department by name..."
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                fontSize: '16px',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                outline: 'none',
+                fontFamily: 'Poppins, sans-serif',
+              }}
+            />
+          </div>
+        </Grid>
 
-      {/* Button Add */}
-      <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setAddDialogOpen(true)}
-          style={{
-            background: 'linear-gradient(135deg, #a5d6a7 0%, #66bb6a 100%)',
-            color: '#fff',
-            padding: '10px 24px',
-            fontSize: '16px',
-            borderRadius: '12px',
-            fontWeight: 500,
-            fontFamily: 'Poppins, sans-serif',
-          }}
-        >
-          Add Department
-        </Button>
-      </div>
+        {/* Button Add */}
+        <Grid item xs={12} sm={6} md={4}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setAddDialogOpen(true)}
+              style={{
+                background: 'linear-gradient(135deg, #a5d6a7 0%, #66bb6a 100%)',
+                color: '#fff',
+                padding: '10px 24px',
+                fontSize: '16px',
+                borderRadius: '12px',
+                fontWeight: 500,
+                fontFamily: 'Poppins, sans-serif',
+              }}
+            >
+              Add Department
+            </Button>
+          </div>
+        </Grid>
+      </Grid>
 
       <Grid container spacing={3} justifyContent="center">
         {loading ? (
