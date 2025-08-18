@@ -47,23 +47,29 @@ const headers = [
 
 function DeptRequestTable({ deptRequestQty }) {
   if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>No Data</Typography>;
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
   }
 
   return (
     <Table
       size="small"
-      sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}
+      sx={{
+        minWidth: 180,
+        border: '1px solid #ddd',
+        borderRadius: 1,
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+      }}
     >
       <TableHead>
-        <TableRow>
+        <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
           <TableCell
             sx={{
-              fontWeight: 'bold',
-              fontSize: '0.7rem',
-              backgroundColor: '#f0f0f0',
-              py: 0.5,
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              py: 0.6,
               px: 1,
+              color: '#1976d2',
             }}
           >
             Dept
@@ -71,11 +77,11 @@ function DeptRequestTable({ deptRequestQty }) {
           <TableCell
             align="center"
             sx={{
-              fontWeight: 'bold',
-              fontSize: '0.7rem',
-              backgroundColor: '#f0f0f0',
-              py: 0.5,
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              py: 0.6,
               px: 1,
+              color: '#1976d2',
             }}
           >
             Qty
@@ -84,9 +90,16 @@ function DeptRequestTable({ deptRequestQty }) {
       </TableHead>
       <TableBody>
         {Object.entries(deptRequestQty).map(([dept, qty], idx) => (
-          <TableRow key={idx}>
-            <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{dept}</TableCell>
-            <TableCell align="center" sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>
+          <TableRow
+            key={idx}
+            sx={{
+              '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
+              '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
+              fontSize: '0.75rem',
+            }}
+          >
+            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>{dept}</TableCell>
+            <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
               {qty}
             </TableCell>
           </TableRow>
@@ -170,50 +183,70 @@ export default function SummaryPage() {
   const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
-    <Box sx={{ p: 2, fontSize: '0.75rem', fontFamily: 'Arial, sans-serif' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+    <Box
+      sx={{
+        p: 3,
+        fontSize: '0.85rem',
+        fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+        backgroundColor: '#f5f8fa',
+        minHeight: '100vh',
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        mb={3}
+        sx={{ userSelect: 'none' }}
+      >
         <Typography
-          variant="h6"
+          variant="h5"
           sx={{
             fontWeight: 700,
-            color: theme.palette.primary.main,
-            letterSpacing: '0.03em',
-            userSelect: 'none',
-            fontSize: '0.9rem',
+            color: theme.palette.primary.dark,
+            letterSpacing: '0.05em',
           }}
         >
           Summary List
         </Typography>
 
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon fontSize="small" />}
-            onClick={handleOpenAddDialog}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 1,
-              px: 2,
-              py: 0.6,
-              fontWeight: 600,
-              fontSize: '0.75rem',
-            }}
-          >
-            Add New
-          </Button>
+<Button
+  variant="contained"
+  startIcon={<AddIcon fontSize="small" />}
+  onClick={handleOpenAddDialog}
+  sx={{
+    textTransform: 'none',
+    borderRadius: 2,
+    px: 3,
+    py: 0.75,
+    fontWeight: 700,
+    fontSize: '0.85rem',
+    background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+    color: '#fff',
+    boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+    '&:hover': {
+      background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+      boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+    },
+  }}
+>
+  Add New
+</Button>
+
         </Stack>
       </Stack>
 
       {loading && (
-        <Typography align="center" sx={{ color: '#888', fontSize: '0.8rem', mt: 4 }}>
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
           Loading data...
         </Typography>
       )}
       {error && (
         <Typography
           align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 600, fontSize: '0.8rem', mt: 4 }}
+          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.9rem', mt: 4 }}
         >
           {error}
         </Typography>
@@ -223,47 +256,52 @@ export default function SummaryPage() {
         <>
           <TableContainer
             component={Paper}
-            elevation={3}
+            elevation={4}
             sx={{
-              borderRadius: 1.5,
+              borderRadius: 2,
               overflowX: 'auto',
-              maxHeight: 600,
-              width: '100%',
+              maxHeight: 640,
+              boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
             <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
               <TableHead>
                 <TableRow>
                   {headers.map(({ label, key }) => (
-                    <TableCell
-                      key={key}
-                      align={
-                        ['No', 'Total qty', 'Sup. price', 'Total price', 'Stock', 'Purch. suggest'].includes(label)
-                          ? 'center'
-                          : label === 'Actions'
-                          ? 'center'
-                          : 'left'
-                      }
-                      sx={{
-                        backgroundColor: theme.palette.primary.main,
-                        fontWeight: 700,
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        borderBottom: 'none',
-                        px: 1.5,
-                        py: 1,
-                        whiteSpace: 'nowrap',
-                        textTransform: 'none',
-                        letterSpacing: '0.05em',
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 10,
-                      }}
-                    >
-                      <Tooltip title={label} arrow>
-                        <span>{label}</span>
-                      </Tooltip>
-                    </TableCell>
+<TableCell
+  key={key}
+  align={
+    ['No', 'Price', 'Unit', 'Action'].includes(label)
+      ? 'center'
+      : label === 'Action'
+      ? 'center'
+      : 'left'
+  }
+  sx={{
+    background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
+    fontWeight: 700,
+    color: '#fff',
+    fontSize: '0.85rem',
+    borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
+    px: 2,
+    py: 1.2,
+    whiteSpace: 'nowrap',
+    textTransform: 'capitalize',
+    letterSpacing: '0.05em',
+    userSelect: 'none',
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
+  }}
+>
+  <Tooltip title={label} arrow>
+    <span>{label}</span>
+  </Tooltip>
+</TableCell>
+
+
+
                   ))}
                 </TableRow>
               </TableHead>
@@ -281,72 +319,78 @@ export default function SummaryPage() {
                       <TableRow
                         key={requisition.id}
                         sx={{
-                          backgroundColor: idx % 2 === 0 ? '#fafafa' : '#f4f7fb',
+                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
                           '&:hover': {
-                            backgroundColor: '#e3f2fd',
+                            backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
                           },
-                          fontSize: '0.75rem',
+                          fontSize: '0.8rem',
                           cursor: 'default',
+                          userSelect: 'none',
                         }}
                       >
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
                           {requisition.englishName}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
                           {requisition.vietnameseName}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.oldSapCode}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.newSapCode}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.unit}
                         </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1 }}>
+                        <TableCell sx={{ px: 2, py: 1.2 }}>
                           <DeptRequestTable deptRequestQty={requisition.departmentRequestQty} />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 600 }}>
                           {totalRequestQty}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
                           {supplierProduct.name}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
                           {supplierProduct.price.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
                           {totalPrice.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.stock}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
                           {requisition.purchasingSuggest}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
                           {requisition.reason}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 1.5, py: 1 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
                           {requisition.remark}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1.5, py: 1 }}>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           <Stack direction="row" spacing={1} justifyContent="center">
                             <IconButton
                               aria-label="edit"
                               color="primary"
                               size="small"
+                              sx={{
+                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
+                                borderRadius: 1,
+                              }}
                               onClick={() => handleOpenEditDialog(item)}
                             >
                               <EditIcon fontSize="small" />
@@ -355,6 +399,11 @@ export default function SummaryPage() {
                               aria-label="delete"
                               color="error"
                               size="small"
+                              sx={{
+                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
+                                borderRadius: 1,
+                              }}
                               onClick={() => handleDelete(requisition.id)}
                             >
                               <DeleteIcon fontSize="small" />
@@ -366,8 +415,8 @@ export default function SummaryPage() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 4 }}>
-                      <Stack direction="column" alignItems="center" spacing={1} color="text.secondary">
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 6, color: '#90a4ae' }}>
+                      <Stack direction="column" alignItems="center" spacing={2}>
                         <InboxIcon fontSize="large" />
                         <Typography>No data available.</Typography>
                       </Stack>
@@ -387,7 +436,17 @@ export default function SummaryPage() {
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
             labelRowsPerPage="Rows per page:"
-            sx={{ mt: 1 }}
+            sx={{
+              mt: 3,
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                fontSize: '0.85rem',
+                color: theme.palette.text.secondary,
+              },
+              '.MuiTablePagination-select': { fontSize: '0.85rem' },
+              '.MuiTablePagination-actions > button': {
+                color: theme.palette.primary.main,
+              },
+            }}
           />
         </>
       )}

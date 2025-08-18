@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Table, Space, message, Input, DatePicker } from 'antd';
+import { Button, Table, Space, message } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 
 import AddGroupModal from './AddGroupModal';
 import EditGroupModal from './EditGroupModal';
+import GroupSearchBar from './GroupSearchBar';
 
-const { RangePicker } = DatePicker;
-
-// API URL
 const apiUrl = 'http://10.232.100.50:8080/api/group-summary-requisitions';
 
 const fetchGroups = async () => {
@@ -49,7 +47,6 @@ const GroupRequestPage = () => {
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
 
-  // Search fields
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
@@ -166,12 +163,12 @@ const GroupRequestPage = () => {
             icon={<EditOutlined />} 
             onClick={() => { setCurrentItem(record); setIsEditModalVisible(true); }} 
             style={{ 
-              backgroundColor: '#4CAF50', 
-              borderColor: '#4CAF50', 
-              color: 'white', 
-              marginRight: 8,
+              background: 'linear-gradient(135deg, #81c784, #388e3c)',
+              borderColor: '#388e3c', 
+              color: '#fff',
               fontSize: '0.75rem',
               fontWeight: 600,
+              borderRadius: '6px',
             }}
           />
           <Button 
@@ -179,22 +176,23 @@ const GroupRequestPage = () => {
             onClick={() => handleDelete(record.id)} 
             danger
             style={{
-              backgroundColor: '#F44336', 
-              borderColor: '#F44336', 
-              color: 'white', 
-              marginRight: 8,
+              background: 'linear-gradient(135deg, #e57373, #c62828)',
+              borderColor: '#c62828',
+              color: 'white',
               fontSize: '0.75rem',
               fontWeight: 600,
+              borderRadius: '6px',
             }}
           />
           <Button 
             onClick={() => navigate(`/dashboard/summary/${record.id}`)}
             style={{ 
-              backgroundColor: '#2196F3', 
-              borderColor: '#2196F3', 
+              background: 'linear-gradient(135deg, #64b5f6, #1976d2)', 
+              borderColor: '#1976d2', 
               color: 'white',
               fontSize: '0.75rem',
               fontWeight: 600,
+              borderRadius: '6px',
             }}
           >
             View Summary
@@ -206,54 +204,43 @@ const GroupRequestPage = () => {
   ];
 
   return (
-    <div style={{ padding: '20px 40px' }}>
-      {/* Advanced Search */}
-      <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-        <Input
-          placeholder="Request Group Name"
-          value={nameFilter}
-          onChange={(e) => setNameFilter(e.target.value)}
-          style={{ width: 200 }}
-        />
-        <Input
-          placeholder="Request Status"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ width: 200 }}
-        />
-        <Input
-          placeholder="Created By (User)"
-          value={createdByFilter}
-          onChange={(e) => setCreatedByFilter(e.target.value)}
-          style={{ width: 200 }}
-        />
-        <RangePicker
-          style={{ width: 300 }}
-          value={dateRange}
-          onChange={(dates) => setDateRange(dates || [])}
-        />
-        <Button type="primary" onClick={handleSearch}>Search</Button>
-        <Button onClick={handleReset}>Reset</Button>
+    <div style={{ padding: '30px 50px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+      <h2 style={{ textAlign: 'center', fontSize: '28px', fontWeight: 700, marginBottom: '20px', color: '#1e3a8a' }}>
+        Request Group Management
+      </h2>
+
+      <GroupSearchBar
+        nameFilter={nameFilter}
+        statusFilter={statusFilter}
+        createdByFilter={createdByFilter}
+        dateRange={dateRange}
+        setNameFilter={setNameFilter}
+        setStatusFilter={setStatusFilter}
+        setCreatedByFilter={setCreatedByFilter}
+        setDateRange={setDateRange}
+        handleSearch={handleSearch}
+        handleReset={handleReset}
+      />
+
+      <div style={{ marginBottom: '20px', textAlign: 'right' }}>
+        <Button 
+          type="primary" 
+          icon={<PlusOutlined />} 
+          onClick={() => setIsAddModalVisible(true)}
+          style={{
+            background: 'linear-gradient(135deg, #4fc3f7, #0288d1)',
+            borderColor: '#0288d1',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: '14px',
+            borderRadius: '10px',
+            padding: '8px 20px',
+          }}
+        >
+          Add New Request Group
+        </Button>
       </div>
 
-      {/* Add Button */}
-      <Button 
-        type="primary" 
-        icon={<PlusOutlined />} 
-        onClick={() => setIsAddModalVisible(true)}
-        style={{
-          marginBottom: 20,
-          backgroundColor: '#007BFF', 
-          borderColor: '#007BFF', 
-          color: 'white',
-          fontSize: '0.85rem',
-          fontWeight: 600,
-        }}
-      >
-        Add New Request Group
-      </Button>
-
-      {/* Table */}
       <Table 
         columns={columns} 
         dataSource={filteredData} 
@@ -261,7 +248,7 @@ const GroupRequestPage = () => {
         pagination={{ pageSize: 10 }} 
         bordered
         size="middle"
-        style={{ marginBottom: 20 }}
+        style={{ backgroundColor: '#fff', borderRadius: '12px', overflow: 'hidden' }}
       />
 
       {/* Modals */}

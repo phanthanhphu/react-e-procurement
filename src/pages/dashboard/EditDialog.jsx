@@ -29,7 +29,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
-    if (item) {
+    if (open && item) {
       fetch(`${API_BASE_URL}/api/summary-requisitions/${item.id}`)
         .then(res => res.json())
         .then(data => {
@@ -66,7 +66,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           console.error('Error fetching requisition data:', err);
         });
     }
-  }, [item]);
+  }, [item, open]);
 
   const searchSupplierByName = (query) => {
     if (!query) {

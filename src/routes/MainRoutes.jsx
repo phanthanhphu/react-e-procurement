@@ -1,62 +1,61 @@
 import { lazy } from 'react';
-
-// project-imports
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
 
-// render - Dashboard pages
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
 const SummaryPage = Loadable(lazy(() => import('pages/dashboard/SummaryPage')));
-const SupplierProductsTable = Loadable(lazy(() => import('pages/dashboard/SupplierProductsTable')));  // Route for SupplierProductsTable
-const GroupRequestPage = Loadable(lazy(() => import('pages/dashboard/GroupRequestPage')));  // Import GroupRequestPage
+const SupplierProductsTable = Loadable(lazy(() => import('pages/dashboard/SupplierProductsTable')));
+const GroupRequestPage = Loadable(lazy(() => import('pages/dashboard/GroupRequestPage')));
+const DepartmentPage = Loadable(lazy(() => import('pages/dashboard/DepartmentPage')));  // Thêm DepartmentPage
 
-// render - utils components
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 
-// ==============================|| MAIN ROUTES ||============================== //
-
 const MainRoutes = {
-  path: '/', // Main route path
-  element: <DashboardLayout />, // Main layout wrapper
+  path: '/',
+  element: <DashboardLayout />,
   children: [
     {
       path: '/',
-      element: <DashboardDefault /> // Default dashboard view
+      element: <DashboardDefault />
     },
     {
       path: 'dashboard',
       children: [
         {
           path: '',
-          element: <DashboardDefault /> // Default dashboard page
+          element: <DashboardDefault />
         },
         {
           path: 'summary/:groupId',
-          element: <SummaryPage /> // Summary page
+          element: <SummaryPage />
         },
         {
           path: 'supplier-products',
-          element: <SupplierProductsTable /> // Supplier products page
+          element: <SupplierProductsTable />
         },
         {
-          path: 'group-requests', // Path for the GroupRequestPage
-          element: <GroupRequestPage /> // This is the component to be displayed for group requests
+          path: 'group-requests',
+          element: <GroupRequestPage />
+        },
+        {
+          path: 'department-management',  // Đường dẫn cho Department Management
+          element: <DepartmentPage />  // Component cho Department Management
         }
       ]
     },
     {
       path: 'typography',
-      element: <Typography /> // Typography page
+      element: <Typography />
     },
     {
       path: 'color',
-      element: <Color /> // Color page
+      element: <Color />
     },
     {
       path: 'shadows',
-      element: <Shadow /> // Shadows page
+      element: <Shadow />
     }
   ]
 };

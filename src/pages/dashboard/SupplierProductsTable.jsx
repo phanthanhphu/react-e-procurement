@@ -21,20 +21,21 @@ import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import { API_BASE_URL } from '../../config';
-import AddProductDialog from './AddProductDialog'; // Import component mới
-import EditProductDialog from './EditProductDialog'; // Import Edit dialog
+import AddProductDialog from './AddProductDialog'; 
+import EditProductDialog from './EditProductDialog'; 
+import SupplierSearch from './SupplierSearch'; // Import component tìm kiếm
 
 const headers = [
   { label: 'No', key: 'no' },
-  { label: 'Supplier Code', key: 'supplierCode' }, // Mã nhà cung cấp
-  { label: 'Supplier Name', key: 'supplierName' }, // Tên nhà cung cấp
-  { label: 'SAP Code', key: 'sapCode' }, // SAP code
-  { label: 'Product Full Name', key: 'productFullName' }, // Tên dài sản phẩm
-  { label: 'Product Short Name', key: 'productShortName' }, // Tên ngắn sản phẩm
-  { label: 'Size', key: 'size' }, // Kích thước
-  { label: 'Price', key: 'price' }, // Đơn giá
-  { label: 'Unit', key: 'unit' }, // Đơn vị tính sản phẩm
-  { label: 'Action', key: 'action' }, // Cột Action
+  { label: 'Supplier Code', key: 'supplierCode' },
+  { label: 'Supplier Name', key: 'supplierName' },
+  { label: 'SAP Code', key: 'sapCode' },
+  { label: 'Item Description', key: 'productFullName' },
+  { label: 'Short Item Description', key: 'productShortName' },
+  { label: 'Size', key: 'size' },
+  { label: 'Price', key: 'price' },
+  { label: 'Unit', key: 'unit' },
+  { label: 'Action', key: 'action' }, 
 ];
 
 function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
@@ -42,34 +43,44 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>No Data</Typography>;
   }
   return (
-    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 300px)', overflow: 'auto' }}>  {/* Chiều cao bảng chiếm toàn bộ phần còn lại của màn hình */}
+    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflow: 'auto' }}>
       <Table size="small" sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
-        <TableHead>
-          <TableRow>
-            {headers.map(({ label, key }) => (
-              <TableCell
-                key={key}
-                align={label === 'Actions' ? 'center' : 'left'}
-                sx={{
-                  fontWeight: 'bold',
-                  fontSize: '0.72rem',
-                  backgroundColor: '#4680FF', // Màu nền xanh
-                  color: 'white', // Màu chữ trắng
-                  py: 0.5,
-                  px: 1,
-                }}
-              >
-                {label}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
+<TableHead>
+  <TableRow
+    sx={{
+      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+    }}
+  >
+    {headers.map(({ label, key }) => (
+      <TableCell
+        key={key}
+        align={label === 'Action' ? 'center' : 'left'}
+        sx={{
+          fontWeight: 'bold',
+          fontSize: '0.75rem',
+          color: '#ffffff',
+          py: 0.7,
+          px: 1,
+          whiteSpace: 'nowrap',
+          borderRight: '1px solid rgba(255,255,255,0.15)',
+          '&:last-child': {
+            borderRight: 'none',
+          },
+        }}
+      >
+        {label}
+      </TableCell>
+    ))}
+  </TableRow>
+</TableHead>
+
+
         <TableBody>
           {supplierProducts.map((product, idx) => (
             <TableRow
               key={product.id}
               sx={{
-                backgroundColor: idx % 2 === 0 ? '#fafafa' : '#f4f7fb',
+                backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
                 '&:hover': {
                   backgroundColor: '#e3f2fd',
                   transition: 'background-color 0.3s ease',
@@ -77,20 +88,20 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
                 cursor: 'pointer',
               }}
             >
-              <TableCell align="center" sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>
                 {idx + 1}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.supplierCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.supplierName}</TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.sapCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.productFullName}</TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.productShortName}</TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.size}</TableCell>
-              <TableCell align="left" sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.supplierCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.supplierName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.sapCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.productFullName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.productShortName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.size}</TableCell>
+              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>
                 {product.price ? product.price.toLocaleString() : 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.7rem', py: 0.3, px: 1 }}>{product.unit}</TableCell>
-              <TableCell align="center" sx={{ py: 0.3, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.unit}</TableCell>
+              <TableCell align="center" sx={{ py: 0.5, px: 1 }}>
                 <Stack direction="row" spacing={1} justifyContent="center">
                   <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
                     <EditIcon fontSize="small" />
@@ -115,10 +126,17 @@ export default function SupplierProductsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [file, setFile] = useState(null);  // Trạng thái để lưu trữ file Excel
-  const [openAddDialog, setOpenAddDialog] = useState(false); // Trạng thái mở Dialog Add
-  const [openEditDialog, setOpenEditDialog] = useState(false); // Trạng thái mở Dialog Edit
-  const [productToEdit, setProductToEdit] = useState(null); // Trạng thái để chứa sản phẩm cần chỉnh sửa
+  const [file, setFile] = useState(null);
+  const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [productToEdit, setProductToEdit] = useState(null);
+
+  // Search states
+  const [searchSupplierCode, setSearchSupplierCode] = useState('');
+  const [searchSupplierName, setSearchSupplierName] = useState('');
+  const [searchSapCode, setSearchSapCode] = useState('');
+  const [searchProductFullName, setSearchProductFullName] = useState('');
+  const [searchProductShortName, setSearchProductShortName] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -126,7 +144,7 @@ export default function SupplierProductsPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/supplier-products`, {
         method: 'GET',
-        headers: { 'accept': '*/*' },
+        headers: { accept: '*/*' },
       });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
@@ -158,15 +176,13 @@ export default function SupplierProductsPage() {
     }
   };
 
-  // Hàm xử lý file khi chọn
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
   };
 
-  // Hàm upload file
   const handleUpload = async () => {
     if (!file) {
-      alert("Please select a file to upload.");
+      alert('Please select a file to upload.');
       return;
     }
     const formData = new FormData();
@@ -180,12 +196,12 @@ export default function SupplierProductsPage() {
       });
 
       if (!response.ok) throw new Error(`Upload failed with status: ${response.status}`);
-      alert("File uploaded successfully");
-      fetchData();  // Fetch the updated data after the upload
+      alert('File uploaded successfully');
+      fetchData();
     } catch (err) {
       setError('Failed to upload file');
       console.error(err);
-      alert("Error uploading file");
+      alert('Error uploading file');
     } finally {
       setLoading(false);
     }
@@ -197,44 +213,91 @@ export default function SupplierProductsPage() {
     setPage(0);
   };
 
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  // Filter data dựa trên từ khóa tìm kiếm
+  const filteredData = data.filter((item) => {
+    return (
+      item.supplierCode?.toLowerCase().includes(searchSupplierCode.toLowerCase()) &&
+      item.supplierName?.toLowerCase().includes(searchSupplierName.toLowerCase()) &&
+      item.sapCode?.toLowerCase().includes(searchSapCode.toLowerCase()) &&
+      item.productFullName?.toLowerCase().includes(searchProductFullName.toLowerCase()) &&
+      item.productShortName?.toLowerCase().includes(searchProductShortName.toLowerCase())
+    );
+  });
 
-  // Hàm để chỉnh sửa sản phẩm
+  const displayData = filteredData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   const handleEditProduct = (product) => {
     setProductToEdit(product);
     setOpenEditDialog(true);
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
         Supplier Products
       </Typography>
 
-      <Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
-        <Button
-          variant="contained"
-          startIcon={<FileUploadIcon />}
-          onClick={() => document.getElementById('file-input').click()}
-        >
-          Upload Excel
-        </Button>
-        <Input
-          id="file-input"
-          type="file"
-          accept=".xlsx, .xls"
-          onChange={handleFileChange}
-          sx={{ display: 'none' }}
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenAddDialog(true)}
-        >
-          Add Product
-        </Button>
-      </Stack>
+<Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
+  <Button
+    variant="contained"
+    startIcon={<FileUploadIcon />}
+    onClick={() => document.getElementById('file-input').click()}
+    sx={{
+      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+      color: '#fff',
+      textTransform: 'none',
+      px: 3,
+      borderRadius: '20px',
+      '&:hover': {
+        background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+      },
+    }}
+  >
+    Upload Excel
+  </Button>
+
+  <Input
+    id="file-input"
+    type="file"
+    accept=".xlsx, .xls"
+    onChange={handleFileChange}
+    sx={{ display: 'none' }}
+  />
+
+  <Button
+    variant="contained"
+    startIcon={<AddIcon />}
+    onClick={() => setOpenAddDialog(true)}
+    sx={{
+      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+      color: '#fff',
+      textTransform: 'none',
+      px: 3,
+      borderRadius: '20px',
+      '&:hover': {
+        background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+      },
+    }}
+  >
+    Add Product
+  </Button>
+</Stack>
+
+
+      {/* Component tìm kiếm */}
+      <SupplierSearch
+        searchSupplierCode={searchSupplierCode}
+        setSearchSupplierCode={setSearchSupplierCode}
+        searchSupplierName={searchSupplierName}
+        setSearchSupplierName={setSearchSupplierName}
+        searchSapCode={searchSapCode}
+        setSearchSapCode={setSearchSapCode}
+        searchProductFullName={searchProductFullName}
+        setSearchProductFullName={setSearchProductFullName}
+        searchProductShortName={searchProductShortName}
+        setSearchProductShortName={setSearchProductShortName}
+        setPage={setPage}
+      />
 
       <SupplierProductsTable
         supplierProducts={displayData}
@@ -245,21 +308,16 @@ export default function SupplierProductsPage() {
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
         component="div"
-        count={data.length}
+        count={filteredData.length}
         rowsPerPage={rowsPerPage}
         page={page}
         onPageChange={handleChangePage}
         onRowsPerPageChange={handleChangeRowsPerPage}
+        sx={{ mt: 1 }}
       />
 
-      {/* Add Product Dialog */}
-      <AddProductDialog
-        open={openAddDialog}
-        onClose={() => setOpenAddDialog(false)}
-        onRefresh={fetchData}
-      />
+      <AddProductDialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} onRefresh={fetchData} />
 
-      {/* Edit Product Dialog */}
       {productToEdit && (
         <EditProductDialog
           open={openEditDialog}
