@@ -7,8 +7,9 @@ import dayjs from 'dayjs';
 import AddGroupModal from './AddGroupModal';
 import EditGroupModal from './EditGroupModal';
 import GroupSearchBar from './GroupSearchBar';
+import { API_BASE_URL } from '../../config';
 
-const apiUrl = 'http://10.232.100.50:8080/api/group-summary-requisitions';
+const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
 
 const fetchGroups = async () => {
   try {

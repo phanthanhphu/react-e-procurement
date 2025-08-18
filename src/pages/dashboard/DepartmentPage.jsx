@@ -21,8 +21,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import factoryImage from '../../assets/svg/logos/factory_1.png';
+import { API_BASE_URL } from '../../config';
 
-const API_URL = 'http://10.232.100.50:8080/api/departments';
+const API_URL = `${API_BASE_URL}/api/departments`;
 
 function DepartmentSearch({ onSearch, onReset }) {
   const [searchName, setSearchName] = useState('');

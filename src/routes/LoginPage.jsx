@@ -16,6 +16,7 @@ import gitlabLogo from '../assets/svg/brands/gitlab-gray.svg';
 
 import flagUS from '../assets/vendor/flag-icon-css/flags/1x1/us.svg';
 import flagGB from '../assets/vendor/flag-icon-css/flags/1x1/gb.svg';
+import { API_BASE_URL } from '../config';
 
 const options = [
   {
@@ -124,7 +125,7 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch('http://10.232.100.50:8080/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

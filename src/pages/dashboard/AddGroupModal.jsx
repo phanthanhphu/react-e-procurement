@@ -1,8 +1,9 @@
 import React from 'react';
 import { Modal, Form, Input, Select, message } from 'antd';
+import { API_BASE_URL } from '../../config';
 
 // API URL
-const apiUrl = 'http://10.232.100.50:8080/api/group-summary-requisitions';
+const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
 
 const AddGroupModal = ({ visible, onCancel, onOk }) => {
   const [form] = Form.useForm();
