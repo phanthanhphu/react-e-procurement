@@ -20,8 +20,9 @@ import { API_BASE_URL } from '../../config';
 
 export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [formData, setFormData] = useState({
-    englishName: '',
-    vietnameseName: '',
+    itemDescriptionEN: '',
+    itemDescriptionVN: '',
+    fullItemDescriptionVN: '',
     oldSapCode: '',
     newSapCode: '',
     unit: '',
@@ -43,8 +44,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [selectedSupplierName, setSelectedSupplierName] = useState('');
   const [formErrors, setFormErrors] = useState({
     oldSapCode: '',
-    vietnameseName: '',
-    englishName: '',
+    itemDescriptionVN: '',
+    itemDescriptionEN: '',
   });
 
   useEffect(() => {
@@ -74,8 +75,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   useEffect(() => {
-    searchSupplier(formData.vietnameseName, formData.oldSapCode);
-  }, [formData.vietnameseName, formData.oldSapCode]);
+    searchSupplier(formData.itemDescriptionVN, formData.oldSapCode);
+  }, [formData.itemDescriptionVN, formData.oldSapCode]);
 
   const handleSelectSupplier = (event) => {
     const selId = event.target.value;
@@ -84,8 +85,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     if (sel) {
       setFormData((prev) => ({
         ...prev,
-        vietnameseName: sel.productFullName || '',
-        englishName: sel.productShortName || '',
+        itemDescriptionVN: sel.productFullName || '',
+        itemDescriptionEN: sel.productShortName || '',
+        fullItemDescriptionVN: sel.productFullName || '',
         oldSapCode: sel.sapCode || '',
         supplierPrice: sel.price || 0,
         unit: sel.unit || '',
@@ -109,8 +111,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setDeptRows([...deptRows, { department: '', qty: '' }]);
   };
 
-  // Hàm xóa dòng bị loại bỏ => không có handleRemoveDeptRow
-
   const calcTotalRequestQty = () => {
     return deptRows.reduce((sum, row) => {
       const q = parseFloat(row.qty);
@@ -125,8 +125,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const validateForm = () => {
     const errors = {};
     if (!formData.oldSapCode.trim()) errors.oldSapCode = 'Old SAP Code is required';
-    if (!formData.vietnameseName.trim()) errors.vietnameseName = 'Vietnamese Name is required';
-    if (!formData.englishName.trim()) errors.englishName = 'English Name is required';
+    if (!formData.itemDescriptionVN.trim()) errors.itemDescriptionVN = 'Item Description (VN) is required';
+    if (!formData.itemDescriptionEN.trim()) errors.itemDescriptionEN = 'Item Description (EN) is required';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -170,10 +170,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       }
       onClose();
 
-      // Reset form
       setFormData({
-        englishName: '',
-        vietnameseName: '',
+        itemDescriptionEN: '',
+        itemDescriptionVN: '',
+        fullItemDescriptionVN: '',
         oldSapCode: '',
         newSapCode: '',
         unit: '',
@@ -241,19 +241,19 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Vietnamese Name"
-              value={formData.vietnameseName}
-              onChange={handleChange('vietnameseName')}
+              label="Item Description (VN)"
+              value={formData.itemDescriptionVN}
+              onChange={handleChange('itemDescriptionVN')}
               fullWidth
               size="small"
-              error={!!formErrors.vietnameseName}
-              helperText={formErrors.vietnameseName}
+              error={!!formErrors.itemDescriptionVN}
+              helperText={formErrors.itemDescriptionVN}
               InputLabelProps={{
                 required: true,
                 style: { color: 'red' },
               }}
               InputProps={{
-                endAdornment: formData.vietnameseName.trim() ? (
+                endAdornment: formData.itemDescriptionVN.trim() ? (
                   searchLoading ? (
                     <CircularProgress size={20} />
                   ) : null
@@ -261,19 +261,19 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               }}
             />
             <TextField
-              label="English Name"
-              value={formData.englishName}
-              onChange={handleChange('englishName')}
+              label="Item Description (EN)"
+              value={formData.itemDescriptionEN}
+              onChange={handleChange('itemDescriptionEN')}
               fullWidth
               size="small"
-              error={!!formErrors.englishName}
-              helperText={formErrors.englishName}
+              error={!!formErrors.itemDescriptionEN}
+              helperText={formErrors.itemDescriptionEN}
               InputLabelProps={{
                 required: true,
                 style: { color: 'red' },
               }}
               InputProps={{
-                endAdornment: formData.englishName.trim() ? (
+                endAdornment: formData.itemDescriptionEN.trim() ? (
                   searchLoading ? (
                     <CircularProgress size={20} />
                   ) : null
@@ -281,6 +281,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               }}
             />
           </Stack>
+
+          <TextField
+            label="Full Item Description (VN)"
+            value={formData.fullItemDescriptionVN}
+            onChange={handleChange('fullItemDescriptionVN')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
 
           {supplierOptions.length > 0 && (
             <Paper variant="outlined" sx={{ mb: 1, p: 1 }}>
@@ -318,7 +328,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   size="small"
                   fullWidth
                 />
-                {/* Đã loại bỏ nút xóa */}
               </Stack>
             ))}
             <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>

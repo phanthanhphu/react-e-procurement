@@ -12,6 +12,10 @@ const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 
+const ProductType1Page = Loadable(lazy(() => import('pages/dashboard/ProductType1Page')));
+const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManagementPage')));
+
+
 const MainRoutes = {
   path: '/',
   element: <DashboardLayout />,
@@ -42,7 +46,17 @@ const MainRoutes = {
         {
           path: 'department-management',  // Đường dẫn cho Department Management
           element: <DepartmentPage />  // Component cho Department Management
+        },
+        {
+          path: 'product-type-management',
+          element: <ProductType1Page />
+        },
+        {
+          path: 'user-management',
+          element: <UserManagementPage />
         }
+
+
       ]
     },
     {

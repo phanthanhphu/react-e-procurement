@@ -212,29 +212,28 @@ export default function SummaryPage() {
 
         <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
-<Button
-  variant="contained"
-  startIcon={<AddIcon fontSize="small" />}
-  onClick={handleOpenAddDialog}
-  sx={{
-    textTransform: 'none',
-    borderRadius: 2,
-    px: 3,
-    py: 0.75,
-    fontWeight: 700,
-    fontSize: '0.85rem',
-    background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-    color: '#fff',
-    boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-    '&:hover': {
-      background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-      boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-    },
-  }}
->
-  Add New
-</Button>
-
+          <Button
+            variant="contained"
+            startIcon={<AddIcon fontSize="small" />}
+            onClick={handleOpenAddDialog}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 2,
+              px: 3,
+              py: 0.75,
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+              '&:hover': {
+                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+              },
+            }}
+          >
+            Add New
+          </Button>
         </Stack>
       </Stack>
 
@@ -268,40 +267,37 @@ export default function SummaryPage() {
               <TableHead>
                 <TableRow>
                   {headers.map(({ label, key }) => (
-<TableCell
-  key={key}
-  align={
-    ['No', 'Price', 'Unit', 'Action'].includes(label)
-      ? 'center'
-      : label === 'Action'
-      ? 'center'
-      : 'left'
-  }
-  sx={{
-    background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
-    fontWeight: 700,
-    color: '#fff',
-    fontSize: '0.85rem',
-    borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
-    px: 2,
-    py: 1.2,
-    whiteSpace: 'nowrap',
-    textTransform: 'capitalize',
-    letterSpacing: '0.05em',
-    userSelect: 'none',
-    position: 'sticky',
-    top: 0,
-    zIndex: 20,
-    boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
-  }}
->
-  <Tooltip title={label} arrow>
-    <span>{label}</span>
-  </Tooltip>
-</TableCell>
-
-
-
+                    <TableCell
+                      key={key}
+                      align={
+                        ['No', 'Price', 'Unit', 'Action'].includes(label)
+                          ? 'center'
+                          : label === 'Action'
+                          ? 'center'
+                          : 'left'
+                      }
+                      sx={{
+                        background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
+                        fontWeight: 700,
+                        color: '#fff',
+                        fontSize: '0.85rem',
+                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
+                        px: 2,
+                        py: 1.2,
+                        whiteSpace: 'nowrap',
+                        textTransform: 'capitalize',
+                        letterSpacing: '0.05em',
+                        userSelect: 'none',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 20,
+                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
+                      }}
+                    >
+                      <Tooltip title={label} arrow>
+                        <span>{label}</span>
+                      </Tooltip>
+                    </TableCell>
                   ))}
                 </TableRow>
               </TableHead>
@@ -362,13 +358,12 @@ export default function SummaryPage() {
                             currency: 'VND',
                           })}
                         </TableCell>
-                  <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                    {totalPrice.toLocaleString('vi-VN', {
-                      style: 'currency',
-                      currency: 'VND',
-                    })}
-                  </TableCell>
-
+                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
+                          {totalPrice.toLocaleString('vi-VN', {
+                            style: 'currency',
+                            currency: 'VND',
+                          })}
+                        </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.stock}
                         </TableCell>

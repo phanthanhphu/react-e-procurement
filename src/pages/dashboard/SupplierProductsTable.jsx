@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'; 
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Typography,
   Box,
@@ -21,9 +21,9 @@ import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import { API_BASE_URL } from '../../config';
-import AddProductDialog from './AddProductDialog'; 
-import EditProductDialog from './EditProductDialog'; 
-import SupplierSearch from './SupplierSearch'; // Import component tìm kiếm
+import AddProductDialog from './AddProductDialog';
+import EditProductDialog from './EditProductDialog';
+import SupplierSearch from './SupplierSearch';
 
 const headers = [
   { label: 'No', key: 'no' },
@@ -35,45 +35,49 @@ const headers = [
   { label: 'Size', key: 'size' },
   { label: 'Price', key: 'price' },
   { label: 'Unit', key: 'unit' },
-  { label: 'Action', key: 'action' }, 
+  { label: 'Action', key: 'action' },
 ];
 
 function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
   if (!supplierProducts || supplierProducts.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>No Data</Typography>;
   }
-  return (
-    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflow: 'auto' }}>
-      <Table size="small" sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1, overflow: 'hidden' }}>
-<TableHead>
-  <TableRow
-    sx={{
-      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-    }}
-  >
-    {headers.map(({ label, key }) => (
-      <TableCell
-        key={key}
-        align={label === 'Action' ? 'center' : 'left'}
-        sx={{
-          fontWeight: 'bold',
-          fontSize: '0.75rem',
-          color: '#ffffff',
-          py: 0.7,
-          px: 1,
-          whiteSpace: 'nowrap',
-          borderRight: '1px solid rgba(255,255,255,0.15)',
-          '&:last-child': {
-            borderRight: 'none',
-          },
-        }}
-      >
-        {label}
-      </TableCell>
-    ))}
-  </TableRow>
-</TableHead>
 
+  return (
+    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto' }}>
+      <Table size="small" sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1 }}>
+        <TableHead>
+          <TableRow
+            sx={{
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            }}
+          >
+            {headers.map(({ label, key }) => (
+              <TableCell
+                key={key}
+                align={label === 'Action' ? 'center' : 'left'}
+                sx={{
+                  fontWeight: 'bold',
+                  fontSize: '0.75rem',
+                  color: '#ffffff',
+                  py: 1, // Tăng padding cho các ô header
+                  px: 1,
+                  whiteSpace: 'nowrap',
+                  borderRight: '1px solid rgba(255,255,255,0.15)',
+                  '&:last-child': {
+                    borderRight: 'none',
+                  },
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  backgroundColor: '#027aff',
+                }}
+              >
+                {label}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
 
         <TableBody>
           {supplierProducts.map((product, idx) => (
@@ -88,20 +92,42 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
                 cursor: 'pointer',
               }}
             >
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
                 {idx + 1}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.supplierCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.supplierName}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.sapCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.productFullName}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.productShortName}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.size}</TableCell>
-              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.sapCode}</TableCell>
+              <TableCell
+                sx={{
+                  fontSize: '0.75rem',
+                  py: 1,
+                  px: 1,
+                  whiteSpace: 'normal',  // Cho phép văn bản xuống dòng
+                  wordBreak: 'break-word',  // Cắt từ dài nếu cần
+                  width: '300px',  // Cố định chiều rộng cho cột dài
+                }}
+              >
+                {product.productFullName}
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontSize: '0.75rem',
+                  py: 1,
+                  px: 1,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  width: '300px',  // Cố định chiều rộng cho cột dài
+                }}
+              >
+                {product.productShortName}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.size}</TableCell>
+              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
                 {product.price ? product.price.toLocaleString() : 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1 }}>{product.unit}</TableCell>
-              <TableCell align="center" sx={{ py: 0.5, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.unit}</TableCell>
+              <TableCell align="center" sx={{ py: 1, px: 1 }}>
                 <Stack direction="row" spacing={1} justifyContent="center">
                   <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
                     <EditIcon fontSize="small" />
@@ -237,54 +263,52 @@ export default function SupplierProductsPage() {
         Supplier Products
       </Typography>
 
-<Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
-  <Button
-    variant="contained"
-    startIcon={<FileUploadIcon />}
-    onClick={() => document.getElementById('file-input').click()}
-    sx={{
-      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-      color: '#fff',
-      textTransform: 'none',
-      px: 3,
-      borderRadius: '20px',
-      '&:hover': {
-        background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-      },
-    }}
-  >
-    Upload Excel
-  </Button>
+      <Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
+        <Button
+          variant="contained"
+          startIcon={<FileUploadIcon />}
+          onClick={() => document.getElementById('file-input').click()}
+          sx={{
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            color: '#fff',
+            textTransform: 'none',
+            px: 3,
+            borderRadius: '20px',
+            '&:hover': {
+              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+            },
+          }}
+        >
+          Upload Excel
+        </Button>
 
-  <Input
-    id="file-input"
-    type="file"
-    accept=".xlsx, .xls"
-    onChange={handleFileChange}
-    sx={{ display: 'none' }}
-  />
+        <Input
+          id="file-input"
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={handleFileChange}
+          sx={{ display: 'none' }}
+        />
 
-  <Button
-    variant="contained"
-    startIcon={<AddIcon />}
-    onClick={() => setOpenAddDialog(true)}
-    sx={{
-      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-      color: '#fff',
-      textTransform: 'none',
-      px: 3,
-      borderRadius: '20px',
-      '&:hover': {
-        background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-      },
-    }}
-  >
-    Add Product
-  </Button>
-</Stack>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setOpenAddDialog(true)}
+          sx={{
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            color: '#fff',
+            textTransform: 'none',
+            px: 3,
+            borderRadius: '20px',
+            '&:hover': {
+              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+            },
+          }}
+        >
+          Add Product
+        </Button>
+      </Stack>
 
-
-      {/* Component tìm kiếm */}
       <SupplierSearch
         searchSupplierCode={searchSupplierCode}
         setSearchSupplierCode={setSearchSupplierCode}

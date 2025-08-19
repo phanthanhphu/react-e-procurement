@@ -4,7 +4,9 @@ import {
   HomeTrendUp,
   Chart,
   ArrangeHorizontalSquare,
-  Location
+  Location,
+  Box, // Icon for Product Type Management
+  Profile  // Icon for User Management
 } from 'iconsax-reactjs';
 
 // icons
@@ -14,7 +16,9 @@ const icons = {
   summary: Chart,
   comparison: ArrangeHorizontalSquare,
   supplierproducts: Location, // Changed from 'locations' to 'supplierproducts'
-  groupRequest: ArrangeHorizontalSquare // Add icon for group request
+  groupRequest: ArrangeHorizontalSquare, // Add icon for group request
+  productType: Box, // Icon for Product Type Management
+  userManagement: Profile  // Icon for User Management
 };
 
 // ==============================|| MENU ITEMS - DASHBOARD ||============================== //
@@ -56,7 +60,24 @@ const dashboard = {
       url: '/dashboard/department-management',
       icon: icons.summary,
       breadcrumbs: false
-    }
+    },
+      {
+        id: 'product-type-management',
+        title: 'Product Type Management',
+        type: 'item',
+        url: '/dashboard/product-type-management',
+        icon: icons.summary, // hoặc chọn icon khác tùy thích
+        breadcrumbs: false
+      },
+      {
+        id: 'user-management',
+        title: 'User Management',
+        type: 'item',
+        url: '/dashboard/user-management',
+        icon: icons.summary, // hoặc chọn icon khác tùy thích
+        breadcrumbs: false
+      }
+
   ]
 };
 

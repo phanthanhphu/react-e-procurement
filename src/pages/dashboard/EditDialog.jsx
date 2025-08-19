@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, TextField, Stack, CircularProgress,
@@ -11,8 +11,9 @@ import { API_BASE_URL } from '../../config';
 
 export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
-    englishName: '',
-    vietnameseName: '',
+    itemDescriptionEN: '',
+    itemDescriptionVN: '',
+    fullItemDescriptionVN: '',
     oldSapCode: '',
     newSapCode: '',
     unit: '',
@@ -25,29 +26,35 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   });
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
   const [saving, setSaving] = useState(false);
-  const [supplierOptions, setSupplierOptions] = useState([]); 
+  const [supplierOptions, setSupplierOptions] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
-    if (open && item) {
-      fetch(`${API_BASE_URL}/api/summary-requisitions/${item.id}`)
-        .then(res => res.json())
+    console.log('EditDialog opened with item:', item); // Debug: Log item prop
+    if (open && item && item.requisition && item.requisition.id) {
+      fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch requisition data: ${res.status}`);
+          return res.json();
+        })
         .then(data => {
-          const requisition = data.requisition;
-          const supplierProduct = data.supplierProduct;
+          console.log('API response:', data); // Debug: Log API response
+          const requisition = data.requisition || {};
+          const supplierProduct = data.supplierProduct || {};
 
           setFormData({
-            englishName: requisition.englishName || '',
-            vietnameseName: requisition.vietnameseName || '',
+            itemDescriptionEN: requisition.englishName || '',
+            itemDescriptionVN: requisition.vietnameseName || '',
+            fullItemDescriptionVN: requisition.vietnameseName || '',
             oldSapCode: requisition.oldSapCode || '',
             newSapCode: requisition.newSapCode || '',
-            unit: supplierProduct?.unit || '',
+            unit: supplierProduct.unit || '',
             stock: requisition.stock || '',
             purchasingSuggest: requisition.purchasingSuggest || '',
             reason: requisition.reason || '',
             remark: requisition.remark || '',
-            supplierPrice: supplierProduct?.price || 0,
-            supplierId: supplierProduct?.id || '',
+            supplierPrice: supplierProduct.price || 0,
+            supplierId: supplierProduct.id || '',
           });
 
           if (requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object') {
@@ -60,11 +67,30 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             setDeptRows([{ department: '', qty: '' }]);
           }
 
-          setSupplierOptions(supplierProduct ? [supplierProduct] : []);
+          setSupplierOptions(supplierProduct.id ? [supplierProduct] : []);
         })
         .catch(err => {
           console.error('Error fetching requisition data:', err);
+          alert('Failed to load requisition data. Please try again.');
         });
+    } else {
+      console.warn('No valid item or item.requisition.id, resetting form. Item:', item); // Debug: Log missing item
+      setFormData({
+        itemDescriptionEN: '',
+        itemDescriptionVN: '',
+        fullItemDescriptionVN: '',
+        oldSapCode: '',
+        newSapCode: '',
+        unit: '',
+        stock: '',
+        purchasingSuggest: '',
+        reason: '',
+        remark: '',
+        supplierPrice: 0,
+        supplierId: '',
+      });
+      setDeptRows([{ department: '', qty: '' }]);
+      setSupplierOptions([]);
     }
   }, [item, open]);
 
@@ -88,12 +114,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   useEffect(() => {
-    searchSupplierByName(formData.vietnameseName.trim());
-  }, [formData.vietnameseName]);
+    searchSupplierByName(formData.itemDescriptionVN.trim());
+  }, [formData.itemDescriptionVN]);
 
   useEffect(() => {
-    searchSupplierByName(formData.englishName.trim());
-  }, [formData.englishName]);
+    searchSupplierByName(formData.itemDescriptionEN.trim());
+  }, [formData.itemDescriptionEN]);
 
   const handleChange = (field) => (e) => {
     setFormData(prev => ({ ...prev, [field]: e.target.value }));
@@ -122,14 +148,20 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         supplierId: selectedSupplier.id,
         supplierPrice: selectedSupplier.price,
         unit: selectedSupplier.unit,
-        vietnameseName: selectedSupplier.productFullName,
-        englishName: selectedSupplier.productShortName || selectedSupplier.productFullName,
+        itemDescriptionVN: selectedSupplier.productFullName,
+        itemDescriptionEN: selectedSupplier.productShortName || selectedSupplier.productFullName,
+        fullItemDescriptionVN: selectedSupplier.productFullName,
         oldSapCode: selectedSupplier.sapCode || prev.oldSapCode,
       }));
     }
   };
 
   const handleSave = async () => {
+    if (!item || !item.requisition || !item.requisition.id) {
+      alert('Cannot save: Item or requisition ID is missing.');
+      return;
+    }
+
     const deptQtyMap = {};
     deptRows.forEach(({ department, qty }) => {
       if (department.trim() && qty.trim()) deptQtyMap[department.trim()] = parseFloat(qty);
@@ -139,12 +171,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Update failed');
+      if (!res.ok) throw new Error(`Update failed: ${res.status}`);
       await onRefresh();
       onClose();
     } catch {
@@ -173,7 +205,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          {/* Old SAP Code và New SAP Code moved up */}
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -191,29 +222,38 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             />
           </Stack>
 
-          {/* Vietnamese Name và English Name cùng dòng */}
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Vietnamese Name"
-              value={formData.vietnameseName}
-              onChange={handleChange('vietnameseName')}
+              label="Item Description (VN)"
+              value={formData.itemDescriptionVN}
+              onChange={handleChange('itemDescriptionVN')}
               fullWidth
               size="small"
               InputProps={{
-                endAdornment: formData.vietnameseName.trim() ? (searchLoading ? <CircularProgress size={20} /> : null) : null,
+                endAdornment: formData.itemDescriptionVN.trim() ? (searchLoading ? <CircularProgress size={20} /> : null) : null,
               }}
             />
             <TextField
-              label="English Name"
-              value={formData.englishName}
-              onChange={handleChange('englishName')}
+              label="Item Description (EN)"
+              value={formData.itemDescriptionEN}
+              onChange={handleChange('itemDescriptionEN')}
               fullWidth
               size="small"
               InputProps={{
-                endAdornment: formData.englishName.trim() ? (searchLoading ? <CircularProgress size={20} /> : null) : null,
+                endAdornment: formData.itemDescriptionEN.trim() ? (searchLoading ? <CircularProgress size={20} /> : null) : null,
               }}
             />
           </Stack>
+
+          <TextField
+            label="Full Item Description (VN)"
+            value={formData.fullItemDescriptionVN}
+            onChange={handleChange('fullItemDescriptionVN')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
 
           <Paper variant="outlined" sx={{ mb: 1, p: 1 }}>
             <FormControl fullWidth size="small">
@@ -232,7 +272,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             </FormControl>
           </Paper>
 
-          {/* Department Request Qty, Stock, Purchasing Suggest, Reason, and Remark fields */}
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
               Department Request Qty:
@@ -259,12 +298,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 </IconButton>
               </Stack>
             ))}
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1}}>
               Add Department
             </Button>
           </Paper>
 
-          {/* Total info */}
           <Stack
             direction="row"
             spacing={4}
@@ -292,7 +330,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             </Typography>
           </Stack>
 
-          {/* Stock và Purchasing Suggest cùng 1 hàng */}
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
               label="Stock"
@@ -314,8 +351,24 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             />
           </Stack>
 
-          <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} fullWidth size="small" multiline rows={2} />
-          <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} fullWidth size="small" multiline rows={2} />
+          <TextField
+            label="Reason"
+            value={formData.reason}
+            onChange={handleChange('reason')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
+          <TextField
+            label="Remark"
+            value={formData.remark}
+            onChange={handleChange('remark')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5 }}>
