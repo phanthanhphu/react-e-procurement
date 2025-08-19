@@ -20,7 +20,7 @@ const EditProductType1Modal = ({ visible, record, onClose, onSuccess }) => {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/product-type-1/${record.id}?name=${encodeURIComponent(nameTrimmed)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/product-type-1/${record.id}?name=${encodeURIComponent(nameTrimmed)}`, {
         method: 'PUT',
         headers: { accept: '*/*' },
       });

@@ -37,7 +37,7 @@ const ProductType1Page = () => {
   const loadType1 = async (page = 0) => {
     setLoadingType1(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/product-type-1?page=${page}&size=${PAGE_SIZE}`);
+      const res = await fetch(`${API_BASE_URL}/api/product-type-1?page=${page}&size=${PAGE_SIZE}`);
       const json = await res.json();
       setType1Data(json.content || []);
       setType1Total(json.totalElements || 0);
@@ -51,7 +51,7 @@ const ProductType1Page = () => {
   const loadType2 = async (parentId, page = 0) => {
     setLoadingType2(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/product-type-2?productType1Id=${parentId}&page=${page}&size=${PAGE_SIZE}`);
+      const res = await fetch(`${API_BASE_URL}/api/product-type-2?productType1Id=${parentId}&page=${page}&size=${PAGE_SIZE}`);
       const json = await res.json();
       setType2Data(json.content || []);
       setType2Total(json.totalElements || 0);

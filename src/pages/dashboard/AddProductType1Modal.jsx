@@ -1,8 +1,7 @@
 // AddProductType1Modal.jsx
 import React, { useState } from 'react';
 import { Modal, Input, message } from 'antd';
-
-const API_BASE_URL = 'http://10.232.100.50:8080/api';
+import { API_BASE_URL } from '../../config';
 
 const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
   const [inputName, setInputName] = useState('');
@@ -16,7 +15,7 @@ const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/product-type-1?name=${encodeURIComponent(nameTrimmed)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/product-type-1?name=${encodeURIComponent(nameTrimmed)}`, {
         method: 'POST',
         headers: { accept: '*/*' },
         body: '',
