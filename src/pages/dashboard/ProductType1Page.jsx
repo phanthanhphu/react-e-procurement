@@ -209,8 +209,8 @@ const ProductType1Page = () => {
     try {
       const { kind, record } = deleteTarget;
       const url = kind === 'type1'
-        ? `${API_BASE_URL}/product-type-1/${record.id}`
-        : `${API_BASE_URL}/product-type-2/${record.id}`;
+        ? `${API_BASE_URL}/api/product-type-1/${record.id}`
+        : `${API_BASE_URL}/api/product-type-2/${record.id}`;
       const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       message.success('Deleted successfully');
@@ -229,7 +229,7 @@ const ProductType1Page = () => {
         title={(
           <Space style={{ justifyContent: 'space-between', width: '100%' }}>
             <Typography.Title level={3} style={{ margin: 0, color: '#001529' }}>
-              Product Type Categories (Parent Type 1)
+              Parent Type
             </Typography.Title>
             <Button
               type="primary"
@@ -272,7 +272,7 @@ const ProductType1Page = () => {
               <Card size="small" style={{ margin: 0, backgroundColor: '#fafafa' }}>
                 <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
                   <Typography.Title level={5} style={{ margin: 0 }}>
-                    Sub-Types (Product Type 2) of “{rec.name}”
+                    Sub-Type
                   </Typography.Title>
                   <Button
                     type="dashed"
