@@ -8,7 +8,7 @@ import EditProductType1Modal from './EditProductType1Modal';
 import AddProductType2Modal from './AddProductType2Modal';
 import EditProductType2Modal from './EditProductType2Modal';
 
-const API_BASE_URL = 'http://10.232.100.50:8080/api';
+import { API_BASE_URL } from '../../config';
 const PAGE_SIZE = 10;
 
 const ProductType1Page = () => {

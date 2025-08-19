@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Input, message } from 'antd';
 
-const API_BASE_URL = 'http://10.232.100.50:8080/api';
+import { API_BASE_URL } from '../../config';
 
 const AddProductType2Modal = ({ visible, parentId, onClose, onSuccess }) => {
   const [inputName, setInputName] = useState('');
