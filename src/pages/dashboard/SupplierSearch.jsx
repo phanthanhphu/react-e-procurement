@@ -1,5 +1,5 @@
 import React from 'react';
-import { Paper, TextField, Button, Stack, Grid, useTheme } from '@mui/material';
+import { Paper, TextField, Button, Box, useTheme } from '@mui/material';
 
 export default function SupplierSearch({
   searchSupplierCode,
@@ -8,32 +8,21 @@ export default function SupplierSearch({
   setSearchSupplierName,
   searchSapCode,
   setSearchSapCode,
-  searchItemNo, // Đổi tên đây từ productFullName thành itemNo
-  setSearchItemNo, // Đổi tên setter
+  searchItemNo,
+  setSearchItemNo,
   searchProductShortName,
   setSearchProductShortName,
-  searchFullDescription, // Trường mới Full Description
-  setSearchFullDescription, // Setter mới
-  searchGroupItem1, // Trường mới Group Item 1
-  setSearchGroupItem1, // Setter mới
-  searchGroupItem2, // Trường mới Group Item 2
-  setSearchGroupItem2, // Setter mới
+  searchFullDescription,
+  setSearchFullDescription,
+  searchGroupItem1,
+  setSearchGroupItem1,
+  searchGroupItem2,
+  setSearchGroupItem2,
   setPage,
   onSearch,
   onReset,
 }) {
   const theme = useTheme();
-
-  const fields = [
-    { label: 'Supplier Code', value: searchSupplierCode, setter: setSearchSupplierCode },
-    { label: 'Supplier Name', value: searchSupplierName, setter: setSearchSupplierName },
-    { label: 'SAP Code', value: searchSapCode, setter: setSearchSapCode },
-    { label: 'Item No', value: searchItemNo, setter: setSearchItemNo }, // Thay Item Description thành Item No
-    { label: 'Short Item Desc', value: searchProductShortName, setter: setSearchProductShortName },
-    { label: 'Full Description', value: searchFullDescription, setter: setSearchFullDescription }, // Full Description
-    { label: 'Group Item 1', value: searchGroupItem1, setter: setSearchGroupItem1 }, // Group Item 1
-    { label: 'Group Item 2', value: searchGroupItem2, setter: setSearchGroupItem2 }, // Group Item 2
-  ];
 
   return (
     <Paper
@@ -45,36 +34,71 @@ export default function SupplierSearch({
         borderRadius: 3,
         boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
         border: `1px solid ${theme.palette.divider}`,
-        overflowX: 'auto', // cho phép cuộn ngang nếu quá nhỏ
+        overflowX: 'auto',
       }}
     >
-      <Grid
-        container
-        spacing={2}
-        wrap="nowrap" // không xuống dòng
-        alignItems="center"
+      {/* Hàng 1: 4 input + nút Search */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          mb: 2,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
       >
-        {fields.map((field, idx) => (
-          <Grid item key={idx} sx={{ flex: 1, minWidth: 150 }}>
-            <TextField
-              fullWidth
-              label={field.label}
-              variant="outlined"
-              size="small"
-              value={field.value}
-              onChange={(e) => {
-                setPage(0);
-                field.setter(e.target.value);
-              }}
-            />
-          </Grid>
-        ))}
+        <TextField
+          label="Supplier Code"
+          variant="outlined"
+          size="small"
+          value={searchSupplierCode}
+          onChange={(e) => {
+            setPage(0);
+            setSearchSupplierCode(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="Supplier Name"
+          variant="outlined"
+          size="small"
+          value={searchSupplierName}
+          onChange={(e) => {
+            setPage(0);
+            setSearchSupplierName(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="SAP Code"
+          variant="outlined"
+          size="small"
+          value={searchSapCode}
+          onChange={(e) => {
+            setPage(0);
+            setSearchSapCode(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="Item No"
+          variant="outlined"
+          size="small"
+          value={searchItemNo}
+          onChange={(e) => {
+            setPage(0);
+            setSearchItemNo(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
 
-        {/* Buttons */}
-        <Grid item sx={{ display: 'flex', gap: 8 }}>
+        <Box sx={{ flexShrink: 0 }}>
           <Button
             variant="contained"
-            onClick={() => { setPage(0); onSearch(); }}
+            onClick={() => {
+              setPage(0);
+              onSearch();
+            }}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -83,13 +107,76 @@ export default function SupplierSearch({
               px: 3,
               borderRadius: '8px',
               fontSize: '0.875rem',
+              height: 40,
+              whiteSpace: 'nowrap',
             }}
           >
             Search
           </Button>
+        </Box>
+      </Box>
+
+      {/* Hàng 2: 4 input + nút Reset */}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <TextField
+          label="Short Item Desc"
+          variant="outlined"
+          size="small"
+          value={searchProductShortName}
+          onChange={(e) => {
+            setPage(0);
+            setSearchProductShortName(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="Full Description"
+          variant="outlined"
+          size="small"
+          value={searchFullDescription}
+          onChange={(e) => {
+            setPage(0);
+            setSearchFullDescription(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="Group Item 1"
+          variant="outlined"
+          size="small"
+          value={searchGroupItem1}
+          onChange={(e) => {
+            setPage(0);
+            setSearchGroupItem1(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+        <TextField
+          label="Group Item 2"
+          variant="outlined"
+          size="small"
+          value={searchGroupItem2}
+          onChange={(e) => {
+            setPage(0);
+            setSearchGroupItem2(e.target.value);
+          }}
+          sx={{ flexGrow: 1, minWidth: 200 }}
+        />
+
+        <Box sx={{ flexShrink: 0 }}>
           <Button
             variant="outlined"
-            onClick={() => { setPage(0); onReset(); }}
+            onClick={() => {
+              setPage(0);
+              onReset();
+            }}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -98,12 +185,14 @@ export default function SupplierSearch({
               fontSize: '0.875rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
+              height: 40,
+              whiteSpace: 'nowrap',
             }}
           >
             Reset
           </Button>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Paper>
   );
 }

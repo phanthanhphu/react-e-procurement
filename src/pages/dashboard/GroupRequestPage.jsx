@@ -11,14 +11,14 @@ import { API_BASE_URL } from '../../config';
 
 const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
 
-const fetchGroups = async () => {
+const fetchGroups = async (page = 0, limit = 10) => {
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${apiUrl}/page?page=${page}&limit=${limit}`, {
       method: 'GET',
       headers: { 'Accept': '*/*' },
     });
     const data = await response.json();
-    return data;
+    return data.content || []; // Trả về dữ liệu nhóm từ trang hiện tại (content)
   } catch (error) {
     console.error('Error fetching groups:', error);
     message.error('Failed to load groups');
@@ -54,19 +54,22 @@ const GroupRequestPage = () => {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
+  const [page, setPage] = useState(0); // Track current page for pagination
+  const [limit, setLimit] = useState(10); // Number of items per page
   const navigate = useNavigate();
 
+  // Fetch groups with pagination
   useEffect(() => {
     const loadData = async () => {
-      const groups = await fetchGroups();
+      const groups = await fetchGroups(page, limit);
       setData(groups);
       setFilteredData(groups);
     };
     loadData();
-  }, []);
+  }, [page, limit]);
 
   const reloadTableData = async () => {
-    const groups = await fetchGroups();
+    const groups = await fetchGroups(page, limit);
     setData(groups);
     setFilteredData(groups);
   };
@@ -123,18 +126,18 @@ const GroupRequestPage = () => {
     <div style={{ padding: '30px 50px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {/* Title section */}
       <h2 style={{
-        textAlign: 'left',  // Canh trái tiêu đề
-        fontSize: '1rem',  // Adjusted to 1rem (16px)
+        textAlign: 'left',
+        fontSize: '1rem',
         fontWeight: 600,
-        marginBottom: '12px',  // Margin-bottom as per the CSS
-        color: '#1976d2',  // The color #1976d2
-        lineHeight: 1.5,  // Line height as specified
-        fontFamily: 'Inter, sans-serif',  // Assuming 'Inter' is available or added as a web font
+        marginBottom: '12px',
+        color: '#1976d2',
+        lineHeight: 1.5,
+        fontFamily: 'Inter, sans-serif',
       }}>
         Supplier Group Management
       </h2>
 
-      {/* Add Button: Now placed above the search bar */}
+      {/* Add Button */}
       <div style={{ marginBottom: '20px', textAlign: 'right' }}>
         <Button 
           type="primary" 
@@ -149,18 +152,13 @@ const GroupRequestPage = () => {
             borderRadius: '10px',
             padding: '8px 20px',
             boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-            }
           }}
         >
           Add New Request Group
         </Button>
       </div>
 
-
-      {/* Search bar section */}
+      {/* Search bar */}
       <GroupSearchBar
         nameFilter={nameFilter}
         statusFilter={statusFilter}
@@ -176,8 +174,8 @@ const GroupRequestPage = () => {
 
       {/* Display Groups as Cards */}
       <Row gutter={[12, 12]} wrap>
-        {filteredData.map((group) => (
-          <Col flex="10%" key={group.id}>
+        {filteredData.slice(0, limit).map((group) => (
+          <Col span={4} key={group.id}> {/* span={4} will make sure to display 5 items per row */}
             <Card
               bordered={false}
               size="small"
@@ -188,10 +186,9 @@ const GroupRequestPage = () => {
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
               }}
             >
-              {/* Header: Title + Edit/Delete */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '14px', fontWeight: 600 }}>{group.name}</span>
                 <div style={{ display: 'flex', gap: '4px' }}>
@@ -222,14 +219,12 @@ const GroupRequestPage = () => {
                 </div>
               </div>
 
-              {/* Content */}
               <div style={{ fontSize: '12px', textAlign: 'left', marginTop: '8px', flexGrow: 1 }}>
                 <p style={{ margin: '2px 0' }}><strong>Status:</strong> {group.status}</p>
                 <p style={{ margin: '2px 0' }}><strong>Created By:</strong> {group.createdBy}</p>
                 <p style={{ margin: '2px 0' }}><strong>Date:</strong> {dayjs(group.createdDate).format('YYYY-MM-DD')}</p>
               </div>
 
-              {/* Footer: View Summary */}
               <div style={{ marginTop: '8px' }}>
                 <Button
                   size="small"
@@ -264,6 +259,24 @@ const GroupRequestPage = () => {
         onCancel={() => setIsEditModalVisible(false)} 
         onOk={handleEditOk} 
       />
+
+      {/* Pagination Controls */}
+      <div style={{ marginTop: '20px', textAlign: 'center' }}>
+        <Space>
+          <Button 
+            onClick={() => setPage(page > 0 ? page - 1 : 0)} 
+            disabled={page === 0}
+          >
+            Previous
+          </Button>
+          <Button 
+            onClick={() => setPage(page + 1)} 
+            disabled={filteredData.length < limit}
+          >
+            Next
+          </Button>
+        </Space>
+      </div>
     </div>
   );
 };
