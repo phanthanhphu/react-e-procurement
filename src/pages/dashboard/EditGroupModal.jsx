@@ -63,6 +63,17 @@ const EditGroupModal = ({ visible, onCancel, onOk, currentItem }) => {
         </Form.Item>
 
         <Form.Item 
+          label="Type"
+          name="type" 
+          rules={[{ required: true, message: 'Please select a type!' }]}
+        >
+          <Select placeholder="Select Type">
+            <Select.Option value="Requisition_urgent">Requisition Urgent</Select.Option>
+            <Select.Option value="Requisition_monthly">Requisition Monthly</Select.Option>
+          </Select>
+        </Form.Item>
+
+        <Form.Item 
           label="Status"
           name="status" 
           rules={[{ required: true, message: 'Please select a status!' }]}

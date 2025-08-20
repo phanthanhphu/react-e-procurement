@@ -38,12 +38,17 @@ const ProductType1Page = () => {
     setLoadingType1(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/product-type-1?page=${page}&size=${PAGE_SIZE}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        const errorMessage = errorData.message || 'Failed to load Type 1 data';
+        throw new Error(errorMessage);
+      }
       const json = await res.json();
       setType1Data(json.content || []);
       setType1Total(json.totalElements || 0);
       setType1Page(json.number || 0);
     } catch (error) {
-      message.error(error.message);
+      message.error(error.message || 'An unexpected error occurred');
     }
     setLoadingType1(false);
   };
@@ -52,12 +57,17 @@ const ProductType1Page = () => {
     setLoadingType2(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/product-type-2?productType1Id=${parentId}&page=${page}&size=${PAGE_SIZE}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        const errorMessage = errorData.message || 'Failed to load Type 2 data';
+        throw new Error(errorMessage);
+      }
       const json = await res.json();
       setType2Data(json.content || []);
       setType2Total(json.totalElements || 0);
       setType2Page(json.number || 0);
     } catch (error) {
-      message.error(error.message);
+      message.error(error.message || 'An unexpected error occurred');
     }
     setLoadingType2(false);
   };
@@ -203,25 +213,40 @@ const ProductType1Page = () => {
     },
   ];
 
-  const handleDelete = async () => {
-    if (!deleteTarget.record) return;
-    setLoadingType1(true);
-    try {
-      const { kind, record } = deleteTarget;
-      const url = kind === 'type1'
-        ? `${API_BASE_URL}/api/product-type-1/${record.id}`
-        : `${API_BASE_URL}/api/product-type-2/${record.id}`;
-      const res = await fetch(url, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      message.success('Deleted successfully');
-      setDeleteConfirmVisible(false);
-      if (kind === 'type1') loadType1(type1Page);
-      else if (kind === 'type2' && expandedType1Id) loadType2(expandedType1Id, type2Page);
-    } catch (error) {
-      message.error(error.message);
+const handleDelete = async () => {
+  if (!deleteTarget.record) return;
+  setLoadingType1(true);
+  try {
+    const { kind, record } = deleteTarget;
+    const url = kind === 'type1'
+      ? `${API_BASE_URL}/api/product-type-1/${record.id}`
+      : `${API_BASE_URL}/api/product-type-2/${record.id}`;
+    
+    const res = await fetch(url, { method: 'DELETE' });
+
+    // Kiểm tra nếu API trả về lỗi liên quan đến các mục ProductType2
+    if (!res.ok) {
+      const errorData = await res.json();
+      const errorMessage = errorData.message || 'Delete failed';
+      
+      if (errorMessage.includes("associated ProductType2 items")) {
+        message.error("Cannot delete this ProductType1 because there are associated ProductType2 items.");
+      } else {
+        message.error(errorMessage);
+      }
+      throw new Error(errorMessage);
     }
-    setLoadingType1(false);
-  };
+
+    message.success('Deleted successfully');
+    setDeleteConfirmVisible(false);
+    if (kind === 'type1') loadType1(type1Page);
+    else if (kind === 'type2' && expandedType1Id) loadType2(expandedType1Id, type2Page);
+  } catch (error) {
+    message.error(error.message || 'An unexpected error occurred');
+  }
+  setLoadingType1(false);
+};
+
 
   return (
     <div style={{ padding: 32, backgroundColor: '#f0f2f5', minHeight: '100vh' }}>

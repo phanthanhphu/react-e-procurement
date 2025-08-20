@@ -174,77 +174,117 @@ const GroupRequestPage = () => {
 
       {/* Display Groups as Cards */}
       <Row gutter={[12, 12]} wrap>
-        {filteredData.slice(0, limit).map((group) => (
-          <Col span={4} key={group.id}> {/* span={4} will make sure to display 5 items per row */}
-            <Card
-              bordered={false}
-              size="small"
-              style={{
-                borderRadius: '10px',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-                textAlign: 'center',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '14px', fontWeight: 600 }}>{group.name}</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <Button
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={() => { setCurrentItem(group); setIsEditModalVisible(true); }}
-                    style={{
-                      backgroundColor: '#81c784',
-                      borderColor: '#388e3c',
-                      color: '#fff',
-                      fontWeight: 500,
-                      fontSize: '0.75rem',
-                    }}
-                  />
-                  <Button
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDelete(group.id)}
-                    style={{
-                      backgroundColor: '#e57373',
-                      borderColor: '#c62828',
-                      color: '#fff',
-                      fontWeight: 500,
-                      fontSize: '0.75rem',
-                    }}
-                  />
+        {filteredData.slice(0, limit).map((group) => {
+          // Xử lý style cho type
+          const typeStyle = {
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontSize: '12px', // Font size of type similar to other fields
+            fontWeight: 600,
+            color: '#fff',
+            display: 'inline-block',
+            marginRight: '8px',
+            marginBottom: '6px', // Add space below
+          };
+
+          const bgColor =
+            group.type === 'Requisition_urgent'
+              ? '#e57373' // đỏ nhạt
+              : group.type === 'Requisition_monthly'
+              ? '#64b5f6' // xanh nhạt
+              : '#9e9e9e'; // fallback màu xám
+
+          return (
+            <Col span={4} key={group.id}>
+              <Card
+                bordered={false}
+                size="small"
+                style={{
+                  borderRadius: '10px',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                  textAlign: 'center',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>{group.name}</span>
+                  <div style={{ display: 'flex', gap: '6px' }}> {/* Increased gap for icons */}
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => { setCurrentItem(group); setIsEditModalVisible(true); }}
+                      style={{
+                        backgroundColor: '#81c784',
+                        borderColor: '#388e3c',
+                        color: '#fff',
+                        fontWeight: 500,
+                        fontSize: '0.75rem',
+                      }}
+                    />
+                    <Button
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDelete(group.id)}
+                      style={{
+                        backgroundColor: '#e57373',
+                        borderColor: '#c62828',
+                        color: '#fff',
+                        fontWeight: 500,
+                        fontSize: '0.75rem',
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ fontSize: '12px', textAlign: 'left', marginTop: '8px', flexGrow: 1 }}>
-                <p style={{ margin: '2px 0' }}><strong>Status:</strong> {group.status}</p>
-                <p style={{ margin: '2px 0' }}><strong>Created By:</strong> {group.createdBy}</p>
-                <p style={{ margin: '2px 0' }}><strong>Date:</strong> {dayjs(group.createdDate).format('YYYY-MM-DD')}</p>
-              </div>
+                <br /> {/* This <br> adds space between Type and Buttons */}
 
-              <div style={{ marginTop: '8px' }}>
-                <Button
-                  size="small"
-                  icon={<EyeOutlined />}
-                  onClick={() => navigate(`/dashboard/summary/${group.id}`)}
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#64b5f6',
-                    borderColor: '#1976d2',
-                    color: '#fff',
-                    fontWeight: 500,
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  View Summary
-                </Button>
-              </div>
-            </Card>
-          </Col>
-        ))}
+                {/* Type and Badge in same line */}
+                <div style={{ textAlign: 'left', display: 'flex', alignItems: 'center' }}>
+                  <p style={{ fontSize: '12px', margin: '0', fontWeight: 600, marginRight: '8px' }}>
+                    <strong>Type:</strong>
+                  </p>
+                  <span style={{ ...typeStyle, backgroundColor: bgColor }}>
+                    {group.type === 'Requisition_urgent' ? 'Requisition Urgent' : 'Requisition Monthly'}
+                  </span>
+                </div>
+
+                {/* Body */}
+                <div style={{ fontSize: '12px', textAlign: 'left', marginTop: '8px', flexGrow: 1 }}>
+                  <p style={{ margin: '2px 0' }}><strong>Status:</strong> {group.status}</p>
+                  <p style={{ margin: '2px 0' }}><strong>Created By:</strong> {group.createdBy}</p>
+                  <p style={{ margin: '2px 0' }}><strong>Date:</strong> {dayjs(group.createdDate).format('YYYY-MM-DD')}</p>
+                </div>
+
+                {/* Footer */}
+                <div style={{ marginTop: '8px' }}>
+                  <Button
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => navigate(`/dashboard/summary/${group.id}`)}
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+                      borderColor: '#0288d1',
+                      color: '#fff',
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                      borderRadius: '8px',
+                      padding: '6px 0',
+                      boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+                    }}
+                  >
+                    View Summary
+                  </Button>
+                </div>
+
+              </Card>
+            </Col>
+          );
+        })}
       </Row>
 
       {/* Modals */}
