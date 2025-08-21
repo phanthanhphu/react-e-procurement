@@ -15,7 +15,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import factoryImage from '../../assets/svg/logos/factory_1.png';
+import factoryImage from '../../assets/svg/logos/corporation.png';
 import { API_BASE_URL } from '../../config';
 
 import AddDepartmentDialog from './AddDepartmentDialog';
