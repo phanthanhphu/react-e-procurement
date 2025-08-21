@@ -6,14 +6,15 @@ const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')))
 const SummaryPage = Loadable(lazy(() => import('pages/dashboard/SummaryPage')));
 const SupplierProductsTable = Loadable(lazy(() => import('pages/dashboard/SupplierProductsTable')));
 const GroupRequestPage = Loadable(lazy(() => import('pages/dashboard/GroupRequestPage')));
-const DepartmentPage = Loadable(lazy(() => import('pages/dashboard/DepartmentPage')));  // Thêm DepartmentPage
+const DepartmentPage = Loadable(lazy(() => import('pages/dashboard/DepartmentPage')));
+const ProductType1Page = Loadable(lazy(() => import('pages/dashboard/ProductType1Page')));
+const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManagementPage')));
+const RequisitionMonthlyPage = Loadable(lazy(() => import('pages/dashboard/RequisitionMonthlyPage')));  // <-- Thêm import
 
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
-
-const ProductType1Page = Loadable(lazy(() => import('pages/dashboard/ProductType1Page')));
-const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManagementPage')));
+const ComparisonPage = Loadable(lazy(() => import('pages/dashboard/ComparisonPage')));
 
 
 const MainRoutes = {
@@ -44,8 +45,8 @@ const MainRoutes = {
           element: <GroupRequestPage />
         },
         {
-          path: 'department-management',  // Đường dẫn cho Department Management
-          element: <DepartmentPage />  // Component cho Department Management
+          path: 'department-management',
+          element: <DepartmentPage />
         },
         {
           path: 'product-type-management',
@@ -54,8 +55,15 @@ const MainRoutes = {
         {
           path: 'user-management',
           element: <UserManagementPage />
+        },
+        {
+          path: 'requisition-monthly/:groupId',
+          element: <RequisitionMonthlyPage />      
+        },
+        {
+          path: 'comparison/:groupId',
+          element: <ComparisonPage />
         }
-
 
       ]
     },

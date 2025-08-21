@@ -4,7 +4,7 @@ import { saveAs } from 'file-saver';
 import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 
-export default function ExportExcelButton({ data }) {
+export default function ExportComparisonExcelButton({ data }) {
   const exportToExcel = () => {
     if (!data || data.length === 0) {
       alert('No data to export');
@@ -20,44 +20,41 @@ export default function ExportExcelButton({ data }) {
 
     const wsData = [];
 
-    const titleRow = new Array(6 + allDeptKeys.length + 5).fill('');
-    titleRow[6] = 'SUMMARY REQUISITION';
+    const titleRow = new Array(6 + allDeptKeys.length + 8).fill('');
+    titleRow[6] = 'COMPARISON SUMMARY';
     wsData.push(titleRow);
 
     wsData.push([
       'No',
-      'Description',
-      '',
+      'Item Description (EN)',
+      'Item Description (VN)',
       'Old SAP Code',
       'SAP Code in New SAP',
-      'Unit',
+      'Order Unit',
       ...Array(allDeptKeys.length).fill("Department Request Q'ty"),
       'Total Request Qty',
-      'Stock (01/08/2025)',
-      'Purchasing Suggest',
-      'Reason',
+      'Supplier',
+      'Unit Price (VND)',
+      'Total Amount (VND)',
+      'Amount Difference (VND)',
+      'Difference (%)',
       'Remark',
     ]);
 
     wsData.push([
-      '',
-      'English Name',
-      'Vietnamese Name',
-      '',
-      '',
-      '',
+      '', '', '', '', '', '',
       ...allDeptKeys,
-      '',
-      '',
-      '',
-      '',
-      '',
+      '', '', '', '', '', '', ''
     ]);
 
     data.forEach((item, index) => {
       const { requisition, supplierProduct } = item;
       const deptQty = requisition.departmentRequestQty || {};
       const totalQty = allDeptKeys.reduce((sum, key) => sum + (deptQty[key] || 0), 0);
+      const unitPrice = supplierProduct.price;
+      const totalAmount = unitPrice * totalQty;
+      const amountDiff = 0; // Bạn có thể thay bằng logic thực tế nếu có
+      const diffPercent = '0%'; // Tương tự
 
       const row = [
         index + 1,
@@ -68,17 +65,20 @@ export default function ExportExcelButton({ data }) {
         supplierProduct.unit,
         ...allDeptKeys.map((key) => deptQty[key] || ''),
         totalQty,
-        requisition.stock,
-        requisition.purchasingSuggest,
-        requisition.reason,
+        supplierProduct.name,
+        unitPrice,
+        totalAmount,
+        amountDiff,
+        diffPercent,
         requisition.remark || '',
       ];
 
       wsData.push(row);
     });
 
-    const totalCols = 6 + allDeptKeys.length + 5;
+    const totalCols = 6 + allDeptKeys.length + 8;
 
+    // Chữ ký
     const signatureTitles = new Array(totalCols).fill('');
     signatureTitles[0] = 'Request by';
     signatureTitles[5] = 'Purchasing Teamleader';
@@ -86,23 +86,20 @@ export default function ExportExcelButton({ data }) {
     signatureTitles[14] = 'Approval by';
 
     const blankLine = new Array(totalCols).fill('');
-    const signBlank1 = [...blankLine];
-    const signBlank2 = [...blankLine];
-
     const signatureNames = new Array(totalCols).fill('');
     signatureNames[0] = 'DANG THI NHU NGOC';
     signatureNames[5] = 'Ms. SELENA TAM';
     signatureNames[10] = 'Mr. EJ KIM';
     signatureNames[14] = 'Mr. YONGUK LEE';
 
-    const signBlank3 = [...blankLine];
+    wsData.push(signatureTitles, blankLine, blankLine, signatureNames, blankLine);
 
-    wsData.push(signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
-
+    // Tạo sheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+    XLSX.utils.book_append_sheet(wb, ws, 'Comparison');
 
+    // Style
     const commonBorder = {
       top: { style: 'thin', color: { rgb: '000000' } },
       bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -143,9 +140,7 @@ export default function ExportExcelButton({ data }) {
     for (let r = 0; r < totalRows; r++) {
       for (let c = 0; c < totalCols; c++) {
         const cellRef = XLSX.utils.encode_cell({ r, c });
-        if (!ws[cellRef]) {
-          ws[cellRef] = { t: 's', v: '' };
-        }
+        if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
 
         if (r === 0) ws[cellRef].s = titleStyle;
         else if (r === 1 || r === 2) ws[cellRef].s = boldHeaderStyle;
@@ -156,10 +151,11 @@ export default function ExportExcelButton({ data }) {
       }
     }
 
+    // Merge ô
     const merges = [
       { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-      { s: { r: 0, c: 6 }, e: { r: 0, c: 6 + allDeptKeys.length - 1 } }, // Title
-      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } }, // Description
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 6 + allDeptKeys.length - 1 } },
+      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } }, // Item Desc
       { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
       { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
       { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
@@ -169,14 +165,14 @@ export default function ExportExcelButton({ data }) {
       { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } },
       { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } },
       { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } },
+      { s: { r: 1, c: 11 + allDeptKeys.length }, e: { r: 2, c: 11 + allDeptKeys.length } },
+      { s: { r: 1, c: 12 + allDeptKeys.length }, e: { r: 2, c: 12 + allDeptKeys.length } },
 
-      // Merge ô tiêu đề chữ ký
+      // Merge chữ ký
       { s: { r: totalRows - 5, c: 0 }, e: { r: totalRows - 5, c: 2 } },
       { s: { r: totalRows - 5, c: 5 }, e: { r: totalRows - 5, c: 7 } },
       { s: { r: totalRows - 5, c: 10 }, e: { r: totalRows - 5, c: 12 } },
       { s: { r: totalRows - 5, c: 14 }, e: { r: totalRows - 5, c: 16 } },
-
-      // Merge ô tên người ký
       { s: { r: totalRows - 2, c: 0 }, e: { r: totalRows - 2, c: 2 } },
       { s: { r: totalRows - 2, c: 5 }, e: { r: totalRows - 2, c: 7 } },
       { s: { r: totalRows - 2, c: 10 }, e: { r: totalRows - 2, c: 12 } },
@@ -184,18 +180,13 @@ export default function ExportExcelButton({ data }) {
     ];
 
     ws['!merges'] = merges;
-
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
-    ws['!cols'][0] = { wch: 5 };
+    ws['!rows'] = wsData.map(() => ({ hpt: 24 }));
 
-    // Giảm độ rộng cột cho các cột "Department Request Q'ty"
-    allDeptKeys.forEach((_, idx) => {
-      ws['!cols'][6 + idx] = { wch: 12 }; // Cột Department Request Q'ty
-    });
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
 
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'summary_requisition.xlsx');
+    // ✅ Đổi tên file tại đây:
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'comparison_summary.xlsx');
   };
 
   return (
@@ -203,17 +194,9 @@ export default function ExportExcelButton({ data }) {
       variant="contained"
       color="success"
       onClick={exportToExcel}
-      startIcon={<img src={ExcelIcon} alt="Excel Icon" style={{ width: 20, height: 20 }} />}
-      sx={{
-        textTransform: 'none',
-        borderRadius: 1,
-        px: 2,
-        py: 0.6,
-        fontWeight: 600,
-        fontSize: '0.75rem',
-      }}
+      startIcon={<img src={ExcelIcon} alt="Export to Excel" style={{ width: 20, height: 20 }} />}
     >
-      Export Urgent Excel
+      Export Comparison Excel
     </Button>
   );
 }

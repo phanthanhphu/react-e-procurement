@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography,
   Box,
@@ -21,16 +21,16 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import InboxIcon from '@mui/icons-material/Inbox';
-import ExportExcelButton from './ExportExcelButton';
+import ExportRequisitionMonthlyExcelButton from './ExportRequisitionMonthlyExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import { API_BASE_URL } from '../../config';
-
-
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 const navigate = useNavigate();
 const headers = [
   { label: 'No', key: 'no' },
+  { label: 'Group Item 1', key: 'englishName' },
+  { label: 'Group Item 2', key: 'vietnameseName' },
   { label: 'Item Description (EN)', key: 'englishName' },
   { label: 'Item Description (VN)', key: 'vietnameseName' },
   { label: 'Old SAP Code', key: 'oldSapCode' }, 
@@ -38,15 +38,23 @@ const headers = [
   { label: 'Order Unit', key: 'unit' }, 
   { label: 'Dept qty', key: 'departmentRequestQty' },
   { label: 'Total qty', key: 'totalRequestQty' },
-  { label: 'Supplier', key: 'supplierName' },
-  { label: 'Sup. price', key: 'supplierPrice' },
-  { label: 'Total price', key: 'totalPrice' },
-  { label: 'Stock', key: 'stock' },
+  { label: 'Total not isued qty ', key: 'supplierName' },
+  { label: 'Inhand', key: 'supplierPrice' },
+  { label: 'Actual inhand', key: 'totalPrice' },
   { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
-  { label: 'Reason', key: 'reason' },
-  { label: 'Remark', key: 'remark' },
+  { label: 'Price', key: 'reason' },
+  { label: 'Amount', key: 'remark' },
+  { label: 'Suppliers', key: 'remark' },
   { label: 'Actions', key: 'actions' },
 ];
+
+const handleGoToComparison = () => {
+  if (groupId) {
+    navigate(`/dashboard/comparison/${groupId}`);
+  } else {
+    alert('Group ID không hợp lệ');
+  }
+};
 
 function DeptRequestTable({ deptRequestQty }) {
   if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
@@ -112,10 +120,11 @@ function DeptRequestTable({ deptRequestQty }) {
   );
 }
 
-export default function SummaryPage() {
+export default function RequisitionMonthlyPage() {
   const theme = useTheme();
   const { groupId } = useParams();
   const navigate = useNavigate();
+
   const [data, setData] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -183,6 +192,15 @@ export default function SummaryPage() {
     setPage(0);
   };
 
+  // Mới thêm: hàm chuyển trang comparison
+  const handleGoToComparison = () => {
+    if (groupId) {
+      navigate(`/dashboard/comparison/${groupId}`);
+    } else {
+      alert('Group ID không hợp lệ');
+    }
+  };
+
   const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
@@ -210,33 +228,33 @@ export default function SummaryPage() {
             letterSpacing: '0.05em',
           }}
         >
-          Requisition Urgent
+          Requisiton Monthly
         </Typography>
 
         <Stack direction="row" spacing={2}>
-          <ExportExcelButton data={data} />
+          <ExportRequisitionMonthlyExcelButton data={data} />
 
-        <Button
-          variant="contained"
-          onClick={() => navigate(`/comparison/${groupId}`)}
-          sx={{
-            textTransform: 'none',
-            borderRadius: 2,
-            px: 3,
-            py: 0.75,
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
-            boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-            },
-          }}
-        >
-          Comparison
-        </Button>
+          <Button
+            variant="contained"
+            onClick={handleGoToComparison}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 2,
+              px: 3,
+              py: 0.75,
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+              '&:hover': {
+                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+              },
+            }}
+          >
+            Comparison
+          </Button>
 
 
           <Button
@@ -262,7 +280,6 @@ export default function SummaryPage() {
             Add New
           </Button>
         </Stack>
-
       </Stack>
 
       {loading && (
@@ -329,106 +346,62 @@ export default function SummaryPage() {
                   ))}
                 </TableRow>
               </TableHead>
+
               <TableBody>
-                {displayData.length > 0 ? (
-                  displayData.map((item, idx) => {
-                    const { requisition, supplierProduct } = item;
-                    const totalRequestQty = Object.values(requisition.departmentRequestQty || {}).reduce(
-                      (sum, qty) => sum + qty,
-                      0
-                    );
-                    const totalPrice = supplierProduct.price * totalRequestQty;
+                {displayData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 5, fontStyle: 'italic', color: '#999' }}>
+                      No data available.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayData.map((row, index) => {
+                    const globalIndex = page * rowsPerPage + index + 1;
 
                     return (
                       <TableRow
-                        key={requisition.id}
+                        key={row.id}
                         sx={{
-                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                          '&:hover': {
-                            backgroundColor: '#e1f0ff',
-                            transition: 'background-color 0.3s ease',
-                          },
-                          fontSize: '0.8rem',
-                          cursor: 'default',
-                          userSelect: 'none',
+                          '&:hover': { backgroundColor: '#e3f2fd' },
+                          borderBottom: '1px solid #e0e0e0',
                         }}
                       >
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {page * rowsPerPage + idx + 1}
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                          {globalIndex}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {requisition.englishName}
+                        <TableCell sx={{ minWidth: 140 }}>{row.groupItem1}</TableCell>
+                        <TableCell sx={{ minWidth: 140 }}>{row.groupItem2}</TableCell>
+                        <TableCell sx={{ minWidth: 250 }}>{row.englishName}</TableCell>
+                        <TableCell sx={{ minWidth: 250 }}>{row.vietnameseName}</TableCell>
+                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.oldSapCode}</TableCell>
+                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.newSapCode}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.unit}</TableCell>
+                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>
+                          <DeptRequestTable deptRequestQty={row.deptRequestQty} />
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.vietnameseName}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.oldSapCode}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.newSapCode}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.unit}
-                        </TableCell>
-                        <TableCell sx={{ px: 2, py: 1.2 }}>
-                          <DeptRequestTable deptRequestQty={requisition.departmentRequestQty} />
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 600 }}>
-                          {totalRequestQty}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {supplierProduct.name}
-                        </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct.price.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
-                        </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.stock}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.purchasingSuggest}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.reason}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.remark}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.totalRequestQty}</TableCell>
+                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.totalNotIssuedQty}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.inHand}</TableCell>
+                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.actualInHand}</TableCell>
+                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.purchasingSuggest}</TableCell>
+                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.price}</TableCell>
+                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.amount}</TableCell>
+                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.suppliers}</TableCell>
+                        <TableCell align="center" sx={{ minWidth: 120 }}>
                           <Stack direction="row" spacing={1} justifyContent="center">
                             <IconButton
-                              aria-label="edit"
                               color="primary"
                               size="small"
-                              sx={{
-                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                                borderRadius: 1,
-                              }}
-                              onClick={() => handleOpenEditDialog(item)}
+                              onClick={() => handleOpenEditDialog(row)}
+                              aria-label="Edit"
                             >
                               <EditIcon fontSize="small" />
                             </IconButton>
                             <IconButton
-                              aria-label="delete"
                               color="error"
                               size="small"
-                              sx={{
-                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                                borderRadius: 1,
-                              }}
-                              onClick={() => handleDelete(requisition.id)}
+                              onClick={() => handleDelete(row.id)}
+                              aria-label="Delete"
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
@@ -437,38 +410,27 @@ export default function SummaryPage() {
                       </TableRow>
                     );
                   })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 6, color: '#90a4ae' }}>
-                      <Stack direction="column" alignItems="center" spacing={2}>
-                        <InboxIcon fontSize="large" />
-                        <Typography>No data available.</Typography>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
           </TableContainer>
 
           <TablePagination
-            rowsPerPageOptions={[10, 25, 50, 100]}
             component="div"
             count={data.length}
-            rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Rows per page:"
+            rowsPerPageOptions={[10, 25, 50]}
+            labelRowsPerPage="Rows per page"
             sx={{
-              mt: 3,
-              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                fontSize: '0.85rem',
-                color: theme.palette.text.secondary,
-              },
-              '.MuiTablePagination-select': { fontSize: '0.85rem' },
-              '.MuiTablePagination-actions > button': {
-                color: theme.palette.primary.main,
+              mt: 2,
+              '& .MuiTablePagination-toolbar': {
+                paddingLeft: 2,
+                paddingRight: 2,
+                backgroundColor: '#f0f4f8',
+                borderRadius: 2,
               },
             }}
           />
@@ -477,16 +439,16 @@ export default function SummaryPage() {
 
       <EditDialog
         open={openEditDialog}
-        item={selectedItem}
         onClose={handleCloseEditDialog}
-        onSave={fetchData}
+        item={selectedItem}
+        onUpdated={fetchData}
       />
 
       <AddDialog
         open={openAddDialog}
         onClose={handleCloseAddDialog}
-        onRefresh={fetchData}
         groupId={groupId}
+        onAdded={fetchData}
       />
     </Box>
   );

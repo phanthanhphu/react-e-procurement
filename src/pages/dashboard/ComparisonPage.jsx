@@ -21,14 +21,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import InboxIcon from '@mui/icons-material/Inbox';
-import ExportExcelButton from './ExportExcelButton';
+import ExportComparisonExcelButton from './ExportComparisonExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import { API_BASE_URL } from '../../config';
 
-
-import { useParams, useNavigate } from 'react-router-dom';
-const navigate = useNavigate();
 const headers = [
   { label: 'No', key: 'no' },
   { label: 'Item Description (EN)', key: 'englishName' },
@@ -36,14 +33,13 @@ const headers = [
   { label: 'Old SAP Code', key: 'oldSapCode' }, 
   { label: 'SAP Code in New SAP', key: 'newSapCode' },
   { label: 'Order Unit', key: 'unit' }, 
-  { label: 'Dept qty', key: 'departmentRequestQty' },
-  { label: 'Total qty', key: 'totalRequestQty' },
-  { label: 'Supplier', key: 'supplierName' },
-  { label: 'Sup. price', key: 'supplierPrice' },
-  { label: 'Total price', key: 'totalPrice' },
-  { label: 'Stock', key: 'stock' },
-  { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
-  { label: 'Reason', key: 'reason' },
+  { label: 'Supplier', key: 'departmentRequestQty' },
+  { label: 'Selected supplier name', key: 'totalRequestQty' },
+  { label: 'Price', key: 'supplierName' },
+  { label: 'Unit Price (VND)', key: 'supplierPrice' },
+  { label: 'Total Amount (VND)', key: 'totalPrice' },
+  { label: 'Amount Difference (VND)', key: 'stock' },
+  { label: 'Difference (%)', key: 'purchasingSuggest' },
   { label: 'Remark', key: 'remark' },
   { label: 'Actions', key: 'actions' },
 ];
@@ -115,7 +111,7 @@ function DeptRequestTable({ deptRequestQty }) {
 export default function SummaryPage() {
   const theme = useTheme();
   const { groupId } = useParams();
-  const navigate = useNavigate();
+
   const [data, setData] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -210,59 +206,12 @@ export default function SummaryPage() {
             letterSpacing: '0.05em',
           }}
         >
-          Requisition Urgent
+          Comparison
         </Typography>
 
         <Stack direction="row" spacing={2}>
-          <ExportExcelButton data={data} />
-
-        <Button
-          variant="contained"
-          onClick={() => navigate(`/comparison/${groupId}`)}
-          sx={{
-            textTransform: 'none',
-            borderRadius: 2,
-            px: 3,
-            py: 0.75,
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
-            boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-            },
-          }}
-        >
-          Comparison
-        </Button>
-
-
-          <Button
-            variant="contained"
-            startIcon={<AddIcon fontSize="small" />}
-            onClick={handleOpenAddDialog}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 2,
-              px: 3,
-              py: 0.75,
-              fontWeight: 700,
-              fontSize: '0.85rem',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-              '&:hover': {
-                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-              },
-            }}
-          >
-            Add New
-          </Button>
+            <ExportComparisonExcelButton data={data} />
         </Stack>
-
       </Stack>
 
       {loading && (
