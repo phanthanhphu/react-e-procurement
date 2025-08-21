@@ -26,9 +26,6 @@ import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import { API_BASE_URL } from '../../config';
 
-
-import { useParams, useNavigate } from 'react-router-dom';
-const navigate = useNavigate();
 const headers = [
   { label: 'No', key: 'no' },
   { label: 'Item Description (EN)', key: 'englishName' },
@@ -115,7 +112,7 @@ function DeptRequestTable({ deptRequestQty }) {
 export default function SummaryPage() {
   const theme = useTheme();
   const { groupId } = useParams();
-  const navigate = useNavigate();
+
   const [data, setData] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
@@ -216,27 +213,27 @@ export default function SummaryPage() {
         <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
 
-        <Button
-          variant="contained"
-          onClick={() => navigate(`/comparison/${groupId}`)}
-          sx={{
-            textTransform: 'none',
-            borderRadius: 2,
-            px: 3,
-            py: 0.75,
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
-            boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-            },
-          }}
-        >
-          Comparison
-        </Button>
+      <Button
+        variant="contained"
+        onClick={() => navigate(`/comparison/${groupId}`)}
+        sx={{
+          textTransform: 'none',
+          borderRadius: 2,
+          px: 3,
+          py: 0.75,
+          fontWeight: 700,
+          fontSize: '0.85rem',
+          background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+          color: '#fff',
+          boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+          '&:hover': {
+            background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+            boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+          },
+        }}
+      >
+        Comparison
+      </Button>
 
 
           <Button
