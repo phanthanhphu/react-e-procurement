@@ -25,8 +25,7 @@ import ExportRequisitionMonthlyExcelButton from './ExportRequisitionMonthlyExcel
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import { API_BASE_URL } from '../../config';
-import { useNavigate } from 'react-router-dom';
-const navigate = useNavigate();
+
 const headers = [
   { label: 'No', key: 'no' },
   { label: 'Group Item 1', key: 'englishName' },
