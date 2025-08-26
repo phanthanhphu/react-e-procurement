@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, TextField, Stack, CircularProgress,
-  FormControl, InputLabel, Select, MenuItem,
-  Typography, Paper, IconButton
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Stack,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Typography,
+  Paper,
+  IconButton,
+  FormHelperText,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -23,11 +35,20 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     remark: '',
     supplierPrice: 0,
     supplierId: '',
+    productType1Id: '', // Thêm
+    productType2Id: '', // Thêm
+    groupId: '', // Thêm
   });
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
   const [saving, setSaving] = useState(false);
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [productType1List, setProductType1List] = useState([]); // Thêm
+  const [productType2List, setProductType2List] = useState([]); // Thêm
+  const [loadingType1, setLoadingType1] = useState(false); // Thêm
+  const [loadingType2, setLoadingType2] = useState(false); // Thêm
+  const [departmentList, setDepartmentList] = useState([]); // Thêm
+  const [loadingDepartments, setLoadingDepartments] = useState(false); // Thêm
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item); // Debug: Log item prop
@@ -45,7 +66,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           setFormData({
             itemDescriptionEN: requisition.englishName || '',
             itemDescriptionVN: requisition.vietnameseName || '',
-            fullItemDescriptionVN: requisition.vietnameseName || '',
+            fullItemDescriptionVN: requisition.fullDescription || '',
             oldSapCode: requisition.oldSapCode || '',
             newSapCode: requisition.newSapCode || '',
             unit: supplierProduct.unit || '',
@@ -55,6 +76,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             remark: requisition.remark || '',
             supplierPrice: supplierProduct.price || 0,
             supplierId: supplierProduct.id || '',
+            productType1Id: requisition.productType1Id || '', // Thêm
+            productType2Id: requisition.productType2Id || '', // Thêm
+            groupId: requisition.groupId || '', // Thêm
           });
 
           if (requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object') {
@@ -88,11 +112,81 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         remark: '',
         supplierPrice: 0,
         supplierId: '',
+        productType1Id: '',
+        productType2Id: '',
+        groupId: '',
       });
       setDeptRows([{ department: '', qty: '' }]);
       setSupplierOptions([]);
     }
+
+    // Tải danh sách productType1 và department khi dialog mở
+    if (open) {
+      fetchProductType1List();
+      fetchDepartmentList();
+    }
   }, [item, open]);
+
+  // Tải danh sách productType1
+  const fetchProductType1List = async () => {
+    setLoadingType1(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
+      if (!res.ok) throw new Error('Failed to load product type 1 list');
+      const data = await res.json();
+      setProductType1List(data.content || data);
+    } catch (error) {
+      console.error(error);
+      setProductType1List([]);
+    } finally {
+      setLoadingType1(false);
+    }
+  };
+
+  // Tải danh sách productType2 dựa trên productType1Id
+  useEffect(() => {
+    if (formData.productType1Id) {
+      fetchProductType2List(formData.productType1Id);
+    } else {
+      setProductType2List([]);
+      setFormData((prev) => ({ ...prev, productType2Id: '' }));
+    }
+  }, [formData.productType1Id]);
+
+  const fetchProductType2List = async (type1Id) => {
+    setLoadingType2(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
+      );
+      if (!res.ok) throw new Error('Failed to load product type 2 list');
+      const data = await res.json();
+      setProductType2List(data.content || data);
+    } catch (error) {
+      console.error(error);
+      setProductType2List([]);
+    } finally {
+      setLoadingType2(false);
+    }
+  };
+
+  // Tải danh sách phòng ban
+  const fetchDepartmentList = async () => {
+    setLoadingDepartments(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/departments`, {
+        headers: { accept: '*/*' },
+      });
+      if (!res.ok) throw new Error('Failed to load department list');
+      const data = await res.json();
+      setDepartmentList(data || []);
+    } catch (error) {
+      console.error(error);
+      setDepartmentList([]);
+    } finally {
+      setLoadingDepartments(false);
+    }
+  };
 
   const searchSupplierByName = (query) => {
     if (!query) {
@@ -164,22 +258,54 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
     const deptQtyMap = {};
     deptRows.forEach(({ department, qty }) => {
-      if (department.trim() && qty.trim()) deptQtyMap[department.trim()] = parseFloat(qty);
+      if (department.trim() && qty.trim()) {
+        // Tìm department từ departmentList dựa trên id
+        const dept = departmentList.find(d => d.id === department);
+        if (dept) {
+          deptQtyMap[department] = parseFloat(qty);
+        }
+      }
     });
 
-    const payload = { ...formData, departmentRequestQty: deptQtyMap };
+    const payload = {
+      englishName: formData.itemDescriptionEN || '',
+      vietnameseName: formData.itemDescriptionVN || '',
+      fullDescription: formData.fullItemDescriptionVN || '',
+      oldSapCode: formData.oldSapCode || '',
+      newSapCode: formData.newSapCode || '',
+      departmentRequestQty: deptQtyMap,
+      stock: parseFloat(formData.stock) || 0,
+      purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
+      reason: formData.reason || '',
+      remark: formData.remark || '',
+      supplierId: formData.supplierId || '',
+      groupId: formData.groupId || '',
+      productType1Id: formData.productType1Id || undefined,
+      productType2Id: formData.productType2Id || undefined,
+    };
+
+    console.log('Sending payload:', payload); // Debug payload
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`Update failed: ${res.status}`);
+      if (!res.ok) {
+        const error = await res.text();
+        console.error('API error:', error);
+        alert(`Update failed: ${error || 'Unknown error'}`);
+        throw new Error(`Update failed: ${res.status} - ${error}`);
+      }
       await onRefresh();
       onClose();
-    } catch {
+    } catch (err) {
+      console.error('Update error:', err);
       alert('Failed to update item. Please try again.');
     } finally {
       setSaving(false);
@@ -205,6 +331,59 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+            <Select
+              labelId="product-type-1-label"
+              value={formData.productType1Id}
+              label="Product Type 1"
+              onChange={handleChange('productType1Id')}
+              disabled={loadingType1}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType1List.map((type1) => (
+                <MenuItem key={type1.id} value={type1.id}>
+                  {type1.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
+          </FormControl>
+
+          <FormControl
+            fullWidth
+            size="small"
+            disabled={!formData.productType1Id || loadingType2}
+          >
+            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+            <Select
+              labelId="product-type-2-label"
+              value={formData.productType2Id}
+              label="Product Type 2"
+              onChange={handleChange('productType2Id')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType2List.map((type2) => (
+                <MenuItem key={type2.id} value={type2.id}>
+                  {type2.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
+          </FormControl>
+
+          <TextField
+            label="Group ID" // Thêm input cho groupId
+            value={formData.groupId}
+            onChange={handleChange('groupId')}
+            fullWidth
+            size="small"
+          />
+
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -278,13 +457,25 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             </Typography>
             {deptRows.map((row, i) => (
               <Stack direction="row" spacing={2} alignItems="center" key={i} sx={{ mb: 1 }}>
-                <TextField
-                  label="Department"
-                  value={row.department}
-                  onChange={e => handleDeptChange(i, 'department', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
+                <FormControl fullWidth size="small" disabled={loadingDepartments}>
+                  <InputLabel id={`department-label-${i}`}>Department</InputLabel>
+                  <Select
+                    labelId={`department-label-${i}`}
+                    value={row.department}
+                    label="Department"
+                    onChange={e => handleDeptChange(i, 'department', e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {departmentList.map((dept) => (
+                      <MenuItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                </FormControl>
                 <TextField
                   label="Qty"
                   type="number"

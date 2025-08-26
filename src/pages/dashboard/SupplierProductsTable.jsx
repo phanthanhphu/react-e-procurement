@@ -15,11 +15,13 @@ import {
   useTheme,
   Button,
   Input,
+  Popover,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import ImageIcon from '@mui/icons-material/Image';
 import { API_BASE_URL } from '../../config';
 import AddProductDialog from './AddProductDialog';
 import EditProductDialog from './EditProductDialog';
@@ -29,9 +31,12 @@ const headers = [
   { label: 'No', key: 'no' },
   { label: 'Supplier Code', key: 'supplierCode' },
   { label: 'Supplier Name', key: 'supplierName' },
+  { label: 'Product Type 1', key: 'productType1Name' },
+  { label: 'Product Type 2', key: 'productType2Name' },
   { label: 'SAP Code', key: 'sapCode' },
   { label: 'Item Description', key: 'productFullName' },
   { label: 'Short Item Description', key: 'productShortName' },
+  { label: 'Images', key: 'image' },
   { label: 'Size', key: 'size' },
   { label: 'Price', key: 'price' },
   { label: 'Unit', key: 'unit' },
@@ -39,6 +44,36 @@ const headers = [
 ];
 
 function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
+
+  const handlePopoverOpen = (event, imageUrls) => {
+    setAnchorEl(event.currentTarget);
+    const fullSrcs = imageUrls.map((imgSrc) =>
+      imgSrc.startsWith('http')
+        ? imgSrc
+        : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
+    );
+    console.log('Image URLs:', fullSrcs); // Log URL để debug
+    setPopoverImgSrcs(fullSrcs);
+  };
+
+  const handlePopoverClose = () => {
+    setAnchorEl(null);
+    setPopoverImgSrcs([]);
+  };
+
+  const handlePopoverEnter = () => {
+    // Giữ Popover mở khi di chuột vào
+  };
+
+  const handlePopoverLeave = () => {
+    // Đóng Popover khi di chuột ra ngoài
+    handlePopoverClose();
+  };
+
+  const open = Boolean(anchorEl);
+
   if (!supplierProducts || supplierProducts.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>No Data</Typography>;
   }
@@ -55,12 +90,12 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
             {headers.map(({ label, key }) => (
               <TableCell
                 key={key}
-                align={label === 'Action' ? 'center' : 'left'}
+                align={label === 'Action' || label === 'Images' ? 'center' : 'left'}
                 sx={{
                   fontWeight: 'bold',
                   fontSize: '0.75rem',
                   color: '#ffffff',
-                  py: 1, // Tăng padding cho các ô header
+                  py: 1,
                   px: 1,
                   whiteSpace: 'nowrap',
                   borderRight: '1px solid rgba(255,255,255,0.15)',
@@ -97,15 +132,21 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierCode}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+                {product.productType1Name || 'N/A'}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+                {product.productType2Name || 'N/A'}
+              </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.sapCode}</TableCell>
               <TableCell
                 sx={{
                   fontSize: '0.75rem',
                   py: 1,
                   px: 1,
-                  whiteSpace: 'normal',  // Cho phép văn bản xuống dòng
-                  wordBreak: 'break-word',  // Cắt từ dài nếu cần
-                  width: '300px',  // Cố định chiều rộng cho cột dài
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  width: '300px',
                 }}
               >
                 {product.productFullName}
@@ -117,10 +158,24 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
                   px: 1,
                   whiteSpace: 'normal',
                   wordBreak: 'break-word',
-                  width: '300px',  // Cố định chiều rộng cho cột dài
+                  width: '300px',
                 }}
               >
                 {product.productShortName}
+              </TableCell>
+              <TableCell align="center" sx={{ py: 1, px: 1 }}>
+                {product.imageUrls && product.imageUrls.length > 0 ? (
+                  <IconButton
+                    size="small"
+                    onMouseEnter={(e) => handlePopoverOpen(e, product.imageUrls)}
+                    aria-owns={open ? 'mouse-over-popover' : undefined}
+                    aria-haspopup="true"
+                  >
+                    <ImageIcon fontSize="small" />
+                  </IconButton>
+                ) : (
+                  <Typography sx={{ fontSize: '0.7rem', color: '#888' }}>No Images</Typography>
+                )}
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.size}</TableCell>
               <TableCell align="left" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
@@ -141,6 +196,56 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
           ))}
         </TableBody>
       </Table>
+
+      <Popover
+        id="mouse-over-popover"
+        sx={{
+          pointerEvents: 'auto',
+        }}
+        open={open}
+        anchorEl={anchorEl}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        onClose={handlePopoverClose}
+        disableRestoreFocus
+      >
+        <Box
+          sx={{ p: 2, maxWidth: 1000, maxHeight: 400, overflow: 'auto' }}
+          onMouseEnter={handlePopoverEnter}
+          onMouseLeave={handlePopoverLeave}
+        >
+          {popoverImgSrcs.length > 0 ? (
+            <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+              {popoverImgSrcs.map((imgSrc, index) => (
+                <Box key={index} sx={{ maxWidth: 300, textAlign: 'center' }}>
+                  <img
+                    src={imgSrc}
+                    alt={`Product Image ${index + 1}`}
+                    style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 4 }}
+                    loading="lazy"
+                    onError={(e) => {
+                      console.error(`Failed to load image: ${imgSrc}`);
+                      e.target.src = '/images/fallback.jpg';
+                      e.target.alt = 'Failed to load';
+                    }}
+                  />
+                  <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#555' }}>
+                    Image {index + 1}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography sx={{ p: 2, fontSize: '0.9rem' }}>No images available</Typography>
+          )}
+        </Box>
+      </Popover>
     </TableContainer>
   );
 }
@@ -148,8 +253,9 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
 export default function SupplierProductsPage() {
   const theme = useTheme();
   const [data, setData] = useState([]);
+  const [totalElements, setTotalElements] = useState(0); // Thêm state cho totalElements
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [rowsPerPage, setRowsPerPage] = useState(10); // Thay đổi mặc định thành 10 để khớp với API
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [file, setFile] = useState(null);
@@ -168,20 +274,24 @@ export default function SupplierProductsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/supplier-products`, {
-        method: 'GET',
-        headers: { accept: '*/*' },
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/api/supplier-products?page=${page}&limit=${rowsPerPage}`,
+        {
+          method: 'GET',
+          headers: { accept: '*/*' },
+        }
+      );
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      setData(result);
+      setData(result.content); // Lấy danh sách sản phẩm từ content
+      setTotalElements(result.totalElements); // Cập nhật tổng số bản ghi
     } catch (err) {
       setError('Failed to fetch data');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, rowsPerPage]);
 
   useEffect(() => {
     fetchData();
@@ -233,10 +343,13 @@ export default function SupplierProductsPage() {
     }
   };
 
-  const handleChangePage = (event, newPage) => setPage(newPage);
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+    setPage(0); // Reset về trang đầu khi thay đổi số bản ghi mỗi trang
   };
 
   // Filter data dựa trên từ khóa tìm kiếm
@@ -249,8 +362,6 @@ export default function SupplierProductsPage() {
       item.productShortName?.toLowerCase().includes(searchProductShortName.toLowerCase())
     );
   });
-
-  const displayData = filteredData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   const handleEditProduct = (product) => {
     setProductToEdit(product);
@@ -324,7 +435,7 @@ export default function SupplierProductsPage() {
       />
 
       <SupplierProductsTable
-        supplierProducts={displayData}
+        supplierProducts={filteredData} // Sử dụng filteredData thay vì displayData
         handleDelete={handleDelete}
         handleEdit={handleEditProduct}
       />
@@ -332,7 +443,7 @@ export default function SupplierProductsPage() {
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
         component="div"
-        count={filteredData.length}
+        count={totalElements} // Sử dụng totalElements từ API
         rowsPerPage={rowsPerPage}
         page={page}
         onPageChange={handleChangePage}

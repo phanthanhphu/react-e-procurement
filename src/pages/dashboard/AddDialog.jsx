@@ -14,8 +14,11 @@ import {
   MenuItem,
   Typography,
   Paper,
+  IconButton,
+  FormHelperText,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { API_BASE_URL } from '../../config';
 
 export default function AddDialog({ open, onClose, onRefresh, groupId }) {
@@ -34,6 +37,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     supplierPrice: 0,
     supplierId: '',
     groupId: groupId || '',
+    productType1Id: '',
+    productType2Id: '',
   });
 
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
@@ -42,15 +47,83 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [selectedSupplierName, setSelectedSupplierName] = useState('');
-  const [formErrors, setFormErrors] = useState({
-    oldSapCode: '',
-    itemDescriptionVN: '',
-    itemDescriptionEN: '',
-  });
+  const [productType1List, setProductType1List] = useState([]);
+  const [productType2List, setProductType2List] = useState([]);
+  const [loadingType1, setLoadingType1] = useState(false);
+  const [loadingType2, setLoadingType2] = useState(false);
+  const [departmentList, setDepartmentList] = useState([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
 
   useEffect(() => {
-    setFormData((prev) => ({ ...prev, groupId: groupId || '' }));
-  }, [groupId]);
+    if (open) {
+      fetchProductType1List();
+      fetchDepartmentList();
+      setFormData((prev) => ({
+        ...prev,
+        groupId: groupId || '',
+        productType1Id: '',
+        productType2Id: '',
+      }));
+    }
+  }, [open, groupId]);
+
+  const fetchProductType1List = async () => {
+    setLoadingType1(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
+      if (!res.ok) throw new Error('Failed to load product type 1 list');
+      const data = await res.json();
+      setProductType1List(data.content || data);
+    } catch (error) {
+      console.error(error);
+      setProductType1List([]);
+    } finally {
+      setLoadingType1(false);
+    }
+  };
+
+  useEffect(() => {
+    if (formData.productType1Id) {
+      fetchProductType2List(formData.productType1Id);
+    } else {
+      setProductType2List([]);
+      setFormData((prev) => ({ ...prev, productType2Id: '' }));
+    }
+  }, [formData.productType1Id]);
+
+  const fetchProductType2List = async (type1Id) => {
+    setLoadingType2(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
+      );
+      if (!res.ok) throw new Error('Failed to load product type 2 list');
+      const data = await res.json();
+      setProductType2List(data.content || data);
+    } catch (error) {
+      console.error(error);
+      setProductType2List([]);
+    } finally {
+      setLoadingType2(false);
+    }
+  };
+
+  const fetchDepartmentList = async () => {
+    setLoadingDepartments(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/departments`, {
+        headers: { accept: '*/*' },
+      });
+      if (!res.ok) throw new Error('Failed to load department list');
+      const data = await res.json();
+      setDepartmentList(data || []);
+    } catch (error) {
+      console.error(error);
+      setDepartmentList([]);
+    } finally {
+      setLoadingDepartments(false);
+    }
+  };
 
   const searchSupplier = (productFullName, sapCode) => {
     if (!productFullName.trim() && !sapCode.trim()) {
@@ -111,6 +184,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setDeptRows([...deptRows, { department: '', qty: '' }]);
   };
 
+  const handleDeleteDeptRow = (index) => {
+    const updated = deptRows.filter((_, i) => i !== index);
+    setDeptRows(updated.length > 0 ? updated : [{ department: '', qty: '' }]);
+  };
+
   const calcTotalRequestQty = () => {
     return deptRows.reduce((sum, row) => {
       const q = parseFloat(row.qty);
@@ -122,18 +200,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     return calcTotalRequestQty() * (formData.supplierPrice || 0);
   };
 
-  const validateForm = () => {
-    const errors = {};
-    if (!formData.oldSapCode.trim()) errors.oldSapCode = 'Old SAP Code is required';
-    if (!formData.itemDescriptionVN.trim()) errors.itemDescriptionVN = 'Item Description (VN) is required';
-    if (!formData.itemDescriptionEN.trim()) errors.itemDescriptionEN = 'Item Description (EN) is required';
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
   const handleAdd = async () => {
-    if (!validateForm()) return;
-
     if (!groupId) {
       alert('Group ID is missing.');
       return;
@@ -142,25 +209,39 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     const deptQtyMap = {};
     deptRows.forEach((row) => {
       if (row.department && row.qty) {
-        deptQtyMap[row.department] = parseFloat(row.qty);
+        deptQtyMap[row.department] = parseFloat(row.qty); // Key là department ID, value là qty
       }
     });
 
     const totalRequestQty = Object.values(deptQtyMap).reduce((sum, val) => sum + val, 0);
 
     const payload = {
-      ...formData,
+      englishName: formData.itemDescriptionEN || '',
+      vietnameseName: formData.itemDescriptionVN || '',
+      fullDescription: formData.fullItemDescriptionVN || '',
+      oldSapCode: formData.oldSapCode || '',
+      newSapCode: formData.newSapCode || '',
       departmentRequestQty: deptQtyMap,
+      stock: parseFloat(formData.stock) || 0,
+      purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
+      reason: formData.reason || '',
+      remark: formData.remark || '',
+      supplierId: formData.supplierId || '',
+      groupId: formData.groupId || '',
+      productType1Id: formData.productType1Id || undefined,
+      productType2Id: formData.productType2Id || undefined,
       totalRequestQty,
       totalPrice: totalRequestQty * (formData.supplierPrice || 0),
-      groupId,
     };
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Add failed status ${res.status}`);
@@ -185,11 +266,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         supplierPrice: 0,
         supplierId: '',
         groupId: groupId || '',
+        productType1Id: '',
+        productType2Id: '',
       });
       setDeptRows([{ department: '', qty: '' }]);
       setSupplierOptions([]);
       setSelectedSupplierId('');
       setSelectedSupplierName('');
+      setProductType1List([]);
+      setProductType2List([]);
+      setDepartmentList([]);
     } catch (err) {
       console.error('Add error:', err);
       alert('Add failed. Please try again!');
@@ -214,6 +300,51 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+            <Select
+              labelId="product-type-1-label"
+              value={formData.productType1Id}
+              label="Product Type 1"
+              onChange={handleChange('productType1Id')}
+              disabled={loadingType1}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType1List.map((type1) => (
+                <MenuItem key={type1.id} value={type1.id}>
+                  {type1.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
+          </FormControl>
+
+          <FormControl
+            fullWidth
+            size="small"
+            disabled={!formData.productType1Id || loadingType2}
+          >
+            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+            <Select
+              labelId="product-type-2-label"
+              value={formData.productType2Id}
+              label="Product Type 2"
+              onChange={handleChange('productType2Id')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType2List.map((type2) => (
+                <MenuItem key={type2.id} value={type2.id}>
+                  {type2.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
+          </FormControl>
+
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -222,11 +353,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               size="small"
               fullWidth
               sx={{ flex: 1 }}
-              error={!!formErrors.oldSapCode}
-              helperText={formErrors.oldSapCode}
               InputLabelProps={{
-                required: true,
-                style: { color: 'red' },
+                style: { color: 'inherit' },
               }}
             />
             <TextField
@@ -246,11 +374,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               onChange={handleChange('itemDescriptionVN')}
               fullWidth
               size="small"
-              error={!!formErrors.itemDescriptionVN}
-              helperText={formErrors.itemDescriptionVN}
               InputLabelProps={{
-                required: true,
-                style: { color: 'red' },
+                style: { color: 'inherit' },
               }}
               InputProps={{
                 endAdornment: formData.itemDescriptionVN.trim() ? (
@@ -266,11 +391,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               onChange={handleChange('itemDescriptionEN')}
               fullWidth
               size="small"
-              error={!!formErrors.itemDescriptionEN}
-              helperText={formErrors.itemDescriptionEN}
               InputLabelProps={{
-                required: true,
-                style: { color: 'red' },
+                style: { color: 'inherit' },
               }}
               InputProps={{
                 endAdornment: formData.itemDescriptionEN.trim() ? (
@@ -312,14 +434,32 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               Department Request Qty:
             </Typography>
             {deptRows.map((row, index) => (
-              <Stack direction="row" spacing={2} alignItems="center" key={index} sx={{ mb: 1 }}>
-                <TextField
-                  label="Department"
-                  value={row.department}
-                  onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
+              <Stack
+                direction="row"
+                spacing={2}
+                alignItems="center"
+                key={index}
+                sx={{ mb: 1 }}
+              >
+                <FormControl fullWidth size="small" disabled={loadingDepartments}>
+                  <InputLabel id={`department-label-${index}`}>Department</InputLabel>
+                  <Select
+                    labelId={`department-label-${index}`}
+                    value={row.department}
+                    label="Department"
+                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>None</em>
+                    </MenuItem>
+                    {departmentList.map((dept) => (
+                      <MenuItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                </FormControl>
                 <TextField
                   label="Qty"
                   type="number"
@@ -328,9 +468,23 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   size="small"
                   fullWidth
                 />
+                <IconButton
+                  aria-label="delete department"
+                  onClick={() => handleDeleteDeptRow(index)}
+                  size="small"
+                  color="error"
+                  sx={{ ml: 1 }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
               </Stack>
             ))}
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={handleAddDeptRow}
+              sx={{ mt: 1 }}
+            >
               Add Department
             </Button>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography,
   Box,
@@ -24,16 +24,19 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import ExportExcelButton from './ExportExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
+import RequisitionSearch from './RequisitionSearch'; // Import component mới
 import { API_BASE_URL } from '../../config';
 
 const headers = [
   { label: 'No', key: 'no' },
+  { label: 'Group Type 1', key: 'productType1Name' },
+  { label: 'Group Type 2', key: 'productType2Name' },
   { label: 'Item Description (EN)', key: 'englishName' },
   { label: 'Item Description (VN)', key: 'vietnameseName' },
-  { label: 'Old SAP Code', key: 'oldSapCode' }, 
+  { label: 'Old SAP Code', key: 'oldSapCode' },
   { label: 'SAP Code in New SAP', key: 'newSapCode' },
-  { label: 'Order Unit', key: 'unit' }, 
-  { label: 'Dept qty', key: 'departmentRequestQty' },
+  { label: 'Order Unit', key: 'unit' },
+  { label: 'Department', key: 'departmentRequests' },
   { label: 'Total qty', key: 'totalRequestQty' },
   { label: 'Supplier', key: 'supplierName' },
   { label: 'Sup. price', key: 'supplierPrice' },
@@ -45,8 +48,8 @@ const headers = [
   { label: 'Actions', key: 'actions' },
 ];
 
-function DeptRequestTable({ deptRequestQty }) {
-  if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
+function DeptRequestTable({ departmentRequests }) {
+  if (!departmentRequests || departmentRequests.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
   }
 
@@ -72,7 +75,7 @@ function DeptRequestTable({ deptRequestQty }) {
               color: '#1976d2',
             }}
           >
-            Dept
+            Department
           </TableCell>
           <TableCell
             align="center"
@@ -89,7 +92,7 @@ function DeptRequestTable({ deptRequestQty }) {
         </TableRow>
       </TableHead>
       <TableBody>
-        {Object.entries(deptRequestQty).map(([dept, qty], idx) => (
+        {departmentRequests.map((dept, idx) => (
           <TableRow
             key={idx}
             sx={{
@@ -98,9 +101,11 @@ function DeptRequestTable({ deptRequestQty }) {
               fontSize: '0.75rem',
             }}
           >
-            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>{dept}</TableCell>
+            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>
+              {dept.departmentName}
+            </TableCell>
             <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
-              {qty}
+              {dept.quantity}
             </TableCell>
           </TableRow>
         ))}
@@ -112,8 +117,19 @@ function DeptRequestTable({ deptRequestQty }) {
 export default function SummaryPage() {
   const theme = useTheme();
   const { groupId } = useParams();
+  const navigate = useNavigate();
 
   const [data, setData] = useState([]);
+  const [searchValues, setSearchValues] = useState({
+    productType1Name: '',
+    productType2Name: '',
+    englishName: '',
+    vietnameseName: '',
+    oldSapCode: '',
+    newSapCode: '',
+    unit: '',
+    departmentName: '',
+  }); // State để lưu giá trị tìm kiếm
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(false);
@@ -131,14 +147,27 @@ export default function SummaryPage() {
       const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      setData(result);
+      // Lọc dữ liệu theo searchValues
+      const filteredData = result.filter(item => {
+        return (
+          (!searchValues.productType1Name || item.productType1Name?.toLowerCase().includes(searchValues.productType1Name.toLowerCase())) &&
+          (!searchValues.productType2Name || item.productType2Name?.toLowerCase().includes(searchValues.productType2Name.toLowerCase())) &&
+          (!searchValues.englishName || item.requisition.englishName?.toLowerCase().includes(searchValues.englishName.toLowerCase())) &&
+          (!searchValues.vietnameseName || item.requisition.vietnameseName?.toLowerCase().includes(searchValues.vietnameseName.toLowerCase())) &&
+          (!searchValues.oldSapCode || item.requisition.oldSapCode?.toLowerCase().includes(searchValues.oldSapCode.toLowerCase())) &&
+          (!searchValues.newSapCode || item.requisition.newSapCode?.toLowerCase().includes(searchValues.newSapCode.toLowerCase())) &&
+          (!searchValues.unit || item.supplierProduct?.unit?.toLowerCase().includes(searchValues.unit.toLowerCase())) &&
+          (!searchValues.departmentName || item.departmentRequests.some(dept => dept.departmentName?.toLowerCase().includes(searchValues.departmentName.toLowerCase())))
+        );
+      });
+      setData(filteredData);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, searchValues]);
 
   useEffect(() => {
     fetchData();
@@ -180,6 +209,29 @@ export default function SummaryPage() {
     setPage(0);
   };
 
+  const handleSearchChange = (newValues) => {
+    setSearchValues(newValues);
+    setPage(0); // Reset về trang 1 khi thay đổi tìm kiếm
+  };
+
+  const handleSearch = () => {
+    fetchData(); // Gọi lại API với giá trị tìm kiếm
+  };
+
+  const handleReset = () => {
+    setSearchValues({
+      productType1Name: '',
+      productType2Name: '',
+      englishName: '',
+      vietnameseName: '',
+      oldSapCode: '',
+      newSapCode: '',
+      unit: '',
+      departmentName: '',
+    });
+    fetchData(); // Reset và tải lại dữ liệu gốc
+  };
+
   const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
@@ -212,30 +264,27 @@ export default function SummaryPage() {
 
         <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
-
-      <Button
-        variant="contained"
-        onClick={() => navigate(`/comparison/${groupId}`)}
-        sx={{
-          textTransform: 'none',
-          borderRadius: 2,
-          px: 3,
-          py: 0.75,
-          fontWeight: 700,
-          fontSize: '0.85rem',
-          background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-          color: '#fff',
-          boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-          '&:hover': {
-            background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-            boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-          },
-        }}
-      >
-        Comparison
-      </Button>
-
-
+          <Button
+            variant="contained"
+            onClick={() => navigate(`/comparison/${groupId}`)}
+            sx={{
+              textTransform: 'none',
+              borderRadius: 2,
+              px: 3,
+              py: 0.75,
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+              '&:hover': {
+                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+              },
+            }}
+          >
+            Comparison
+          </Button>
           <Button
             variant="contained"
             startIcon={<AddIcon fontSize="small" />}
@@ -259,8 +308,15 @@ export default function SummaryPage() {
             Add New
           </Button>
         </Stack>
-
       </Stack>
+
+      {/* Thêm RequisitionSearch ở đây */}
+      <RequisitionSearch
+        searchValues={searchValues}
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearch}
+        onReset={handleReset}
+      />
 
       {loading && (
         <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
@@ -288,25 +344,23 @@ export default function SummaryPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
+            <Table stickyHeader size="medium" sx={{ minWidth: 1600 }}>
               <TableHead>
                 <TableRow>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Price', 'Unit', 'Action'].includes(label)
-                          ? 'center'
-                          : label === 'Action'
+                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total qty', 'Stock', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
                       sx={{
-                        background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
+                        background: 'linear-gradient(to right, #39a2f7, #0091ff)',
                         fontWeight: 700,
                         color: '#fff',
                         fontSize: '0.85rem',
-                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
+                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)',
                         px: 2,
                         py: 1.2,
                         whiteSpace: 'nowrap',
@@ -316,7 +370,7 @@ export default function SummaryPage() {
                         position: 'sticky',
                         top: 0,
                         zIndex: 20,
-                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
+                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)',
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -329,12 +383,10 @@ export default function SummaryPage() {
               <TableBody>
                 {displayData.length > 0 ? (
                   displayData.map((item, idx) => {
-                    const { requisition, supplierProduct } = item;
-                    const totalRequestQty = Object.values(requisition.departmentRequestQty || {}).reduce(
-                      (sum, qty) => sum + qty,
-                      0
-                    );
-                    const totalPrice = supplierProduct.price * totalRequestQty;
+                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests } = item;
+                    const totalRequestQty = departmentRequests.reduce((sum, dept) => sum + dept.quantity, 0);
+                    const price = supplierProduct?.price ?? 0;
+                    const totalPrice = price * totalRequestQty;
 
                     return (
                       <TableRow
@@ -353,6 +405,12 @@ export default function SummaryPage() {
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                          {productType1Name}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                          {productType2Name}
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
                           {requisition.englishName}
                         </TableCell>
@@ -366,28 +424,22 @@ export default function SummaryPage() {
                           {requisition.newSapCode}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.unit}
+                          {supplierProduct?.unit ?? ''}
                         </TableCell>
                         <TableCell sx={{ px: 2, py: 1.2 }}>
-                          <DeptRequestTable deptRequestQty={requisition.departmentRequestQty} />
+                          <DeptRequestTable departmentRequests={departmentRequests} />
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 600 }}>
                           {totalRequestQty}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {supplierProduct.name}
+                          {supplierProduct?.supplierName ?? ''}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct.price.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
+                          {price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
+                          {totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.stock}
@@ -476,7 +528,7 @@ export default function SummaryPage() {
         open={openEditDialog}
         item={selectedItem}
         onClose={handleCloseEditDialog}
-        onSave={fetchData}
+        onRefresh={fetchData}
       />
 
       <AddDialog
