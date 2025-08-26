@@ -37,7 +37,7 @@ export default function SupplierSearch({
         overflowX: 'auto',
       }}
     >
-      {/* Hàng 1: 4 input + nút Search */}
+      {/* Row 1: 4 inputs + Search button */}
       <Box
         sx={{
           display: 'flex',
@@ -91,7 +91,6 @@ export default function SupplierSearch({
           }}
           sx={{ flexGrow: 1, minWidth: 200 }}
         />
-
         <Box sx={{ flexShrink: 0 }}>
           <Button
             variant="contained"
@@ -116,7 +115,7 @@ export default function SupplierSearch({
         </Box>
       </Box>
 
-      {/* Hàng 2: 4 input + nút Reset */}
+      {/* Row 2: 4 inputs + Reset button */}
       <Box
         sx={{
           display: 'flex',
@@ -126,7 +125,7 @@ export default function SupplierSearch({
         }}
       >
         <TextField
-          label="Short Item Desc"
+          label="Short Item Description"
           variant="outlined"
           size="small"
           value={searchProductShortName}
@@ -169,7 +168,6 @@ export default function SupplierSearch({
           }}
           sx={{ flexGrow: 1, minWidth: 200 }}
         />
-
         <Box sx={{ flexShrink: 0 }}>
           <Button
             variant="outlined"

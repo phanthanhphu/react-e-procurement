@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid,
   Typography,
@@ -17,12 +17,20 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import factoryImage from '../../assets/svg/logos/corporation.png';
 import { API_BASE_URL } from '../../config';
-
 import AddDepartmentDialog from './AddDepartmentDialog';
 import EditDepartmentDialog from './EditDepartmentDialog';
 import DepartmentSearch from './DepartmentSearch';
 
 const API_URL = `${API_BASE_URL}/api/departments`;
+
+// Simple debounce function
+const debounce = (func, wait) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
 
 export default function DepartmentManagement() {
   const [departments, setDepartments] = useState([]);
@@ -31,29 +39,37 @@ export default function DepartmentManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
-  const [newName, setNewName] = useState('');
+  const [divisionFilter, setDivisionFilter] = useState('');
+  const [departmentNameFilter, setDepartmentNameFilter] = useState('');
   const [page, setPage] = useState(0);
-  const limit = 16;
+  const size = 10;
   const [totalPages, setTotalPages] = useState(1);
 
   const theme = useTheme();
 
-  useEffect(() => {
-    fetchDepartments(page);
-  }, [page]);
-
-  const fetchDepartments = async (pageNumber = 0) => {
+  const fetchDepartments = async (pageNumber = 0, divisionFilter = '', departmentNameFilter = '') => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/page?page=${pageNumber}&limit=${limit}`, {
+      let url = `${API_URL}/filter?page=${pageNumber}&size=${size}`;
+      if (divisionFilter.trim()) {
+        url += `&division=${encodeURIComponent(divisionFilter.trim())}`;
+      }
+      if (departmentNameFilter.trim()) {
+        url += `&departmentName=${encodeURIComponent(departmentNameFilter.trim())}`;
+      }
+
+      const res = await fetch(url, {
         headers: { accept: '*/*' },
       });
       if (!res.ok) throw new Error('Failed to fetch departments');
       const data = await res.json();
       const { content, totalPages: tp } = data;
+
       const mapped = content.map((dep) => ({
         id: dep.id,
-        name: dep.name,
+        departmentName: dep.departmentName,
+        division: dep.division,
+        createdAt: dep.createdAt,
         image: factoryImage,
       }));
       setDepartments(mapped);
@@ -66,73 +82,80 @@ export default function DepartmentManagement() {
     }
   };
 
-  const handleSearch = async () => {
-    if (!newName.trim()) return fetchDepartments(0);
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    debounce((division, departmentName) => {
+      fetchDepartments(0, division, departmentName);
+    }, 500),
+    []
+  );
 
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `${API_URL}/page/search?name=${encodeURIComponent(newName.trim())}&page=0&limit=${limit}`,
-        { headers: { accept: '*/*' } }
-      );
-      if (!res.ok) throw new Error('Failed to search departments');
-      const data = await res.json();
-      const { content, totalPages: tp } = data;
-      const mapped = content.map((dep) => ({
-        id: dep.id,
-        name: dep.name,
-        image: factoryImage,
-      }));
-      setDepartments(mapped);
-      setTotalPages(tp);
-      setPage(0);
-    } catch (error) {
-      console.error(error);
-      setDepartments([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    fetchDepartments(page, divisionFilter, departmentNameFilter);
+  }, [page]);
+
+  // Trigger debounced search on divisionFilter or departmentNameFilter change
+  useEffect(() => {
+    debouncedSearch(divisionFilter, departmentNameFilter);
+  }, [divisionFilter, departmentNameFilter, debouncedSearch]);
 
   const handleResetSearch = () => {
-    setNewName('');
-    fetchDepartments(0);
+    setDivisionFilter('');
+    setDepartmentNameFilter('');
+    setPage(0);
   };
 
-  const handleAdd = async () => {
-    if (!newName.trim()) return;
+  const handleAdd = async (newDepartment) => {
+    console.log('handleAdd called with:', newDepartment);
+    if (!newDepartment.departmentName.trim() || !newDepartment.division.trim()) {
+      console.log('Validation failed: departmentName or division is empty');
+      return;
+    }
     try {
+      const currentDate = new Date().toISOString();
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           accept: '*/*',
         },
-        body: JSON.stringify({ name: newName, englishName: '' }),
+        body: JSON.stringify({
+          id: `temp_${Date.now()}`,
+          departmentName: newDepartment.departmentName,
+          division: newDepartment.division,
+          createdAt: currentDate,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to add department');
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to add department: ${res.status} - ${errorText}`);
+      }
       setAddDialogOpen(false);
-      setNewName('');
-      fetchDepartments(0);
+      fetchDepartments(0, divisionFilter, departmentNameFilter);
     } catch (error) {
-      console.error(error);
+      console.error('Add department error:', error);
     }
   };
 
-  const handleUpdate = async () => {
-    if (!selectedDepartment || !newName.trim()) return;
+  const handleUpdate = async (updatedDepartment) => {
+    if (!updatedDepartment) return;
     try {
-      const res = await fetch(`${API_URL}/${selectedDepartment.id}`, {
+      const res = await fetch(`${API_URL}/${updatedDepartment.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           accept: '*/*',
         },
-        body: JSON.stringify({ name: newName, englishName: '' }),
+        body: JSON.stringify({
+          id: updatedDepartment.id,
+          departmentName: updatedDepartment.departmentName,
+          division: updatedDepartment.division,
+          createdAt: updatedDepartment.createdAt,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to update department');
+      if (!res.ok) throw new Error(`Failed to update department: ${res.status}`);
       setEditDialogOpen(false);
-      fetchDepartments(page);
+      fetchDepartments(page, divisionFilter, departmentNameFilter);
     } catch (error) {
       console.error(error);
     }
@@ -145,9 +168,9 @@ export default function DepartmentManagement() {
         method: 'DELETE',
         headers: { accept: '*/*' },
       });
-      if (!res.ok) throw new Error('Failed to delete department');
+      if (!res.ok) throw new Error(`Failed to delete department: ${res.status}`);
       setDeleteDialogOpen(false);
-      fetchDepartments(page);
+      fetchDepartments(page, divisionFilter, departmentNameFilter);
     } catch (error) {
       console.error(error);
     }
@@ -155,7 +178,6 @@ export default function DepartmentManagement() {
 
   const handleEdit = (dep) => {
     setSelectedDepartment(dep);
-    setNewName(dep.name);
     setEditDialogOpen(true);
   };
 
@@ -194,9 +216,11 @@ export default function DepartmentManagement() {
       <Grid container alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Grid item>
           <DepartmentSearch
-            searchValue={newName}
-            onSearchChange={setNewName}
-            onSearch={handleSearch}
+            searchValue={divisionFilter}
+            departmentNameValue={departmentNameFilter}
+            onSearchChange={setDivisionFilter}
+            onDepartmentNameChange={setDepartmentNameFilter}
+            onSearch={({ departmentName, division }) => fetchDepartments(0, division, departmentName)}
             onReset={handleResetSearch}
           />
         </Grid>
@@ -247,7 +271,7 @@ export default function DepartmentManagement() {
                 <Stack spacing={2} alignItems="center">
                   <img
                     src={dep.image}
-                    alt={dep.name}
+                    alt={dep.departmentName}
                     style={{
                       width: '72px',
                       height: '72px',
@@ -266,7 +290,17 @@ export default function DepartmentManagement() {
                       textAlign: 'center',
                     }}
                   >
-                    {dep.name}
+                    {dep.departmentName}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: 'Poppins, sans-serif',
+                      color: '#6b7280',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {dep.division}
                   </Typography>
                   <Stack direction="row" spacing={2}>
                     <IconButton
@@ -283,7 +317,7 @@ export default function DepartmentManagement() {
                     <IconButton
                       onClick={() => handleDelete(dep)}
                       sx={{
-                        background: 'linear-gradient(135deg, #ef9a9a  0%, #e57373 100%)',
+                        background: 'linear-gradient(135deg, #ef9a9a 0%, #e57373 100%)',
                         color: '#fff',
                         borderRadius: '50%',
                         p: 1,
@@ -351,16 +385,13 @@ export default function DepartmentManagement() {
         open={editDialogOpen}
         onClose={handleCancelEdit}
         onUpdate={handleUpdate}
-        newName={newName}
-        setNewName={setNewName}
+        department={selectedDepartment}
       />
 
       <AddDepartmentDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
         onAdd={handleAdd}
-        newName={newName}
-        setNewName={setNewName}
       />
 
       <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
@@ -382,4 +413,3 @@ export default function DepartmentManagement() {
     </div>
   );
 }
-

@@ -26,6 +26,7 @@ import { API_BASE_URL } from '../../config';
 import AddProductDialog from './AddProductDialog';
 import EditProductDialog from './EditProductDialog';
 import SupplierSearch from './SupplierSearch';
+import debounce from 'lodash/debounce'; // Cần cài đặt lodash
 
 const headers = [
   { label: 'No', key: 'no' },
@@ -43,7 +44,7 @@ const headers = [
   { label: 'Action', key: 'action' },
 ];
 
-function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
+function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
 
@@ -128,7 +129,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
               }}
             >
               <TableCell align="center" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
-                {idx + 1}
+                {idx + 1 + page * rowsPerPage}
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierCode}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierName}</TableCell>
@@ -253,9 +254,9 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit }) {
 export default function SupplierProductsPage() {
   const theme = useTheme();
   const [data, setData] = useState([]);
-  const [totalElements, setTotalElements] = useState(0); // Thêm state cho totalElements
+  const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10); // Thay đổi mặc định thành 10 để khớp với API
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [file, setFile] = useState(null);
@@ -263,39 +264,110 @@ export default function SupplierProductsPage() {
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [productToEdit, setProductToEdit] = useState(null);
 
-  // Search states
+  // Search states (aligned with SupplierSearch props)
   const [searchSupplierCode, setSearchSupplierCode] = useState('');
   const [searchSupplierName, setSearchSupplierName] = useState('');
   const [searchSapCode, setSearchSapCode] = useState('');
   const [searchProductFullName, setSearchProductFullName] = useState('');
   const [searchProductShortName, setSearchProductShortName] = useState('');
+  const [searchFullDescription, setSearchFullDescription] = useState('');
+  const [searchProductType1Id, setSearchProductType1Id] = useState('');
+  const [searchProductType2Id, setSearchProductType2Id] = useState('');
 
+  // Debounced fetchData function
+  const debouncedFetchData = useCallback(
+    debounce(() => {
+      fetchData();
+    }, 500), // Delay 500ms để tránh gọi quá nhiều
+    []
+  );
+
+  // Fetch data from /filter API
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    console.log('State values:', {
+      searchSupplierCode,
+      searchSupplierName,
+      searchSapCode,
+      searchProductFullName,
+      searchFullDescription,
+      searchProductShortName,
+      searchProductType1Id,
+      searchProductType2Id,
+    });
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/supplier-products?page=${page}&limit=${rowsPerPage}`,
-        {
-          method: 'GET',
-          headers: { accept: '*/*' },
-        }
-      );
+      // Dynamically construct params object with only non-empty values
+      const params = {};
+      if (searchSupplierCode) params.supplierCode = searchSupplierCode;
+      if (searchSupplierName) params.supplierName = searchSupplierName;
+      if (searchSapCode) params.sapCode = searchSapCode;
+      if (searchProductFullName || searchFullDescription) params.productFullName = searchProductFullName || searchFullDescription;
+      if (searchProductShortName) params.productShortName = searchProductShortName;
+      if (searchProductType1Id) params.productType1Id = searchProductType1Id;
+      if (searchProductType2Id) params.productType2Id = searchProductType2Id;
+      params.page = page;
+      params.size = rowsPerPage;
+      params.sortBy = 'createdAt';
+      params.sortDirection = 'DESC';
+
+      console.log('API Call Params:', params);
+
+      const url = new URL(`${API_BASE_URL}/api/supplier-products/filter`);
+      url.search = new URLSearchParams(params).toString();
+      console.log('Request URL:', url.toString());
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { accept: '*/*' },
+      });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      setData(result.content); // Lấy danh sách sản phẩm từ content
-      setTotalElements(result.totalElements); // Cập nhật tổng số bản ghi
+      setData(result.content);
+      setTotalElements(result.totalElements);
     } catch (err) {
       setError('Failed to fetch data');
       console.error(err);
+      setData([]);
+      setTotalElements(0);
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage]);
+  }, [
+    page,
+    rowsPerPage,
+    searchSupplierCode,
+    searchSupplierName,
+    searchSapCode,
+    searchProductFullName,
+    searchFullDescription,
+    searchProductShortName,
+    searchProductType1Id,
+    searchProductType2Id,
+  ]);
 
+  // Trigger fetchData when search or page changes
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    debouncedFetchData();
+  }, [
+    debouncedFetchData,
+    page,
+    rowsPerPage,
+    searchSupplierCode,
+    searchSupplierName,
+    searchSapCode,
+    searchProductFullName,
+    searchFullDescription,
+    searchProductShortName,
+    searchProductType1Id,
+    searchProductType2Id,
+  ]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedFetchData.cancel();
+    };
+  }, [debouncedFetchData]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
@@ -351,17 +423,6 @@ export default function SupplierProductsPage() {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0); // Reset về trang đầu khi thay đổi số bản ghi mỗi trang
   };
-
-  // Filter data dựa trên từ khóa tìm kiếm
-  const filteredData = data.filter((item) => {
-    return (
-      item.supplierCode?.toLowerCase().includes(searchSupplierCode.toLowerCase()) &&
-      item.supplierName?.toLowerCase().includes(searchSupplierName.toLowerCase()) &&
-      item.sapCode?.toLowerCase().includes(searchSapCode.toLowerCase()) &&
-      item.productFullName?.toLowerCase().includes(searchProductFullName.toLowerCase()) &&
-      item.productShortName?.toLowerCase().includes(searchProductShortName.toLowerCase())
-    );
-  });
 
   const handleEditProduct = (product) => {
     setProductToEdit(product);
@@ -431,19 +492,40 @@ export default function SupplierProductsPage() {
         setSearchProductFullName={setSearchProductFullName}
         searchProductShortName={searchProductShortName}
         setSearchProductShortName={setSearchProductShortName}
+        searchFullDescription={searchFullDescription}
+        setSearchFullDescription={setSearchFullDescription}
+        searchProductType1Id={searchProductType1Id}
+        setSearchProductType1Id={setSearchProductType1Id}
+        searchProductType2Id={searchProductType2Id}
+        setSearchProductType2Id={setSearchProductType2Id}
         setPage={setPage}
+        onSearch={fetchData}
+        onReset={() => {
+          setSearchSupplierCode('');
+          setSearchSupplierName('');
+          setSearchSapCode('');
+          setSearchProductFullName('');
+          setSearchProductShortName('');
+          setSearchFullDescription('');
+          setSearchProductType1Id('');
+          setSearchProductType2Id('');
+          setPage(0);
+          fetchData();
+        }}
       />
 
       <SupplierProductsTable
-        supplierProducts={filteredData} // Sử dụng filteredData thay vì displayData
+        supplierProducts={data}
         handleDelete={handleDelete}
         handleEdit={handleEditProduct}
+        page={page}
+        rowsPerPage={rowsPerPage}
       />
 
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
         component="div"
-        count={totalElements} // Sử dụng totalElements từ API
+        count={totalElements}
         rowsPerPage={rowsPerPage}
         page={page}
         onPageChange={handleChangePage}
