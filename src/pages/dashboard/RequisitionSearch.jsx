@@ -1,87 +1,217 @@
-import React from 'react';
-import { Paper, Grid, TextField, Button, useTheme, Box } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert } from '@mui/material';
+import axios from 'axios';
 
 export default function RequisitionSearch({ searchValues, onSearchChange, onSearch, onReset }) {
   const theme = useTheme();
+  const [productType1Options, setProductType1Options] = useState([]);
+  const [filteredProductType1Options, setFilteredProductType1Options] = useState([]);
+  const [selectedProductType1Id, setSelectedProductType1Id] = useState(null);
+  const [productType2Options, setProductType2Options] = useState([]);
+  const [filteredProductType2Options, setFilteredProductType2Options] = useState([]);
+  const [selectedProductType2Id, setSelectedProductType2Id] = useState(null);
+  const [error, setError] = useState(null);
 
+  // Lấy danh sách product-type-1 khi component mount
+  useEffect(() => {
+    const fetchProductType1 = async () => {
+      try {
+        const response = await axios.get(`http://localhost:8080/api/product-type-1/search?page=0&size=100`);
+        setProductType1Options(response.data.content);
+        setFilteredProductType1Options(response.data.content);
+      } catch (error) {
+        setError('Không thể tải danh sách product-type-1. Vui lòng thử lại.');
+        console.error("Error fetching product type 1:", error);
+      }
+    };
+    fetchProductType1();
+  }, []);
+
+  // Lấy danh sách product-type-2 ban đầu, sử dụng selectedProductType1Id nếu có
+  useEffect(() => {
+    const fetchProductType2 = async () => {
+      try {
+        const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+          params: {
+            productType1Id: selectedProductType1Id || undefined,
+            page: 0,
+            size: 100,
+          },
+        });
+        setProductType2Options(response.data.content);
+        setFilteredProductType2Options(response.data.content);
+      } catch (error) {
+        setError('Không thể tải danh sách product-type-2. Vui lòng thử lại.');
+        console.error("Error fetching product type 2:", error);
+      }
+    };
+    fetchProductType2();
+  }, [selectedProductType1Id]);
+
+  // Xử lý tìm kiếm product-type-1
+  const handleProductType1Change = async (event, value) => {
+    onSearchChange({ ...searchValues, productType1Name: value || '' });
+    try {
+      const response = await axios.get(`http://localhost:8080/api/product-type-1/search`, {
+        params: { page: 0, size: 100, name: value || '' },
+      });
+      setFilteredProductType1Options(response.data.content);
+    } catch (error) {
+      setError('Không thể tìm kiếm product-type-1. Vui lòng thử lại.');
+      console.error("Error searching product type 1:", error);
+    }
+  };
+
+  // Xử lý chọn product-type-1
+  const handleProductType1Select = (event, value) => {
+    setSelectedProductType1Id(value ? value.id : null);
+    onSearchChange({ ...searchValues, productType1Name: value ? value.name : '' });
+  };
+
+  // Xử lý tìm kiếm product-type-2
+  const handleProductType2Change = async (event, value) => {
+    onSearchChange({ ...searchValues, productType2Name: value || '' });
+    try {
+      const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+        params: {
+          productType1Id: selectedProductType1Id || undefined,
+          page: 0,
+          size: 100,
+          name: value || '',
+        },
+      });
+      setProductType2Options(response.data.content);
+      setFilteredProductType2Options(response.data.content);
+    } catch (error) {
+      setError('Không thể tìm kiếm product-type-2. Vui lòng thử lại.');
+      console.error("Error searching product type 2:", error);
+    }
+  };
+
+  // Xử lý chọn product-type-2
+  const handleProductType2Select = (event, value) => {
+    setSelectedProductType2Id(value ? value.id : null);
+    onSearchChange({ ...searchValues, productType2Name: value ? value.name : '' });
+  };
+
+  // Xử lý input change cho các trường khác
   const handleInputChange = (field) => (e) => {
     onSearchChange({ ...searchValues, [field]: e.target.value });
+  };
+
+  // Xử lý search
+  const handleSearch = () => {
+    onSearch({ productType1Id: selectedProductType1Id, productType2Id: selectedProductType2Id });
+  };
+
+  // Xử lý reset
+  const handleReset = () => {
+    setSelectedProductType1Id(null);
+    setSelectedProductType2Id(null);
+    setFilteredProductType1Options(productType1Options);
+    setFilteredProductType2Options(productType2Options);
+    onReset();
+  };
+
+  // Đóng Snackbar lỗi
+  const handleCloseError = () => {
+    setError(null);
   };
 
   return (
     <Paper
       elevation={3}
       sx={{
-        p: 1.5,
+        p: { xs: 1, md: 1.5 },
         mb: 4,
         background: 'linear-gradient(to right, #f7faff, #ffffff)',
         borderRadius: 3,
         boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
         border: `1px solid ${theme.palette.divider}`,
         width: '100%',
-        maxWidth: '1200px',
         boxSizing: 'border-box',
+        overflowX: 'auto',
+        maxWidth: '100%',
       }}
     >
-      <Grid
-        container
-        spacing={1}
-        alignItems="center"
+      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
+
+      {/* First Row: 4 Input Fields + Search Button */}
+      <Box
         sx={{
-          width: '100%',
-          boxSizing: 'border-box',
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: 1,
+          mb: 1,
+          alignItems: 'center',
         }}
       >
-        {/* First Row: 4 Input Fields + Search Button */}
-        <Grid item md={3}>
-          <TextField
-            label="Product Type 1 Name"
-            variant="outlined"
-            size="small"
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType1Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
             value={searchValues.productType1Name || ''}
-            onChange={handleInputChange('productType1Name')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            onInputChange={handleProductType1Change}
+            onChange={handleProductType1Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Product Type 1 Name"
+                variant="outlined"
+                size="small"
+                sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+              />
+            )}
           />
-        </Grid>
-        <Grid item md={3}>
-          <TextField
-            label="Product Type 2 Name"
-            variant="outlined"
-            size="small"
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType2Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
             value={searchValues.productType2Name || ''}
-            onChange={handleInputChange('productType2Name')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            onInputChange={handleProductType2Change}
+            onChange={handleProductType2Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Product Type 2 Name"
+                variant="outlined"
+                size="small"
+                sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+              />
+            )}
           />
-        </Grid>
-        <Grid item md={3}>
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="English Name"
             variant="outlined"
             size="small"
             value={searchValues.englishName || ''}
             onChange={handleInputChange('englishName')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item md={3}>
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="Vietnamese Name"
             variant="outlined"
             size="small"
             value={searchValues.vietnameseName || ''}
             onChange={handleInputChange('vietnameseName')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item sx={{ display: 'flex', justifyContent: 'flex-end', flexGrow: 1 }}>
-          <Box sx={{ flexGrow: 1 }} /> {/* Spacer to push button to the right */}
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <Button
             variant="contained"
-            onClick={onSearch}
+            onClick={handleSearch}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -91,64 +221,67 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
               borderRadius: '8px',
               fontSize: '0.875rem',
               height: '40px',
-              minWidth: '100px',
-              mr: 1.5, // 12px margin-right to match Paper's padding
+              width: '100%',
             }}
           >
             Search
           </Button>
-        </Grid>
+        </Box>
+      </Box>
 
-        {/* Second Row: 4 Input Fields + Reset Button */}
-        <Grid item md={3}>
+      {/* Second Row: 4 Input Fields + Reset Button */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: 1,
+          alignItems: 'center',
+        }}
+      >
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="Old SAP Code"
             variant="outlined"
             size="small"
             value={searchValues.oldSapCode || ''}
             onChange={handleInputChange('oldSapCode')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item md={3}>
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="New SAP Code"
             variant="outlined"
             size="small"
             value={searchValues.newSapCode || ''}
             onChange={handleInputChange('newSapCode')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item md={3}>
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="Unit"
             variant="outlined"
             size="small"
             value={searchValues.unit || ''}
             onChange={handleInputChange('unit')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item md={3}>
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <TextField
             label="Department Name"
             variant="outlined"
             size="small"
             value={searchValues.departmentName || ''}
             onChange={handleInputChange('departmentName')}
-            fullWidth
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
           />
-        </Grid>
-        <Grid item sx={{ display: 'flex', justifyContent: 'flex-end', flexGrow: 1 }}>
-          <Box sx={{ flexGrow: 1 }} /> {/* Spacer to push button to the right */}
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <Button
             variant="outlined"
-            onClick={onReset}
+            onClick={handleReset}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -158,14 +291,13 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
               height: '40px',
-              minWidth: '100px',
-              mr: 1.5, // 12px margin-right to match Paper's padding
+              width: '100%',
             }}
           >
             Reset
           </Button>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Paper>
   );
 }

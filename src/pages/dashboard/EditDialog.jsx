@@ -35,20 +35,20 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     remark: '',
     supplierPrice: 0,
     supplierId: '',
-    productType1Id: '', // Thêm
-    productType2Id: '', // Thêm
-    groupId: '', // Thêm
+    productType1Id: '',
+    productType2Id: '',
+    groupId: '',
   });
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
   const [saving, setSaving] = useState(false);
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [productType1List, setProductType1List] = useState([]); // Thêm
-  const [productType2List, setProductType2List] = useState([]); // Thêm
-  const [loadingType1, setLoadingType1] = useState(false); // Thêm
-  const [loadingType2, setLoadingType2] = useState(false); // Thêm
-  const [departmentList, setDepartmentList] = useState([]); // Thêm
-  const [loadingDepartments, setLoadingDepartments] = useState(false); // Thêm
+  const [productType1List, setProductType1List] = useState([]);
+  const [productType2List, setProductType2List] = useState([]);
+  const [loadingType1, setLoadingType1] = useState(false);
+  const [loadingType2, setLoadingType2] = useState(false);
+  const [departmentList, setDepartmentList] = useState([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item); // Debug: Log item prop
@@ -76,9 +76,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             remark: requisition.remark || '',
             supplierPrice: supplierProduct.price || 0,
             supplierId: supplierProduct.id || '',
-            productType1Id: requisition.productType1Id || '', // Thêm
-            productType2Id: requisition.productType2Id || '', // Thêm
-            groupId: requisition.groupId || '', // Thêm
+            productType1Id: requisition.productType1Id || '',
+            productType2Id: requisition.productType2Id || '',
+            groupId: requisition.groupId || '',
           });
 
           if (requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object') {
@@ -120,14 +120,39 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setSupplierOptions([]);
     }
 
-    // Tải danh sách productType1 và department khi dialog mở
+    // Load productType1 and department list when dialog opens
     if (open) {
       fetchProductType1List();
       fetchDepartmentList();
     }
+
+    // Cleanup when dialog closes
+    return () => {
+      setFormData({
+        itemDescriptionEN: '',
+        itemDescriptionVN: '',
+        fullItemDescriptionVN: '',
+        oldSapCode: '',
+        newSapCode: '',
+        unit: '',
+        stock: '',
+        purchasingSuggest: '',
+        reason: '',
+        remark: '',
+        supplierPrice: 0,
+        supplierId: '',
+        productType1Id: '',
+        productType2Id: '',
+        groupId: '',
+      });
+      setDeptRows([{ department: '', qty: '' }]);
+      setSupplierOptions([]);
+      setProductType1List([]);
+      setProductType2List([]);
+      // Preserve departmentList to avoid refetching
+    };
   }, [item, open]);
 
-  // Tải danh sách productType1
   const fetchProductType1List = async () => {
     setLoadingType1(true);
     try {
@@ -143,7 +168,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
   };
 
-  // Tải danh sách productType2 dựa trên productType1Id
   useEffect(() => {
     if (formData.productType1Id) {
       fetchProductType2List(formData.productType1Id);
@@ -170,7 +194,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
   };
 
-  // Tải danh sách phòng ban
   const fetchDepartmentList = async () => {
     setLoadingDepartments(true);
     try {
@@ -179,9 +202,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       });
       if (!res.ok) throw new Error('Failed to load department list');
       const data = await res.json();
+      console.log('Department list response:', data); // Debug log
       setDepartmentList(data || []);
+      console.log('Department names:', data.map(dept => dept.departmentName)); // Debug log
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching department list:', error);
       setDepartmentList([]);
     } finally {
       setLoadingDepartments(false);
@@ -259,11 +284,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     const deptQtyMap = {};
     deptRows.forEach(({ department, qty }) => {
       if (department.trim() && qty.trim()) {
-        // Tìm department từ departmentList dựa trên id
-        const dept = departmentList.find(d => d.id === department);
-        if (dept) {
-          deptQtyMap[department] = parseFloat(qty);
-        }
+        // Use department ID directly as key
+        deptQtyMap[department] = parseFloat(qty);
       }
     });
 
@@ -377,7 +399,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           </FormControl>
 
           <TextField
-            label="Group ID" // Thêm input cho groupId
+            label="Group ID"
             value={formData.groupId}
             onChange={handleChange('groupId')}
             fullWidth
@@ -468,11 +490,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     <MenuItem value="">
                       <em>None</em>
                     </MenuItem>
-                    {departmentList.map((dept) => (
-                      <MenuItem key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </MenuItem>
-                    ))}
+                    {departmentList.length > 0 ? (
+                      departmentList.map((dept) => (
+                        <MenuItem key={dept.id} value={dept.id}>
+                          {dept.departmentName}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      <MenuItem disabled>No departments available</MenuItem>
+                    )}
                   </Select>
                   {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                 </FormControl>
@@ -489,7 +515,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 </IconButton>
               </Stack>
             ))}
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1}}>
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
               Add Department
             </Button>
           </Paper>

@@ -3,7 +3,7 @@ import {
   Paper,
   TextField,
   Button,
-  Grid,
+  Box,
   MenuItem,
   Select,
   InputLabel,
@@ -42,12 +42,19 @@ export default function GroupSearchBar({
         boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
         border: `1px solid ${theme.palette.divider}`,
         overflowX: 'auto',
+        maxWidth: '100%',
       }}
     >
-      <Grid container spacing={2} wrap="nowrap" alignItems="center">
-
-        {/* Request Group Name */}
-        <Grid item sx={{ flex: 1, minWidth: 150 }}>
+      {/* Row 1: 4 inputs + Search/Reset buttons */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: 2,
+          alignItems: 'center',
+        }}
+      >
+        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
           <TextField
             fullWidth
             label="Request Group Name"
@@ -60,10 +67,8 @@ export default function GroupSearchBar({
             }}
             InputProps={{ sx: { borderRadius: '8px' } }}
           />
-        </Grid>
-
-        {/* Request Status - Select */}
-        <Grid item sx={{ flex: 1, minWidth: 150 }}>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
             <InputLabel>Status</InputLabel>
             <Select
@@ -81,10 +86,8 @@ export default function GroupSearchBar({
               <MenuItem value="Completed">Completed</MenuItem>
             </Select>
           </FormControl>
-        </Grid>
-
-        {/* Created By */}
-        <Grid item sx={{ flex: 1, minWidth: 150 }}>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
           <TextField
             fullWidth
             label="Created By (User)"
@@ -97,10 +100,8 @@ export default function GroupSearchBar({
             }}
             InputProps={{ sx: { borderRadius: '8px' } }}
           />
-        </Grid>
-
-        {/* Type - Select */}
-        <Grid item sx={{ flex: 1, minWidth: 180 }}>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 150, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
             <InputLabel>Type</InputLabel>
             <Select
@@ -113,14 +114,12 @@ export default function GroupSearchBar({
               sx={{ borderRadius: '8px' }}
             >
               <MenuItem value="">All</MenuItem>
-      <MenuItem value="Requisition_urgent">Requisition Urgent</MenuItem>
-      <MenuItem value="Requisition_monthly">Requisition Monthly</MenuItem>
+              <MenuItem value="Requisition_urgent">Requisition Urgent</MenuItem>
+              <MenuItem value="Requisition_monthly">Requisition Monthly</MenuItem>
             </Select>
           </FormControl>
-        </Grid>
-
-        {/* Date Range Picker */}
-        <Grid item sx={{ flex: 1, minWidth: 250 }}>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 200, flexShrink: 1 }}>
           <RangePicker
             style={{
               width: '100%',
@@ -136,10 +135,8 @@ export default function GroupSearchBar({
             format="YYYY-MM-DD"
             placeholder={['Start Date', 'End Date']}
           />
-        </Grid>
-
-        {/* Buttons */}
-        <Grid item sx={{ display: 'flex', gap: 8 }}>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <Button
             variant="contained"
             onClick={() => {
@@ -155,10 +152,13 @@ export default function GroupSearchBar({
               borderRadius: '8px',
               fontSize: '0.875rem',
               height: '40px',
+              width: '100%',
             }}
           >
             Search
           </Button>
+        </Box>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <Button
             variant="outlined"
             onClick={() => {
@@ -174,12 +174,13 @@ export default function GroupSearchBar({
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
               height: '40px',
+              width: '100%',
             }}
           >
             Reset
           </Button>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Paper>
   );
 }

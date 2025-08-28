@@ -116,9 +116,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       });
       if (!res.ok) throw new Error('Failed to load department list');
       const data = await res.json();
+      console.log('Department list response:', data); // Debug log
       setDepartmentList(data || []);
+      console.log('Department names:', data.map(dept => dept.departmentName)); // Debug log
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching department list:', error);
       setDepartmentList([]);
     } finally {
       setLoadingDepartments(false);
@@ -275,7 +277,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setSelectedSupplierName('');
       setProductType1List([]);
       setProductType2List([]);
-      setDepartmentList([]);
+      // Removed setDepartmentList([]) to preserve department list
     } catch (err) {
       console.error('Add error:', err);
       alert('Add failed. Please try again!');
@@ -452,11 +454,15 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     <MenuItem value="">
                       <em>None</em>
                     </MenuItem>
-                    {departmentList.map((dept) => (
-                      <MenuItem key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </MenuItem>
-                    ))}
+                    {departmentList.length > 0 ? (
+                      departmentList.map((dept) => (
+                        <MenuItem key={dept.id} value={dept.id}>
+                          {dept.departmentName}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      <MenuItem disabled>No departments available</MenuItem>
+                    )}
                   </Select>
                   {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                 </FormControl>

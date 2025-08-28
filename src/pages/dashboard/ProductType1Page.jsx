@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Space, message, Card, Typography, Modal } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-
+import ProductTypeSearch from './ProductTypeSearch';
 import AddProductType1Modal from './AddProductType1Modal';
 import EditProductType1Modal from './EditProductType1Modal';
 import AddProductType2Modal from './AddProductType2Modal';
 import EditProductType2Modal from './EditProductType2Modal';
-
 import { API_BASE_URL } from '../../config';
+
 const PAGE_SIZE = 10;
 
 const ProductType1Page = () => {
@@ -16,6 +16,8 @@ const ProductType1Page = () => {
   const [type1Page, setType1Page] = useState(0);
   const [type1Total, setType1Total] = useState(0);
   const [loadingType1, setLoadingType1] = useState(false);
+  const [type1NameSearch, setType1NameSearch] = useState('');
+  const [type2NameSearch, setType2NameSearch] = useState('');
 
   const [expandedType1Id, setExpandedType1Id] = useState(null);
   const [type2Data, setType2Data] = useState([]);
@@ -34,56 +36,115 @@ const ProductType1Page = () => {
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState({ kind: '', record: null });
 
-  const loadType1 = async (page = 0) => {
+  const formatDate = (dateArray) => {
+    if (!dateArray || dateArray.length < 6) return '-';
+    const [year, month, day, hour, minute, second] = dateArray;
+    return dayjs(`${year}-${month}-${day} ${hour}:${minute}:${second}`).format('YYYY-MM-DD HH:mm');
+  };
+
+  const loadData = async (page = 0, type1Name = type1NameSearch, type2Name = type2NameSearch) => {
     setLoadingType1(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/product-type-1?page=${page}&size=${PAGE_SIZE}`);
+      const url = `${API_BASE_URL}/api/search?page=${page}&size=${PAGE_SIZE}${
+        type1Name ? `&type1Name=${encodeURIComponent(type1Name)}` : ''
+      }${type2Name ? `&type2Name=${encodeURIComponent(type2Name)}` : ''}`;
+      const res = await fetch(url, { headers: { accept: '*/*' } });
       if (!res.ok) {
         const errorData = await res.json();
-        const errorMessage = errorData.message || 'Failed to load Type 1 data';
+        const errorMessage = errorData.message || 'Failed to load data';
         throw new Error(errorMessage);
       }
       const json = await res.json();
-      setType1Data(json.content || []);
-      setType1Total(json.totalElements || 0);
-      setType1Page(json.number || 0);
+      setType1Data(json.data || []);
+      setType1Total(json.pagination?.totalElements || 0);
+      setType1Page(json.pagination?.page || 0);
+
+      // Update Type 2 data if a row is expanded
+      if (expandedType1Id) {
+        const expandedRecord = json.data.find(item => item.id === expandedType1Id);
+        const type2Items = expandedRecord ? expandedRecord.code : [];
+        // Apply client-side pagination for Type 2
+        const start = type2Page * PAGE_SIZE;
+        const end = start + PAGE_SIZE;
+        setType2Data(type2Items.slice(start, end));
+        setType2Total(type2Items.length);
+      } else {
+        setType2Data([]);
+        setType2Total(0);
+      }
     } catch (error) {
       message.error(error.message || 'An unexpected error occurred');
     }
     setLoadingType1(false);
   };
 
-  const loadType2 = async (parentId, page = 0) => {
-    setLoadingType2(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/product-type-2?productType1Id=${parentId}&page=${page}&size=${PAGE_SIZE}`);
-      if (!res.ok) {
-        const errorData = await res.json();
-        const errorMessage = errorData.message || 'Failed to load Type 2 data';
-        throw new Error(errorMessage);
-      }
-      const json = await res.json();
-      setType2Data(json.content || []);
-      setType2Total(json.totalElements || 0);
-      setType2Page(json.number || 0);
-    } catch (error) {
-      message.error(error.message || 'An unexpected error occurred');
-    }
-    setLoadingType2(false);
+  useEffect(() => {
+    loadData(0, type1NameSearch, type2NameSearch);
+  }, []);
+
+  const handleSearch = ({ type1Name, type2Name }) => {
+    setType1NameSearch(type1Name);
+    setType2NameSearch(type2Name);
+    setType2Page(0);
+    loadData(0, type1Name, type2Name);
   };
 
-  useEffect(() => {
-    loadType1();
-  }, []);
+  const handleReset = () => {
+    setType1NameSearch('');
+    setType2NameSearch('');
+    setExpandedType1Id(null);
+    setType2Data([]);
+    setType2Page(0);
+    loadData(0, '', '');
+  };
 
   const handleExpand = (id) => {
     if (expandedType1Id === id) {
       setExpandedType1Id(null);
       setType2Data([]);
+      setType2Page(0);
+      setType2Total(0);
     } else {
       setExpandedType1Id(id);
-      loadType2(id, 0);
+      setType2Page(0);
+      const expandedRecord = type1Data.find(item => item.id === id);
+      if (expandedRecord) {
+        const type2Items = expandedRecord.code || [];
+        setType2Data(type2Items.slice(0, PAGE_SIZE));
+        setType2Total(type2Items.length);
+      }
     }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget.record) return;
+    setLoadingType1(true);
+    try {
+      const { kind, record } = deleteTarget;
+      const url = kind === 'type1'
+        ? `${API_BASE_URL}/api/product-type-1/${record.id}`
+        : `${API_BASE_URL}/api/product-type-2/${record.id}`;
+      
+      const res = await fetch(url, { method: 'DELETE' });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        const errorMessage = errorData.message || 'Delete failed';
+        if (errorMessage.includes("associated ProductType2 items")) {
+          message.error("Cannot delete this ProductType1 because there are associated ProductType2 items.");
+        } else {
+          message.error(errorMessage);
+        }
+        throw new Error(errorMessage);
+      }
+
+      message.success('Deleted successfully');
+      setDeleteConfirmVisible(false);
+      loadData(type1Page, type1NameSearch, type2NameSearch);
+    } catch (error) {
+      message.error(error.message || 'An unexpected error occurred');
+    }
+    setLoadingType1(false);
   };
 
   const headerStyle = {
@@ -112,7 +173,7 @@ const ProductType1Page = () => {
       title: <div style={headerStyle}>Created Date</div>,
       dataIndex: 'createdDate',
       key: 'createdDate',
-      render: date => date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-',
+      render: date => formatDate(date),
       width: 180,
       align: 'center',
     },
@@ -175,7 +236,7 @@ const ProductType1Page = () => {
       title: <div style={headerStyle}>Created Date</div>,
       dataIndex: 'createdDate',
       key: 'createdDate',
-      render: date => date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-',
+      render: date => formatDate(date),
       width: 160,
       align: 'center',
     },
@@ -195,7 +256,7 @@ const ProductType1Page = () => {
               boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
             }}
             icon={<EditOutlined />}
-            onClick={() => { setType2Record(rec); setShowEditType2(true); }}
+            onClick={() => { setType2Record({ ...rec, parentId: expandedType1Id }); setShowEditType2(true); }}
           />
           <Button
             shape="circle"
@@ -213,65 +274,42 @@ const ProductType1Page = () => {
     },
   ];
 
-const handleDelete = async () => {
-  if (!deleteTarget.record) return;
-  setLoadingType1(true);
-  try {
-    const { kind, record } = deleteTarget;
-    const url = kind === 'type1'
-      ? `${API_BASE_URL}/api/product-type-1/${record.id}`
-      : `${API_BASE_URL}/api/product-type-2/${record.id}`;
-    
-    const res = await fetch(url, { method: 'DELETE' });
-
-    // Kiểm tra nếu API trả về lỗi liên quan đến các mục ProductType2
-    if (!res.ok) {
-      const errorData = await res.json();
-      const errorMessage = errorData.message || 'Delete failed';
-      
-      if (errorMessage.includes("associated ProductType2 items")) {
-        message.error("Cannot delete this ProductType1 because there are associated ProductType2 items.");
-      } else {
-        message.error(errorMessage);
-      }
-      throw new Error(errorMessage);
-    }
-
-    message.success('Deleted successfully');
-    setDeleteConfirmVisible(false);
-    if (kind === 'type1') loadType1(type1Page);
-    else if (kind === 'type2' && expandedType1Id) loadType2(expandedType1Id, type2Page);
-  } catch (error) {
-    message.error(error.message || 'An unexpected error occurred');
-  }
-  setLoadingType1(false);
-};
-
-
   return (
     <div style={{ padding: 32, backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+      <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, maxWidth: 800 }}>
+          <ProductTypeSearch
+            type1NameValue={type1NameSearch}
+            type2NameValue={type2NameSearch}
+            onType1NameChange={setType1NameSearch}
+            onType2NameChange={setType2NameSearch}
+            onSearch={handleSearch}
+            onReset={handleReset}
+          />
+        </div>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setShowAddType1(true)}
+          style={{
+            borderRadius: 20,
+            fontWeight: 500,
+            padding: '0 16px',
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            color: '#fff',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            height: 40,
+            lineHeight: '40px',
+          }}
+        >
+          Add New Parent Type
+        </Button>
+      </Space>
       <Card
         title={(
-          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-            <Typography.Title level={3} style={{ margin: 0, color: '#001529' }}>
-              Parent Type
-            </Typography.Title>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setShowAddType1(true)}
-              style={{
-                borderRadius: 20,
-                fontWeight: 500,
-                padding: '0 16px',
-                background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-                color: '#fff',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
-              }}
-            >
-              Add New Parent Type
-            </Button>
-          </Space>
+          <Typography.Title level={3} style={{ margin: 0, color: '#001529' }}>
+            Parent Type
+          </Typography.Title>
         )}
         bordered={false}
         style={{
@@ -289,7 +327,7 @@ const handleDelete = async () => {
             current: type1Page + 1,
             pageSize: PAGE_SIZE,
             total: type1Total,
-            onChange: page => loadType1(page - 1),
+            onChange: page => loadData(page - 1, type1NameSearch, type2NameSearch),
             showSizeChanger: false,
           }}
           expandable={{
@@ -310,14 +348,24 @@ const handleDelete = async () => {
                 </Space>
                 <Table
                   columns={type2Columns}
-                  dataSource={expandedType1Id === rec.id ? type2Data : []}
+                  dataSource={type2Data}
                   rowKey="id"
                   loading={loadingType2}
                   pagination={{
                     current: type2Page + 1,
                     pageSize: PAGE_SIZE,
                     total: type2Total,
-                    onChange: page => expandedType1Id && loadType2(expandedType1Id, page - 1),
+                    onChange: page => {
+                      setType2Page(page - 1);
+                      const expandedRecord = type1Data.find(item => item.id === expandedType1Id);
+                      if (expandedRecord) {
+                        const type2Items = expandedRecord.code || [];
+                        const start = (page - 1) * PAGE_SIZE;
+                        const end = start + PAGE_SIZE;
+                        setType2Data(type2Items.slice(start, end));
+                        setType2Total(type2Items.length);
+                      }
+                    },
                     size: 'small',
                     showSizeChanger: false,
                   }}
@@ -325,9 +373,9 @@ const handleDelete = async () => {
                 />
               </Card>
             ),
-            rowExpandable: () => true,
+            rowExpandable: rec => rec.code && rec.code.length > 0,
             expandedRowKeys: expandedType1Id ? [expandedType1Id] : [],
-            onExpand: (exp, rec) => exp ? handleExpand(rec.id) : (setExpandedType1Id(null), setType2Data([])),
+            onExpand: (exp, rec) => exp ? handleExpand(rec.id) : (setExpandedType1Id(null), setType2Data([]), setType2Page(0), setType2Total(0)),
           }}
         />
       </Card>
@@ -336,25 +384,25 @@ const handleDelete = async () => {
       <AddProductType1Modal
         visible={showAddType1}
         onClose={() => setShowAddType1(false)}
-        onSuccess={() => { setShowAddType1(false); loadType1(type1Page); }}
+        onSuccess={() => { setShowAddType1(false); loadData(type1Page, type1NameSearch, type2NameSearch); }}
       />
       <EditProductType1Modal
         visible={showEditType1}
         record={type1Record}
         onClose={() => setShowEditType1(false)}
-        onSuccess={() => { setShowEditType1(false); loadType1(type1Page); }}
+        onSuccess={() => { setShowEditType1(false); loadData(type1Page, type1NameSearch, type2NameSearch); }}
       />
       <AddProductType2Modal
         visible={showAddType2}
         parentId={type2Record?.parentId}
         onClose={() => setShowAddType2(false)}
-        onSuccess={() => { setShowAddType2(false); loadType2(type2Record.parentId, type2Page); }}
+        onSuccess={() => { setShowAddType2(false); loadData(type1Page, type1NameSearch, type2NameSearch); }}
       />
       <EditProductType2Modal
         visible={showEditType2}
         record={type2Record}
         onClose={() => setShowEditType2(false)}
-        onSuccess={() => { setShowEditType2(false); loadType2(expandedType1Id, type2Page); }}
+        onSuccess={() => { setShowEditType2(false); loadData(type1Page, type1NameSearch, type2NameSearch); }}
       />
       <Modal
         title="Confirm Delete"

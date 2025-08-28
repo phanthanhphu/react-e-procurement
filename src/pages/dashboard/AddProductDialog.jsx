@@ -28,11 +28,14 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
     supplierCode: '',
     supplierName: '',
     sapCode: '',
-    productFullName: '',
-    productShortName: '',
+    itemNo: '',
+    itemDescription: '',
+    fullDescription: '',
     size: '',
-    price: '',
+    materialGroupFullDescription: '',
     unit: '',
+    price: '',
+    currency: '',
   });
 
   const [files, setFiles] = useState([]);
@@ -108,23 +111,19 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
       return;
     }
 
-    // Thu hồi các URL preview cũ để tránh rò rỉ bộ nhớ
     previews.forEach((preview) => URL.revokeObjectURL(preview));
 
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
 
-    // Reset input để cho phép chọn lại file ngay lập tức
     e.target.value = null;
   };
 
   const handleRemoveFile = (index) => {
-    // Xóa file và preview tại index
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
 
-    // Thu hồi URL của preview bị xóa
     URL.revokeObjectURL(previews[index]);
 
     setFiles(newFiles);
@@ -132,24 +131,17 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
   };
 
   const validateForm = () => {
-    return (
-      formData.supplierCode &&
-      formData.sapCode &&
-      formData.productFullName &&
-      formData.productShortName &&
-      files.length > 0
-    );
+    return true; // Không yêu cầu bất kỳ trường nào, chỉ kiểm tra files nếu cần
   };
 
   const handleSave = async () => {
     if (!validateForm()) {
-      alert('Please fill in all required fields and select at least one image.');
+      alert('Please select at least one image if you want to upload images.');
       return;
     }
 
     const multipartForm = new FormData();
 
-    // Append productType1Id và productType2Id nếu có giá trị
     if (formData.productType1Id) {
       multipartForm.append('productType1Id', formData.productType1Id);
     }
@@ -160,13 +152,15 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
     multipartForm.append('supplierCode', formData.supplierCode);
     multipartForm.append('supplierName', formData.supplierName);
     multipartForm.append('sapCode', formData.sapCode);
-    multipartForm.append('productFullName', formData.productFullName);
-    multipartForm.append('productShortName', formData.productShortName);
+    multipartForm.append('itemNo', formData.itemNo);
+    multipartForm.append('itemDescription', formData.itemDescription);
+    multipartForm.append('fullDescription', formData.fullDescription);
     multipartForm.append('size', formData.size);
-    multipartForm.append('price', formData.price);
+    multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription);
     multipartForm.append('unit', formData.unit);
+    multipartForm.append('price', formData.price);
+    multipartForm.append('currency', formData.currency);
 
-    // Append danh sách file với key 'files'
     files.forEach((file) => {
       multipartForm.append('files', file);
     });
@@ -198,13 +192,15 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
       supplierCode: '',
       supplierName: '',
       sapCode: '',
-      productFullName: '',
-      productShortName: '',
+      itemNo: '',
+      itemDescription: '',
+      fullDescription: '',
       size: '',
-      price: '',
+      materialGroupFullDescription: '',
       unit: '',
+      price: '',
+      currency: '',
     });
-    // Thu hồi tất cả URL preview để tránh rò rỉ bộ nhớ
     previews.forEach((preview) => URL.revokeObjectURL(preview));
     setFiles([]);
     setPreviews([]);
@@ -217,51 +213,6 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-            <Select
-              labelId="product-type-1-label"
-              value={formData.productType1Id}
-              label="Product Type 1"
-              onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType1List.map((type1) => (
-                <MenuItem key={type1.id} value={type1.id}>
-                  {type1.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-          </FormControl>
-
-          <FormControl
-            fullWidth
-            size="small"
-            disabled={!formData.productType1Id || loadingType2}
-          >
-            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-            <Select
-              labelId="product-type-2-label"
-              value={formData.productType2Id}
-              label="Product Type 2"
-              onChange={handleChange('productType2Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType2List.map((type2) => (
-                <MenuItem key={type2.id} value={type2.id}>
-                  {type2.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-          </FormControl>
-
           <TextField
             label="Supplier Code"
             value={formData.supplierCode}
@@ -284,44 +235,113 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             fullWidth
           />
           <TextField
-            label="Product Full Name"
-            value={formData.productFullName}
-            onChange={handleChange('productFullName')}
+            label="Item No"
+            value={formData.itemNo}
+            onChange={handleChange('itemNo')}
             size="small"
             fullWidth
           />
           <TextField
-            label="Product Short Name"
-            value={formData.productShortName}
-            onChange={handleChange('productShortName')}
+            label="Item Description"
+            value={formData.itemDescription}
+            onChange={handleChange('itemDescription')}
             size="small"
             fullWidth
           />
           <TextField
-            label="Size"
-            value={formData.size}
-            onChange={handleChange('size')}
+            label="Full Description"
+            value={formData.fullDescription}
+            onChange={handleChange('fullDescription')}
             size="small"
             fullWidth
+            multiline
+            rows={4}
           />
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="Size"
+              value={formData.size}
+              onChange={handleChange('size')}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Material Group Full Description"
+              value={formData.materialGroupFullDescription}
+              onChange={handleChange('materialGroupFullDescription')}
+              size="small"
+              fullWidth
+            />
+          </Stack>
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="Unit"
+              value={formData.unit}
+              onChange={handleChange('unit')}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Price"
+              value={formData.price}
+              onChange={handleChange('price')}
+              size="small"
+              fullWidth
+              type="number"
+            />
+          </Stack>
           <TextField
-            label="Price"
-            value={formData.price}
-            onChange={handleChange('price')}
-            size="small"
-            fullWidth
-            type="number"
-          />
-          <TextField
-            label="Unit"
-            value={formData.unit}
-            onChange={handleChange('unit')}
+            label="Currency"
+            value={formData.currency}
+            onChange={handleChange('currency')}
             size="small"
             fullWidth
           />
-
+          <FormControl fullWidth size="small">
+            <InputLabel id="product-type-1-label">Group Item 1</InputLabel>
+            <Select
+              labelId="product-type-1-label"
+              value={formData.productType1Id}
+              label="Group Item 1"
+              onChange={handleChange('productType1Id')}
+              disabled={loadingType1}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType1List.map((type1) => (
+                <MenuItem key={type1.id} value={type1.id}>
+                  {type1.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
+          </FormControl>
+          <FormControl
+            fullWidth
+            size="small"
+            disabled={!formData.productType1Id || loadingType2}
+          >
+            <InputLabel id="product-type-2-label">Group Item 2</InputLabel>
+            <Select
+              labelId="product-type-2-label"
+              value={formData.productType2Id}
+              label="Group Item 2"
+              onChange={handleChange('productType2Id')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType2List.map((type2) => (
+                <MenuItem key={type2.id} value={type2.id}>
+                  {type2.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
+          </FormControl>
           <Box>
-            <InputLabel sx={{ mb: 1 }}>Product Images (Max 10)</InputLabel>
+            <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
               <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
                 Choose Image
@@ -332,14 +352,12 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
                   onChange={handleFileChange}
                 />
               </Button>
-
               {files.length > 0 && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
                   {files.length} image(s) selected
                 </Typography>
               )}
             </Stack>
-
             {previews.length > 0 && (
               <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 {previews.map((preview, index) => (

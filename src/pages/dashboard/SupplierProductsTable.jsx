@@ -26,21 +26,23 @@ import { API_BASE_URL } from '../../config';
 import AddProductDialog from './AddProductDialog';
 import EditProductDialog from './EditProductDialog';
 import SupplierSearch from './SupplierSearch';
-import debounce from 'lodash/debounce'; // Cần cài đặt lodash
 
 const headers = [
   { label: 'No', key: 'no' },
   { label: 'Supplier Code', key: 'supplierCode' },
   { label: 'Supplier Name', key: 'supplierName' },
-  { label: 'Product Type 1', key: 'productType1Name' },
-  { label: 'Product Type 2', key: 'productType2Name' },
   { label: 'SAP Code', key: 'sapCode' },
-  { label: 'Item Description', key: 'productFullName' },
-  { label: 'Short Item Description', key: 'productShortName' },
-  { label: 'Images', key: 'image' },
+  { label: 'Item No', key: 'itemNo' },
+  { label: 'Item Description', key: 'itemDescription' },
+  { label: 'Full Description', key: 'fullDescription' },
   { label: 'Size', key: 'size' },
-  { label: 'Price', key: 'price' },
+  { label: 'Material Group Full Description', key: 'materialGroupFullDescription' },
   { label: 'Unit', key: 'unit' },
+  { label: 'Price', key: 'price' },
+  { label: 'Currency', key: 'currency' },
+  { label: 'Group Item 1', key: 'groupItem1Name' },
+  { label: 'Group Item 2', key: 'groupItem2Name' },
+  { label: 'Images', key: 'image' },
   { label: 'Action', key: 'action' },
 ];
 
@@ -51,11 +53,9 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
   const handlePopoverOpen = (event, imageUrls) => {
     setAnchorEl(event.currentTarget);
     const fullSrcs = imageUrls.map((imgSrc) =>
-      imgSrc.startsWith('http')
-        ? imgSrc
-        : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
+      imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
     );
-    console.log('Image URLs:', fullSrcs); // Log URL để debug
+    console.log('Image URLs:', fullSrcs);
     setPopoverImgSrcs(fullSrcs);
   };
 
@@ -64,12 +64,8 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
     setPopoverImgSrcs([]);
   };
 
-  const handlePopoverEnter = () => {
-    // Giữ Popover mở khi di chuột vào
-  };
-
+  const handlePopoverEnter = () => {};
   const handlePopoverLeave = () => {
-    // Đóng Popover khi di chuột ra ngoài
     handlePopoverClose();
   };
 
@@ -83,11 +79,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
     <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto' }}>
       <Table size="small" sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1 }}>
         <TableHead>
-          <TableRow
-            sx={{
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            }}
-          >
+          <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
             {headers.map(({ label, key }) => (
               <TableCell
                 key={key}
@@ -100,9 +92,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   px: 1,
                   whiteSpace: 'nowrap',
                   borderRight: '1px solid rgba(255,255,255,0.15)',
-                  '&:last-child': {
-                    borderRight: 'none',
-                  },
+                  '&:last-child': { borderRight: 'none' },
                   position: 'sticky',
                   top: 0,
                   zIndex: 1,
@@ -114,17 +104,13 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
             ))}
           </TableRow>
         </TableHead>
-
         <TableBody>
           {supplierProducts.map((product, idx) => (
             <TableRow
               key={product.id}
               sx={{
                 backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
-                '&:hover': {
-                  backgroundColor: '#e3f2fd',
-                  transition: 'background-color 0.3s ease',
-                },
+                '&:hover': { backgroundColor: '#e3f2fd', transition: 'background-color 0.3s ease' },
                 cursor: 'pointer',
               }}
             >
@@ -133,36 +119,55 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierCode}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierName}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.sapCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.itemNo || 'N/A'}</TableCell>
+              <TableCell
+                sx={{
+                  fontSize: '0.75rem',
+                  py: 1,
+                  px: 1,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  width: '300px',
+                }}
+              >
+                {product.itemDescription || 'N/A'}
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontSize: '0.75rem',
+                  py: 1,
+                  px: 1,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  width: '300px',
+                }}
+              >
+                {product.fullDescription || 'N/A'}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.size}</TableCell>
+              <TableCell
+                sx={{
+                  fontSize: '0.75rem',
+                  py: 1,
+                  px: 1,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  width: '300px',
+                }}
+              >
+                {product.materialGroupFullDescription || 'N/A'}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.unit}</TableCell>
+              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+                {product.price ? product.price.toLocaleString() : 'N/A'}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.currency || 'N/A'}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
                 {product.productType1Name || 'N/A'}
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
                 {product.productType2Name || 'N/A'}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.sapCode}</TableCell>
-              <TableCell
-                sx={{
-                  fontSize: '0.75rem',
-                  py: 1,
-                  px: 1,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  width: '300px',
-                }}
-              >
-                {product.productFullName}
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontSize: '0.75rem',
-                  py: 1,
-                  px: 1,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  width: '300px',
-                }}
-              >
-                {product.productShortName}
               </TableCell>
               <TableCell align="center" sx={{ py: 1, px: 1 }}>
                 {product.imageUrls && product.imageUrls.length > 0 ? (
@@ -178,11 +183,6 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   <Typography sx={{ fontSize: '0.7rem', color: '#888' }}>No Images</Typography>
                 )}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.size}</TableCell>
-              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
-                {product.price ? product.price.toLocaleString() : 'N/A'}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.unit}</TableCell>
               <TableCell align="center" sx={{ py: 1, px: 1 }}>
                 <Stack direction="row" spacing={1} justifyContent="center">
                   <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
@@ -197,38 +197,39 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
           ))}
         </TableBody>
       </Table>
-
       <Popover
         id="mouse-over-popover"
-        sx={{
-          pointerEvents: 'auto',
-        }}
+        sx={{ pointerEvents: 'auto' }}
         open={open}
         anchorEl={anchorEl}
-        anchorOrigin={{
-          vertical: 'top',
-          horizontal: 'left',
-        }}
-        transformOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left',
-        }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         onClose={handlePopoverClose}
         disableRestoreFocus
       >
         <Box
-          sx={{ p: 2, maxWidth: 1000, maxHeight: 400, overflow: 'auto' }}
+          sx={{
+            p: 2,
+            maxWidth: 400,
+            maxHeight: 400,
+            overflowY: 'auto',
+          }}
           onMouseEnter={handlePopoverEnter}
           onMouseLeave={handlePopoverLeave}
         >
           {popoverImgSrcs.length > 0 ? (
-            <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+            <Stack direction="column" spacing={2}>
               {popoverImgSrcs.map((imgSrc, index) => (
-                <Box key={index} sx={{ maxWidth: 300, textAlign: 'center' }}>
+                <Box key={index} sx={{ textAlign: 'center' }}>
                   <img
                     src={imgSrc}
                     alt={`Product Image ${index + 1}`}
-                    style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 4 }}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: 300,
+                      borderRadius: 4,
+                      objectFit: 'contain',
+                    }}
                     loading="lazy"
                     onError={(e) => {
                       console.error(`Failed to load image: ${imgSrc}`);
@@ -263,26 +264,16 @@ export default function SupplierProductsPage() {
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [productToEdit, setProductToEdit] = useState(null);
-
-  // Search states (aligned with SupplierSearch props)
   const [searchSupplierCode, setSearchSupplierCode] = useState('');
   const [searchSupplierName, setSearchSupplierName] = useState('');
   const [searchSapCode, setSearchSapCode] = useState('');
-  const [searchProductFullName, setSearchProductFullName] = useState('');
-  const [searchProductShortName, setSearchProductShortName] = useState('');
+  const [searchItemNo, setSearchItemNo] = useState('');
+  const [searchItemDescription, setSearchItemDescription] = useState('');
   const [searchFullDescription, setSearchFullDescription] = useState('');
+  const [searchMaterialGroupFullDescription, setSearchMaterialGroupFullDescription] = useState('');
   const [searchProductType1Id, setSearchProductType1Id] = useState('');
   const [searchProductType2Id, setSearchProductType2Id] = useState('');
 
-  // Debounced fetchData function
-  const debouncedFetchData = useCallback(
-    debounce(() => {
-      fetchData();
-    }, 500), // Delay 500ms để tránh gọi quá nhiều
-    []
-  );
-
-  // Fetch data from /filter API
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -290,29 +281,29 @@ export default function SupplierProductsPage() {
       searchSupplierCode,
       searchSupplierName,
       searchSapCode,
-      searchProductFullName,
+      searchItemNo,
+      searchItemDescription,
       searchFullDescription,
-      searchProductShortName,
+      searchMaterialGroupFullDescription,
       searchProductType1Id,
       searchProductType2Id,
     });
     try {
-      // Dynamically construct params object with only non-empty values
       const params = {};
       if (searchSupplierCode) params.supplierCode = searchSupplierCode;
       if (searchSupplierName) params.supplierName = searchSupplierName;
       if (searchSapCode) params.sapCode = searchSapCode;
-      if (searchProductFullName || searchFullDescription) params.productFullName = searchProductFullName || searchFullDescription;
-      if (searchProductShortName) params.productShortName = searchProductShortName;
+      if (searchItemNo) params.itemNo = searchItemNo;
+      if (searchItemDescription) params.itemDescription = searchItemDescription;
+      if (searchFullDescription) params.fullDescription = searchFullDescription;
+      if (searchMaterialGroupFullDescription) params.materialGroupFullDescription = searchMaterialGroupFullDescription;
       if (searchProductType1Id) params.productType1Id = searchProductType1Id;
       if (searchProductType2Id) params.productType2Id = searchProductType2Id;
       params.page = page;
       params.size = rowsPerPage;
       params.sortBy = 'createdAt';
       params.sortDirection = 'DESC';
-
       console.log('API Call Params:', params);
-
       const url = new URL(`${API_BASE_URL}/api/supplier-products/filter`);
       url.search = new URLSearchParams(params).toString();
       console.log('Request URL:', url.toString());
@@ -338,36 +329,18 @@ export default function SupplierProductsPage() {
     searchSupplierCode,
     searchSupplierName,
     searchSapCode,
-    searchProductFullName,
+    searchItemNo,
+    searchItemDescription,
     searchFullDescription,
-    searchProductShortName,
+    searchMaterialGroupFullDescription,
     searchProductType1Id,
     searchProductType2Id,
   ]);
 
-  // Trigger fetchData when search or page changes
+  // Fetch all data on component mount
   useEffect(() => {
-    debouncedFetchData();
-  }, [
-    debouncedFetchData,
-    page,
-    rowsPerPage,
-    searchSupplierCode,
-    searchSupplierName,
-    searchSapCode,
-    searchProductFullName,
-    searchFullDescription,
-    searchProductShortName,
-    searchProductType1Id,
-    searchProductType2Id,
-  ]);
-
-  // Cleanup debounce on unmount
-  useEffect(() => {
-    return () => {
-      debouncedFetchData.cancel();
-    };
-  }, [debouncedFetchData]);
+    fetchData();
+  }, []); // Empty dependency array to run only on mount
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
@@ -394,15 +367,13 @@ export default function SupplierProductsPage() {
       return;
     }
     const formData = new FormData();
-    formData.append('file', file);
-
+    formData.append('files', file);
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/supplier-products/import`, {
         method: 'POST',
         body: formData,
       });
-
       if (!response.ok) throw new Error(`Upload failed with status: ${response.status}`);
       alert('File uploaded successfully');
       fetchData();
@@ -417,11 +388,13 @@ export default function SupplierProductsPage() {
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
+    fetchData();
   };
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0); // Reset về trang đầu khi thay đổi số bản ghi mỗi trang
+    setPage(0);
+    fetchData();
   };
 
   const handleEditProduct = (product) => {
@@ -434,7 +407,6 @@ export default function SupplierProductsPage() {
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
         Supplier Products
       </Typography>
-
       <Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
         <Button
           variant="contained"
@@ -446,14 +418,11 @@ export default function SupplierProductsPage() {
             textTransform: 'none',
             px: 3,
             borderRadius: '20px',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-            },
+            '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
         >
           Upload Excel
         </Button>
-
         <Input
           id="file-input"
           type="file"
@@ -461,7 +430,6 @@ export default function SupplierProductsPage() {
           onChange={handleFileChange}
           sx={{ display: 'none' }}
         />
-
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -472,15 +440,12 @@ export default function SupplierProductsPage() {
             textTransform: 'none',
             px: 3,
             borderRadius: '20px',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-            },
+            '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
         >
           Add Product
         </Button>
       </Stack>
-
       <SupplierSearch
         searchSupplierCode={searchSupplierCode}
         setSearchSupplierCode={setSearchSupplierCode}
@@ -488,12 +453,14 @@ export default function SupplierProductsPage() {
         setSearchSupplierName={setSearchSupplierName}
         searchSapCode={searchSapCode}
         setSearchSapCode={setSearchSapCode}
-        searchProductFullName={searchProductFullName}
-        setSearchProductFullName={setSearchProductFullName}
-        searchProductShortName={searchProductShortName}
-        setSearchProductShortName={setSearchProductShortName}
+        searchItemNo={searchItemNo}
+        setSearchItemNo={setSearchItemNo}
+        searchItemDescription={searchItemDescription}
+        setSearchItemDescription={setSearchItemDescription}
         searchFullDescription={searchFullDescription}
         setSearchFullDescription={setSearchFullDescription}
+        searchMaterialGroupFullDescription={searchMaterialGroupFullDescription}
+        setSearchMaterialGroupFullDescription={setSearchMaterialGroupFullDescription}
         searchProductType1Id={searchProductType1Id}
         setSearchProductType1Id={setSearchProductType1Id}
         searchProductType2Id={searchProductType2Id}
@@ -504,16 +471,16 @@ export default function SupplierProductsPage() {
           setSearchSupplierCode('');
           setSearchSupplierName('');
           setSearchSapCode('');
-          setSearchProductFullName('');
-          setSearchProductShortName('');
+          setSearchItemNo('');
+          setSearchItemDescription('');
           setSearchFullDescription('');
+          setSearchMaterialGroupFullDescription('');
           setSearchProductType1Id('');
           setSearchProductType2Id('');
           setPage(0);
           fetchData();
         }}
       />
-
       <SupplierProductsTable
         supplierProducts={data}
         handleDelete={handleDelete}
@@ -521,7 +488,6 @@ export default function SupplierProductsPage() {
         page={page}
         rowsPerPage={rowsPerPage}
       />
-
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
         component="div"
@@ -532,9 +498,7 @@ export default function SupplierProductsPage() {
         onRowsPerPageChange={handleChangeRowsPerPage}
         sx={{ mt: 1 }}
       />
-
       <AddProductDialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} onRefresh={fetchData} />
-
       {productToEdit && (
         <EditProductDialog
           open={openEditDialog}

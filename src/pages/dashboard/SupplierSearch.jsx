@@ -1,5 +1,6 @@
-import React from 'react';
-import { Paper, TextField, Button, Box, useTheme } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert } from '@mui/material';
+import axios from 'axios';
 
 export default function SupplierSearch({
   searchSupplierCode,
@@ -10,19 +11,137 @@ export default function SupplierSearch({
   setSearchSapCode,
   searchItemNo,
   setSearchItemNo,
-  searchProductShortName,
-  setSearchProductShortName,
+  searchItemDescription,
+  setSearchItemDescription,
   searchFullDescription,
   setSearchFullDescription,
-  searchGroupItem1,
-  setSearchGroupItem1,
-  searchGroupItem2,
-  setSearchGroupItem2,
+  searchProductType1Id,
+  setSearchProductType1Id,
+  searchProductType2Id,
+  setSearchProductType2Id,
   setPage,
   onSearch,
   onReset,
 }) {
   const theme = useTheme();
+  const [productType1Options, setProductType1Options] = useState([]);
+  const [filteredProductType1Options, setFilteredProductType1Options] = useState([]);
+  const [selectedProductType1Id, setSelectedProductType1Id] = useState(null);
+  const [selectedProductType2Id, setSelectedProductType2Id] = useState(null);
+  const [productType2Options, setProductType2Options] = useState([]);
+  const [filteredProductType2Options, setFilteredProductType2Options] = useState([]);
+  const [searchGroupItem1, setSearchGroupItem1] = useState('');
+  const [searchGroupItem2, setSearchGroupItem2] = useState('');
+  const [error, setError] = useState(null);
+
+  // Lấy danh sách product-type-1 khi component mount
+  useEffect(() => {
+    const fetchProductType1 = async () => {
+      try {
+        const response = await axios.get(`http://localhost:8080/api/product-type-1/search?page=0&size=100`);
+        setProductType1Options(response.data.content);
+        setFilteredProductType1Options(response.data.content);
+      } catch (error) {
+        setError('Không thể tải danh sách product-type-1. Vui lòng thử lại.');
+        console.error("Error fetching product type 1:", error);
+      }
+    };
+    fetchProductType1();
+  }, []);
+
+  // Lấy danh sách product-type-2 ban đầu, sử dụng selectedProductType1Id nếu có
+  useEffect(() => {
+    const fetchProductType2 = async () => {
+      try {
+        const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+          params: {
+            productType1Id: selectedProductType1Id || undefined,
+            page: 0,
+            size: 100,
+          },
+        });
+        setProductType2Options(response.data.content);
+        setFilteredProductType2Options(response.data.content);
+      } catch (error) {
+        setError('Không thể tải danh sách product-type-2. Vui lòng thử lại.');
+        console.error("Error fetching product type 2:", error);
+      }
+    };
+    fetchProductType2();
+  }, [selectedProductType1Id]);
+
+  // Xử lý tìm kiếm product-type-1
+  const handleGroupItem1Change = async (event, value) => {
+    setSearchGroupItem1(value || '');
+    try {
+      const response = await axios.get(`http://localhost:8080/api/product-type-1/search`, {
+        params: { page: 0, size: 100, name: value || '' },
+      });
+      setFilteredProductType1Options(response.data.content);
+    } catch (error) {
+      setError('Không thể tìm kiếm product-type-1. Vui lòng thử lại.');
+      console.error("Error searching product type 1:", error);
+    }
+  };
+
+  // Xử lý chọn product-type-1
+  const handleGroupItem1Select = (event, value) => {
+    setSelectedProductType1Id(value ? value.id : null);
+    setSearchGroupItem1(value ? value.name : '');
+    setSearchProductType1Id(value ? value.id : '');
+  };
+
+  // Xử lý tìm kiếm product-type-2
+  const handleGroupItem2Change = async (event, value) => {
+    setSearchGroupItem2(value || '');
+    try {
+      const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+        params: {
+          productType1Id: selectedProductType1Id || undefined,
+          page: 0,
+          size: 100,
+          name: value || '',
+        },
+      });
+      setProductType2Options(response.data.content);
+      setFilteredProductType2Options(response.data.content);
+    } catch (error) {
+      setError('Không thể tìm kiếm product-type-2. Vui lòng thử lại.');
+      console.error("Error searching product type 2:", error);
+    }
+  };
+
+  // Xử lý chọn product-type-2
+  const handleGroupItem2Select = (event, value) => {
+    setSelectedProductType2Id(value ? value.id : null);
+    setSearchGroupItem2(value ? value.name : '');
+    setSearchProductType2Id(value ? value.id : '');
+  };
+
+  // Xử lý reset
+  const handleReset = () => {
+    setPage(0);
+    setSearchGroupItem1('');
+    setSearchGroupItem2('');
+    setSelectedProductType1Id(null);
+    setSelectedProductType2Id(null);
+    setSearchProductType1Id('');
+    setSearchProductType2Id('');
+    setFilteredProductType1Options(productType1Options);
+    setFilteredProductType2Options(productType2Options);
+    onReset();
+  };
+
+  // Xử lý search
+  const handleSearch = () => {
+    setPage(0);
+    onSearch({ productType1Id: selectedProductType1Id, productType2Id: selectedProductType2Id });
+  };
+
+  // Đóng Snackbar lỗi
+  const handleCloseError = () => {
+    setError(null);
+  };
 
   return (
     <Paper
@@ -35,69 +154,81 @@ export default function SupplierSearch({
         boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
         border: `1px solid ${theme.palette.divider}`,
         overflowX: 'auto',
+        maxWidth: '100%',
       }}
     >
+      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
+
       {/* Row 1: 4 inputs + Search button */}
       <Box
         sx={{
           display: 'flex',
+          flexWrap: 'nowrap',
           gap: 2,
           mb: 2,
-          flexWrap: 'wrap',
           alignItems: 'center',
         }}
       >
-        <TextField
-          label="Supplier Code"
-          variant="outlined"
-          size="small"
-          value={searchSupplierCode}
-          onChange={(e) => {
-            setPage(0);
-            setSearchSupplierCode(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="Supplier Name"
-          variant="outlined"
-          size="small"
-          value={searchSupplierName}
-          onChange={(e) => {
-            setPage(0);
-            setSearchSupplierName(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="SAP Code"
-          variant="outlined"
-          size="small"
-          value={searchSapCode}
-          onChange={(e) => {
-            setPage(0);
-            setSearchSapCode(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="Item No"
-          variant="outlined"
-          size="small"
-          value={searchItemNo}
-          onChange={(e) => {
-            setPage(0);
-            setSearchItemNo(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <Box sx={{ flexShrink: 0 }}>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="Supplier Code"
+            variant="outlined"
+            size="small"
+            value={searchSupplierCode}
+            onChange={(e) => {
+              setPage(0);
+              setSearchSupplierCode(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="Supplier Name"
+            variant="outlined"
+            size="small"
+            value={searchSupplierName}
+            onChange={(e) => {
+              setPage(0);
+              setSearchSupplierName(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="SAP Code"
+            variant="outlined"
+            size="small"
+            value={searchSapCode}
+            onChange={(e) => {
+              setPage(0);
+              setSearchSapCode(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="Item No"
+            variant="outlined"
+            size="small"
+            value={searchItemNo}
+            onChange={(e) => {
+              setPage(0);
+              setSearchItemNo(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <Button
             variant="contained"
-            onClick={() => {
-              setPage(0);
-              onSearch();
-            }}
+            onClick={handleSearch}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -107,6 +238,7 @@ export default function SupplierSearch({
               borderRadius: '8px',
               fontSize: '0.875rem',
               height: 40,
+              width: '100%',
               whiteSpace: 'nowrap',
             }}
           >
@@ -119,62 +251,79 @@ export default function SupplierSearch({
       <Box
         sx={{
           display: 'flex',
+          flexWrap: 'nowrap',
           gap: 2,
-          flexWrap: 'wrap',
           alignItems: 'center',
         }}
       >
-        <TextField
-          label="Short Item Description"
-          variant="outlined"
-          size="small"
-          value={searchProductShortName}
-          onChange={(e) => {
-            setPage(0);
-            setSearchProductShortName(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="Full Description"
-          variant="outlined"
-          size="small"
-          value={searchFullDescription}
-          onChange={(e) => {
-            setPage(0);
-            setSearchFullDescription(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="Group Item 1"
-          variant="outlined"
-          size="small"
-          value={searchGroupItem1}
-          onChange={(e) => {
-            setPage(0);
-            setSearchGroupItem1(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <TextField
-          label="Group Item 2"
-          variant="outlined"
-          size="small"
-          value={searchGroupItem2}
-          onChange={(e) => {
-            setPage(0);
-            setSearchGroupItem2(e.target.value);
-          }}
-          sx={{ flexGrow: 1, minWidth: 200 }}
-        />
-        <Box sx={{ flexShrink: 0 }}>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="Short Item Description"
+            variant="outlined"
+            size="small"
+            value={searchItemDescription}
+            onChange={(e) => {
+              setPage(0);
+              setSearchItemDescription(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <TextField
+            label="Full Description"
+            variant="outlined"
+            size="small"
+            value={searchFullDescription}
+            onChange={(e) => {
+              setPage(0);
+              setSearchFullDescription(e.target.value);
+            }}
+            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType1Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+            value={searchGroupItem1}
+            onInputChange={handleGroupItem1Change}
+            onChange={handleGroupItem1Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Group Item 1"
+                variant="outlined"
+                size="small"
+                sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+              />
+            )}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType2Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+            value={searchGroupItem2}
+            onInputChange={handleGroupItem2Change}
+            onChange={handleGroupItem2Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Group Item 2"
+                variant="outlined"
+                size="small"
+                sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+              />
+            )}
+          />
+        </Box>
+        <Box sx={{ width: '20%', minWidth: 200 }}>
           <Button
             variant="outlined"
-            onClick={() => {
-              setPage(0);
-              onReset();
-            }}
+            onClick={handleReset}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
@@ -184,6 +333,7 @@ export default function SupplierSearch({
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
               height: 40,
+              width: '100%',
               whiteSpace: 'nowrap',
             }}
           >
