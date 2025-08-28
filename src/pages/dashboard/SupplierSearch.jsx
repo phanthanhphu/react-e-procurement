@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert } from '@mui/material';
 import axios from 'axios';
+import { API_BASE_URL } from '../../config';
 
 export default function SupplierSearch({
   searchSupplierCode,
@@ -38,7 +39,7 @@ export default function SupplierSearch({
   useEffect(() => {
     const fetchProductType1 = async () => {
       try {
-        const response = await axios.get(`http://localhost:8080/api/product-type-1/search?page=0&size=100`);
+        const response = await axios.get(`${API_BASE_URL}/api/product-type-1/search?page=0&size=100`);
         setProductType1Options(response.data.content);
         setFilteredProductType1Options(response.data.content);
       } catch (error) {
@@ -53,7 +54,7 @@ export default function SupplierSearch({
   useEffect(() => {
     const fetchProductType2 = async () => {
       try {
-        const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+        const response = await axios.get(`${API_BASE_URL}/api/product-type-2/search`, {
           params: {
             productType1Id: selectedProductType1Id || undefined,
             page: 0,
@@ -74,7 +75,7 @@ export default function SupplierSearch({
   const handleGroupItem1Change = async (event, value) => {
     setSearchGroupItem1(value || '');
     try {
-      const response = await axios.get(`http://localhost:8080/api/product-type-1/search`, {
+      const response = await axios.get(`${API_BASE_URL}/api/product-type-1/search`, {
         params: { page: 0, size: 100, name: value || '' },
       });
       setFilteredProductType1Options(response.data.content);
@@ -95,7 +96,7 @@ export default function SupplierSearch({
   const handleGroupItem2Change = async (event, value) => {
     setSearchGroupItem2(value || '');
     try {
-      const response = await axios.get(`http://localhost:8080/api/product-type-2/search`, {
+      const response = await axios.get(`${API_BASE_URL}/api/product-type-2/search`, {
         params: {
           productType1Id: selectedProductType1Id || undefined,
           page: 0,
