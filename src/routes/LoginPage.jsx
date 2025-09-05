@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
-import { useNavigate } from 'react-router-dom';  // import useNavigate
+import { useNavigate } from 'react-router-dom';
 
 import '../assets/css/vendor.min.css';
 import '../assets/vendor/icon-set/style.css';
@@ -116,6 +115,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
+  // Kiểm tra trạng thái đăng nhập khi component mount
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem('isAuthenticated');
+    if (isAuthenticated === 'true') {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -125,16 +132,17 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/users/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json(); // Giả định backend trả về { token, user: { id, username, email, role, profileImageUrl } }
         localStorage.setItem('token', data.token);
         localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('user', JSON.stringify(data.user)); // Lưu thông tin người dùng
 
         toast.success('Login successful! Redirecting...');
 

@@ -15,18 +15,20 @@ import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
 
 // project-imports
 import ProfileTab from './ProfileTab';
 import SettingTab from './SettingTab';
 import Avatar from 'components/@extended/Avatar';
-import IconButton from 'components/@extended/IconButton';
 import Transitions from 'components/@extended/Transitions';
 import MainCard from 'components/MainCard';
+import { useUser } from './useUser'; // Import useUser hook
 
 // assets
 import avatar1 from 'assets/images/users/avatar-6.png';
-import { Setting2, Profile, Logout } from 'iconsax-reactjs';
+import { Setting2, Profile, Logout, Edit2 } from 'iconsax-react';
 
 // tab panel wrapper
 function TabPanel({ children, value, index, ...other }) {
@@ -47,7 +49,7 @@ function TabPanel({ children, value, index, ...other }) {
 function a11yProps(index) {
   return {
     id: `profile-tab-${index}`,
-    'aria-controls': `profile-tabpanel-${index}`
+    'aria-controls': `profile-tabpanel-${index}`,
   };
 }
 
@@ -57,16 +59,20 @@ const tabStyle = {
   justifyContent: 'center',
   alignItems: 'center',
   textTransform: 'capitalize',
-  gap: 1.25
+  gap: 1.25,
 };
 
 // ==============================|| HEADER CONTENT - PROFILE ||============================== //
 
 export default function ProfilePage() {
   const theme = useTheme();
-
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(0);
+
+  // Use useUser hook to get user data and functions
+  const { username, role, isEditing, editedUsername, setEditedUsername, setIsEditing, handleSaveUsername } = useUser();
+
   const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen);
   };
@@ -76,9 +82,8 @@ export default function ProfilePage() {
       return;
     }
     setOpen(false);
+    setIsEditing(false); // Close editing mode when closing popup
   };
-
-  const [value, setValue] = useState(0);
 
   const handleChange = (event, newValue) => {
     setValue(newValue);
@@ -93,8 +98,8 @@ export default function ProfilePage() {
           '&:hover': { bgcolor: 'secondary.lighter' },
           '&:focus-visible': {
             outline: `2px solid ${theme.palette.secondary.dark}`,
-            outlineOffset: 2
-          }
+            outlineOffset: 2,
+          },
         })}
         aria-label="open profile"
         ref={anchorRef}
@@ -122,7 +127,7 @@ export default function ProfilePage() {
                 minWidth: 240,
                 maxWidth: 290,
                 [theme.breakpoints.down('md')]: { maxWidth: 250 },
-                borderRadius: 1.5
+                borderRadius: 1.5,
               })}
             >
               <ClickAwayListener onClickAway={handleClose}>
@@ -133,10 +138,32 @@ export default function ProfilePage() {
                         <Stack direction="row" sx={{ gap: 1.25, alignItems: 'center' }}>
                           <Avatar alt="profile user" src={avatar1} />
                           <Stack>
-                            <Typography variant="subtitle1">John Doe</Typography>
-                            <Typography variant="body2" color="secondary">
-                              UI/UX Designer
-                            </Typography>
+                            {isEditing ? (
+                              <Stack direction="row" alignItems="center" spacing={1}>
+                                <TextField
+                                  value={editedUsername}
+                                  onChange={(e) => setEditedUsername(e.target.value)}
+                                  size="small"
+                                  autoFocus
+                                />
+                                <IconButton color="primary" onClick={handleSaveUsername}>
+                                  <Edit2 size={18} />
+                                </IconButton>
+                              </Stack>
+                            ) : (
+                              <>
+                                <Typography
+                                  variant="subtitle1"
+                                  onClick={() => setIsEditing(true)}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  {username}
+                                </Typography>
+                                <Typography variant="body2" color="secondary">
+                                  {role || 'User'} {/* Display role, fallback to 'User' */}
+                                </Typography>
+                              </>
+                            )}
                           </Stack>
                         </Stack>
                       </Grid>

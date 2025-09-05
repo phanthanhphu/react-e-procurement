@@ -16,16 +16,19 @@ import {
   TablePagination,
   useTheme,
   Tooltip,
+  Popover,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import ImageIcon from '@mui/icons-material/Image';
 import InboxIcon from '@mui/icons-material/Inbox';
 import ExportExcelButton from './ExportExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
-import RequisitionSearch from './RequisitionSearch'; // Import component mới
+import RequisitionSearch from './RequisitionSearch';
 import { API_BASE_URL } from '../../config';
+import ImportExcelButton from './ImportExcelButton';
 
 const headers = [
   { label: 'No', key: 'no' },
@@ -45,6 +48,7 @@ const headers = [
   { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
   { label: 'Reason', key: 'reason' },
   { label: 'Remark', key: 'remark' },
+  { label: 'Images', key: 'image' }, // Added Images column
   { label: 'Actions', key: 'actions' },
 ];
 
@@ -129,15 +133,16 @@ export default function SummaryPage() {
     newSapCode: '',
     unit: '',
     departmentName: '',
-  }); // State để lưu giá trị tìm kiếm
+  });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null); // Popover state
+  const [popoverImgSrcs, setPopoverImgSrcs] = useState([]); // Image URLs for popover
 
   const fetchData = useCallback(async () => {
     if (!groupId) return;
@@ -147,7 +152,6 @@ export default function SummaryPage() {
       const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      // Lọc dữ liệu theo searchValues
       const filteredData = result.filter(item => {
         return (
           (!searchValues.productType1Name || item.productType1Name?.toLowerCase().includes(searchValues.productType1Name.toLowerCase())) &&
@@ -211,11 +215,11 @@ export default function SummaryPage() {
 
   const handleSearchChange = (newValues) => {
     setSearchValues(newValues);
-    setPage(0); // Reset về trang 1 khi thay đổi tìm kiếm
+    setPage(0);
   };
 
   const handleSearch = () => {
-    fetchData(); // Gọi lại API với giá trị tìm kiếm
+    fetchData();
   };
 
   const handleReset = () => {
@@ -229,8 +233,30 @@ export default function SummaryPage() {
       unit: '',
       departmentName: '',
     });
-    fetchData(); // Reset và tải lại dữ liệu gốc
+    fetchData();
   };
+
+  // Popover handlers for image display
+  const handlePopoverOpen = (event, imageUrls) => {
+    setAnchorEl(event.currentTarget);
+    const fullSrcs = imageUrls?.map((imgSrc) =>
+      imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
+    ) || [];
+    console.log('Image URLs:', fullSrcs); // Debug log
+    setPopoverImgSrcs(fullSrcs);
+  };
+
+  const handlePopoverClose = () => {
+    setAnchorEl(null);
+    setPopoverImgSrcs([]);
+  };
+
+  const handlePopoverEnter = () => {};
+  const handlePopoverLeave = () => {
+    handlePopoverClose();
+  };
+
+  const open = Boolean(anchorEl);
 
   const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -264,9 +290,17 @@ export default function SummaryPage() {
 
         <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
+          <ImportExcelButton
+              onImport={(importedData) => {
+                console.log('Imported data:', importedData);
+                // Gọi fetchData để làm mới dữ liệu sau khi import
+                fetchData();
+              }}
+              groupId={groupId} // Thêm prop groupId
+          />
           <Button
             variant="contained"
-            onClick={() => navigate(`/comparison/${groupId}`)}
+            onClick={() => navigate(`/dashboard/comparison/${groupId}`)}
             sx={{
               textTransform: 'none',
               borderRadius: 2,
@@ -310,7 +344,6 @@ export default function SummaryPage() {
         </Stack>
       </Stack>
 
-      {/* Thêm RequisitionSearch ở đây */}
       <RequisitionSearch
         searchValues={searchValues}
         onSearchChange={handleSearchChange}
@@ -344,14 +377,14 @@ export default function SummaryPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1600 }}>
+            <Table stickyHeader size="medium" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total qty', 'Stock', 'Actions'].includes(label)
+                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total qty', 'Stock', 'Images', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -387,6 +420,7 @@ export default function SummaryPage() {
                     const totalRequestQty = departmentRequests.reduce((sum, dept) => sum + dept.quantity, 0);
                     const price = supplierProduct?.price ?? 0;
                     const totalPrice = price * totalRequestQty;
+                    const imageUrls = requisition.imageUrls || supplierProduct?.imageUrls || [];
 
                     return (
                       <TableRow
@@ -406,25 +440,25 @@ export default function SummaryPage() {
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {productType1Name}
+                          {productType1Name || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {productType2Name}
+                          {productType2Name || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {requisition.englishName}
+                          {requisition.englishName || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.vietnameseName}
+                          {requisition.vietnameseName || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.oldSapCode}
+                          {requisition.oldSapCode || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.newSapCode}
+                          {requisition.newSapCode || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct?.unit ?? ''}
+                          {supplierProduct?.unit || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ px: 2, py: 1.2 }}>
                           <DeptRequestTable departmentRequests={departmentRequests} />
@@ -433,25 +467,41 @@ export default function SummaryPage() {
                           {totalRequestQty}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {supplierProduct?.supplierName ?? ''}
+                          {supplierProduct?.supplierName || 'N/A'}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+                          {price ? price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : 'N/A'}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+                          {totalPrice ? totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.stock}
+                          {requisition.stock || 0}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.purchasingSuggest}
+                          {requisition.purchasingSuggest || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.reason}
+                          {requisition.reason || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.remark}
+                          {requisition.remark || 'N/A'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                          {imageUrls.length > 0 ? (
+                            <IconButton
+                              size="small"
+                              onMouseEnter={(e) => handlePopoverOpen(e, imageUrls)}
+                              aria-owns={open ? 'mouse-over-popover' : undefined}
+                              aria-haspopup="true"
+                            >
+                              <ImageIcon fontSize="small" />
+                            </IconButton>
+                          ) : (
+                            <Typography sx={{ fontSize: '0.7rem', color: '#888' }}>
+                              No Images
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           <Stack direction="row" spacing={1} justifyContent="center">
@@ -499,6 +549,58 @@ export default function SummaryPage() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          <Popover
+            id="mouse-over-popover"
+            sx={{ pointerEvents: 'auto' }}
+            open={open}
+            anchorEl={anchorEl}
+            anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+            transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            onClose={handlePopoverClose}
+            disableRestoreFocus
+          >
+            <Box
+              sx={{
+                p: 2,
+                maxWidth: 400,
+                maxHeight: 400,
+                overflowY: 'auto',
+              }}
+              onMouseEnter={handlePopoverEnter}
+              onMouseLeave={handlePopoverLeave}
+            >
+              {popoverImgSrcs.length > 0 ? (
+                <Stack direction="column" spacing={2}>
+                  {popoverImgSrcs.map((imgSrc, index) => (
+                    <Box key={index} sx={{ textAlign: 'center' }}>
+                      <img
+                        src={imgSrc}
+                        alt={`Product Image ${index + 1}`}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: 300,
+                          borderRadius: 4,
+                          objectFit: 'contain',
+                        }}
+                        loading="lazy"
+                        onError={(e) => {
+                          console.error(`Failed to load image: ${imgSrc}`);
+                          e.target.src = '/images/fallback.jpg';
+                          e.target.alt = 'Failed to load';
+                        }}
+                      />
+                      <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#555' }}>
+                        Image {index + 1}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              ) : (
+                <Typography sx={{ p: 2, fontSize: '0.9rem' }}>No images available</Typography>
+              )}
+            </Box>
+          </Popover>
 
           <TablePagination
             rowsPerPageOptions={[10, 25, 50, 100]}
