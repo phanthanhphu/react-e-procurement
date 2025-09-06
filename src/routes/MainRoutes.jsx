@@ -15,6 +15,7 @@ const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManag
 const RequisitionMonthlyPage = Loadable(lazy(() => import('pages/dashboard/RequisitionMonthlyPage')));
 const ComparisonPage = Loadable(lazy(() => import('pages/dashboard/ComparisonPage')));
 
+
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));

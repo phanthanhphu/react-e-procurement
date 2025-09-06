@@ -47,14 +47,6 @@ const headers = [
   { label: 'Actions', key: 'actions' },
 ];
 
-const handleGoToComparison = () => {
-  if (groupId) {
-    navigate(`/dashboard/comparison/${groupId}`);
-  } else {
-    alert('Group ID không hợp lệ');
-  }
-};
-
 function DeptRequestTable({ deptRequestQty }) {
   if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
@@ -191,7 +183,6 @@ export default function RequisitionMonthlyPage() {
     setPage(0);
   };
 
-  // Mới thêm: hàm chuyển trang comparison
   const handleGoToComparison = () => {
     if (groupId) {
       navigate(`/dashboard/comparison/${groupId}`);
@@ -255,7 +246,6 @@ export default function RequisitionMonthlyPage() {
             Comparison
           </Button>
 
-
           <Button
             variant="contained"
             startIcon={<AddIcon fontSize="small" />}
@@ -309,7 +299,7 @@ export default function RequisitionMonthlyPage() {
           >
             <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
@@ -321,21 +311,18 @@ export default function RequisitionMonthlyPage() {
                           : 'left'
                       }
                       sx={{
-                        background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
-                        fontWeight: 700,
-                        color: '#fff',
-                        fontSize: '0.85rem',
-                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
-                        px: 2,
-                        py: 1.2,
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        color: '#ffffff',
+                        py: 1,
+                        px: 1,
                         whiteSpace: 'nowrap',
-                        textTransform: 'capitalize',
-                        letterSpacing: '0.05em',
-                        userSelect: 'none',
+                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
                         zIndex: 20,
-                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
+                        backgroundColor: '#027aff', // Fallback color
                       }}
                     >
                       <Tooltip title={label} arrow>

@@ -141,7 +141,7 @@ export default function SummaryPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null); // Popover state
+  const [anchorEl, setAnchorEl] = useState(null); // Fixed: Removed 'state' typo
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]); // Image URLs for popover
 
   const fetchData = useCallback(async () => {
@@ -379,7 +379,7 @@ export default function SummaryPage() {
           >
             <Table stickyHeader size="medium" sx={{ minWidth: 1800 }}>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
@@ -389,21 +389,18 @@ export default function SummaryPage() {
                           : 'left'
                       }
                       sx={{
-                        background: 'linear-gradient(to right, #39a2f7, #0091ff)',
-                        fontWeight: 700,
-                        color: '#fff',
-                        fontSize: '0.85rem',
-                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)',
-                        px: 2,
-                        py: 1.2,
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        color: '#ffffff',
+                        py: 1,
+                        px: 1,
                         whiteSpace: 'nowrap',
-                        textTransform: 'capitalize',
-                        letterSpacing: '0.05em',
-                        userSelect: 'none',
+                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
                         zIndex: 20,
-                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)',
+                        backgroundColor: '#027aff', // Fallback color
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -436,29 +433,39 @@ export default function SummaryPage() {
                           userSelect: 'none',
                         }}
                       >
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 2,
+                            py: 1.2,
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', // Match row background
+                          }}
+                        >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {productType1Name || 'N/A'}
+                          {productType1Name || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {productType2Name || 'N/A'}
+                          {productType2Name || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {requisition.englishName || 'N/A'}
+                          {requisition.englishName || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.vietnameseName || 'N/A'}
+                          {requisition.vietnameseName || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.oldSapCode || 'N/A'}
+                          {requisition.oldSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.newSapCode || 'N/A'}
+                          {requisition.newSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct?.unit || 'N/A'}
+                          {supplierProduct?.unit || ''}
                         </TableCell>
                         <TableCell sx={{ px: 2, py: 1.2 }}>
                           <DeptRequestTable departmentRequests={departmentRequests} />
@@ -467,25 +474,25 @@ export default function SummaryPage() {
                           {totalRequestQty}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {supplierProduct?.supplierName || 'N/A'}
+                          {supplierProduct?.supplierName || ''}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {price ? price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : 'N/A'}
+                          {price ? price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
                         <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice ? totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : 'N/A'}
+                          {totalPrice ? totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {requisition.stock || 0}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.purchasingSuggest || 'N/A'}
+                          {requisition.purchasingSuggest || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.reason || 'N/A'}
+                          {requisition.reason || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.remark || 'N/A'}
+                          {requisition.remark || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {imageUrls.length > 0 ? (

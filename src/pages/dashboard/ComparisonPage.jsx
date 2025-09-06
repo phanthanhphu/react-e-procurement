@@ -11,148 +11,274 @@ import {
   TableRow,
   Paper,
   Stack,
-  IconButton,
-  Button,
   TablePagination,
   useTheme,
   Tooltip,
+  Button,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
 import InboxIcon from '@mui/icons-material/Inbox';
-import ExportComparisonExcelButton from './ExportComparisonExcelButton';
-import EditDialog from './EditDialog';
-import AddDialog from './AddDialog';
+import ExportComparisonExcelButton from './ExportComparisonExcelButton.jsx';
+import EditDialog from './EditDialog.jsx';
+import AddDialog from './AddDialog.jsx';
 import { API_BASE_URL } from '../../config';
 
 const headers = [
   { label: 'No', key: 'no' },
   { label: 'Item Description (EN)', key: 'englishName' },
   { label: 'Item Description (VN)', key: 'vietnameseName' },
-  { label: 'Old SAP Code', key: 'oldSapCode' }, 
+  { label: 'Old SAP Code', key: 'oldSapCode' },
   { label: 'SAP Code in New SAP', key: 'newSapCode' },
-  { label: 'Order Unit', key: 'unit' }, 
-  { label: 'Supplier', key: 'departmentRequestQty' },
-  { label: 'Selected supplier name', key: 'totalRequestQty' },
-  { label: 'Price', key: 'supplierName' },
-  { label: 'Unit Price (VND)', key: 'supplierPrice' },
-  { label: 'Total Amount (VND)', key: 'totalPrice' },
-  { label: 'Amount Difference (VND)', key: 'stock' },
-  { label: 'Difference (%)', key: 'purchasingSuggest' },
+  { label: 'Suppliers', key: 'suppliers' },
+  { label: 'Department Requests', key: 'departmentRequests' },
+  { label: 'Selected Price (VND)', key: 'price' },
+  { label: 'Total Amount (VND)', key: 'amtVnd' },
+  { label: 'Highest Price (VND)', key: 'highestPrice' },
+  { label: 'Amount Difference (VND)', key: 'amtDifference' },
+  { label: 'Difference (%)', key: 'percentage' },
   { label: 'Remark', key: 'remark' },
-  { label: 'Actions', key: 'actions' },
 ];
 
-function DeptRequestTable({ deptRequestQty }) {
-  if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
+function DeptRequestTable({ departmentRequests }) {
+  const [showAllDepts, setShowAllDepts] = useState(false);
+  const displayDepts = showAllDepts ? departmentRequests : departmentRequests?.slice(0, 3);
+
+  if (!departmentRequests || departmentRequests.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
   }
 
   return (
-    <Table
-      size="small"
-      sx={{
-        minWidth: 180,
-        border: '1px solid #ddd',
-        borderRadius: 1,
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      }}
-    >
-      <TableHead>
-        <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-          <TableCell
-            sx={{
-              fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
-              color: '#1976d2',
-            }}
-          >
-            Dept
-          </TableCell>
-          <TableCell
-            align="center"
-            sx={{
-              fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
-              color: '#1976d2',
-            }}
-          >
-            Qty
-          </TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {Object.entries(deptRequestQty).map(([dept, qty], idx) => (
-          <TableRow
-            key={idx}
-            sx={{
-              '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
-              '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
-              fontSize: '0.75rem',
-            }}
-          >
-            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>{dept}</TableCell>
-            <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
-              {qty}
+    <div>
+      <Table
+        size="small"
+        sx={{
+          minWidth: 180,
+          border: '1px solid #ddd',
+          borderRadius: 1,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        <TableHead>
+          <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
+            <TableCell
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+              }}
+            >
+              Dept
+            </TableCell>
+            <TableCell
+              align="center"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+              }}
+            >
+              Qty
             </TableCell>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHead>
+        <TableBody>
+          {displayDepts.map((dept, idx) => (
+            <TableRow
+              key={dept.departmentId + idx}
+              sx={{
+                '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
+                '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
+                fontSize: '0.75rem',
+              }}
+            >
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>
+                {dept.departmentName}
+              </TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
+                {dept.quantity}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {departmentRequests.length > 3 && (
+        <Button
+          size="small"
+          onClick={() => setShowAllDepts(!showAllDepts)}
+          sx={{
+            mt: 1,
+            fontSize: '0.7rem',
+            color: '#1976d2',
+            textTransform: 'none',
+            '&:hover': { backgroundColor: '#e3f2fd' },
+          }}
+        >
+          {showAllDepts ? 'Show Less' : 'Show More'}
+        </Button>
+      )}
+    </div>
   );
 }
 
-export default function SummaryPage() {
+function SupplierTable({ suppliers }) {
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
+  const displaySuppliers = showAllSuppliers ? suppliers : suppliers?.slice(0, 3);
+
+  if (!suppliers || suppliers.length === 0) {
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Suppliers</Typography>;
+  }
+
+  return (
+    <div>
+      <Table
+        size="small"
+        sx={{
+          minWidth: 200,
+          border: '1px solid #ddd',
+          borderRadius: 1,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        <TableHead>
+          <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
+            <TableCell
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+                width: '60%', // Increase the width of Supplier Name column
+              }}
+            >
+              Supplier Name
+            </TableCell>
+            <TableCell
+              align="right"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+                width: '20%', // Adjust width for Price column
+              }}
+            >
+              Price (VND)
+            </TableCell>
+            <TableCell
+              align="center"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+                width: '20%', // Adjust width for Selected column
+              }}
+            >
+              Selected
+            </TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {displaySuppliers.map((supplier, idx) => (
+            <TableRow
+              key={idx}
+              sx={{
+                backgroundColor: supplier.isSelected === 1 ? '#d0f0c0' : idx % 2 === 0 ? '#fff' : '#f9fbff',
+                '&:hover': { backgroundColor: supplier.isSelected === 1 ? '#b8e6a3' : '#bbdefb', transition: 'background-color 0.3s' },
+                fontSize: '0.75rem',
+              }}
+            >
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1', width: '60%' }}>
+                {supplier.supplierName}
+              </TableCell>
+              <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, width: '20%' }}>
+                {supplier.price ? supplier.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+              </TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600, width: '20%' }}>
+                {supplier.isSelected === 1 ? 'Yes' : 'No'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {suppliers.length > 3 && (
+        <Button
+          size="small"
+          onClick={() => setShowAllSuppliers(!showAllSuppliers)}
+          sx={{
+            mt: 1,
+            fontSize: '0.7rem',
+            color: '#1976d2',
+            textTransform: 'none',
+            '&:hover': { backgroundColor: '#e3f2fd' },
+          }}
+        >
+          {showAllSuppliers ? 'Show Less' : 'Show More'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export default function ComparisonPage() {
   const theme = useTheme();
   const { groupId } = useParams();
 
   const [data, setData] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [openAddDialog, setOpenAddDialog] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!groupId) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
+      const response = await fetch(
+        `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&page=${page}&size=${rowsPerPage}`,
+        {
+          headers: { Accept: '*/*' },
+        }
+      );
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      setData(result);
+      setData(result.content || []);
+      setTotalElements(result.totalElements || 0);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, page, rowsPerPage]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (oldSapCode) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${oldSapCode}`, {
         method: 'DELETE',
         headers: { Accept: '*/*' },
       });
       if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
       await fetchData();
-      const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
+      const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
     } catch (error) {
       console.error('Delete error:', error);
@@ -170,16 +296,11 @@ export default function SummaryPage() {
     setSelectedItem(null);
   };
 
-  const handleOpenAddDialog = () => setOpenAddDialog(true);
-  const handleCloseAddDialog = () => setOpenAddDialog(false);
-
   const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
-
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <Box
@@ -194,24 +315,11 @@ export default function SummaryPage() {
       <Stack
         direction="row"
         alignItems="center"
-        justifyContent="space-between"
+        justifyContent="flex-end"
         mb={3}
         sx={{ userSelect: 'none' }}
       >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-            color: theme.palette.primary.dark,
-            letterSpacing: '0.05em',
-          }}
-        >
-          Comparison
-        </Typography>
-
-        <Stack direction="row" spacing={2}>
-            <ExportComparisonExcelButton data={data} />
-        </Stack>
+        <ExportComparisonExcelButton data={data} />
       </Stack>
 
       {loading && (
@@ -240,35 +348,30 @@ export default function SummaryPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
+            <Table stickyHeader size="medium" sx={{ minWidth: 1200 }}>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Price', 'Unit', 'Action'].includes(label)
-                          ? 'center'
-                          : label === 'Action'
+                        ['No', 'Selected Price (VND)', 'Total Amount (VND)', 'Highest Price (VND)', 'Amount Difference (VND)', 'Difference (%)'].includes(label)
                           ? 'center'
                           : 'left'
                       }
                       sx={{
-                        background: 'linear-gradient(to right, #39a2f7, #0091ff)', // gradient xanh sáng đến đậm
-                        fontWeight: 700,
-                        color: '#fff',
-                        fontSize: '0.85rem',
-                        borderBottom: '2px solid rgba(255, 255, 255, 0.7)', // viền dưới trắng mờ
-                        px: 2,
-                        py: 1.2,
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        color: '#ffffff',
+                        py: 1,
+                        px: 1,
                         whiteSpace: 'nowrap',
-                        textTransform: 'capitalize',
-                        letterSpacing: '0.05em',
-                        userSelect: 'none',
+                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
-                        zIndex: 20,
-                        boxShadow: 'inset 0 -2px 0 rgba(255,255,255,0.25)', // bóng viền trắng dưới
+                        zIndex: 1,
+                        backgroundColor: '#027aff', // Fallback color
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -279,20 +382,14 @@ export default function SummaryPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {displayData.length > 0 ? (
-                  displayData.map((item, idx) => {
-                    const { requisition, supplierProduct } = item;
-                    const totalRequestQty = Object.values(requisition.departmentRequestQty || {}).reduce(
-                      (sum, qty) => sum + qty,
-                      0
-                    );
-                    const totalPrice = supplierProduct.price * totalRequestQty;
-
+                {data.length > 0 ? (
+                  data.map((item, idx) => {
+                    const rowBackgroundColor = idx % 2 === 0 ? '#fff' : '#f7f9fc';
                     return (
                       <TableRow
-                        key={requisition.id}
+                        key={item.oldSapCode + idx}
                         sx={{
-                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                          backgroundColor: rowBackgroundColor,
                           '&:hover': {
                             backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
@@ -302,86 +399,54 @@ export default function SummaryPage() {
                           userSelect: 'none',
                         }}
                       >
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 2,
+                            py: 1.2,
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor, // Match row background
+                          }}
+                        >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {requisition.englishName}
+                          {item.englishName || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.vietnameseName}
+                          {item.vietnameseName || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.oldSapCode}
+                          {item.oldSapCode || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.newSapCode}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.unit}
+                          {item.newSapCode || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ px: 2, py: 1.2 }}>
-                          <DeptRequestTable deptRequestQty={requisition.departmentRequestQty} />
+                          <SupplierTable suppliers={item.suppliers} />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 600 }}>
-                          {totalRequestQty}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {supplierProduct.name}
-                        </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {supplierProduct.price.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
-                        </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
-                          {totalPrice.toLocaleString('vi-VN', {
-                            style: 'currency',
-                            currency: 'VND',
-                          })}
+                        <TableCell sx={{ px: 2, py: 1.2 }}>
+                          <DeptRequestTable departmentRequests={item.departmentRequests} />
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {requisition.stock}
+                          {item.price ? item.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.purchasingSuggest}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.reason}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {requisition.remark}
+                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
+                          {item.amtVnd ? item.amtVnd.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          <Stack direction="row" spacing={1} justifyContent="center">
-                            <IconButton
-                              aria-label="edit"
-                              color="primary"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                                borderRadius: 1,
-                              }}
-                              onClick={() => handleOpenEditDialog(item)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              aria-label="delete"
-                              color="error"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                                borderRadius: 1,
-                              }}
-                              onClick={() => handleDelete(requisition.id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Stack>
+                          {item.highestPrice ? item.highestPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                          {item.amtDifference ? item.amtDifference.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                          {item.percentage ? item.percentage.toFixed(2) + '%' : '0%'}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 2, py: 1.2 }}>
+                          {item.remark || 'N/A'}
                         </TableCell>
                       </TableRow>
                     );
@@ -403,7 +468,7 @@ export default function SummaryPage() {
           <TablePagination
             rowsPerPageOptions={[10, 25, 50, 100]}
             component="div"
-            count={data.length}
+            count={totalElements}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -429,13 +494,6 @@ export default function SummaryPage() {
         item={selectedItem}
         onClose={handleCloseEditDialog}
         onSave={fetchData}
-      />
-
-      <AddDialog
-        open={openAddDialog}
-        onClose={handleCloseAddDialog}
-        onRefresh={fetchData}
-        groupId={groupId}
       />
     </Box>
   );
