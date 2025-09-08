@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -8,140 +8,101 @@ import {
   TextField,
   Stack,
   CircularProgress,
-  FormControl,
   InputLabel,
+  Typography,
+  Box,
+  FormControl,
   Select,
   MenuItem,
-  Typography,
-  Paper,
-  IconButton,
   FormHelperText,
-  Box,
-  Snackbar,
-  Alert,
+  IconButton,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../../config';
-import { debounce } from 'lodash';
 
-export default function EditDialog({ open, item, onClose, onRefresh }) {
+export default function EditProductDialog({ open, onClose, product, onRefresh }) {
   const [formData, setFormData] = useState({
-    itemDescriptionEN: '',
-    itemDescriptionVN: '',
-    fullItemDescriptionVN: '',
-    oldSapCode: '',
-    newSapCode: '',
-    stock: '',
-    purchasingSuggest: '',
-    reason: '',
-    remark: '',
-    supplierId: '',
-    groupId: '',
-    productType1Id: undefined,
-    productType2Id: undefined,
+    productType1Id: '',
+    productType2Id: '',
+    supplierCode: '',
+    supplierName: '',
+    sapCode: '',
+    itemNo: '',
+    itemDescription: '',
+    fullDescription: '',
+    size: '',
+    materialGroupFullDescription: '',
     unit: '',
-    supplierPrice: 0,
+    price: '',
+    currency: '',
   });
-  const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
+
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
+  const [keptImageUrls, setKeptImageUrls] = useState([]);
+  const [removedImageUrls, setRemovedImageUrls] = useState([]);
   const [saving, setSaving] = useState(false);
   const [productType1List, setProductType1List] = useState([]);
   const [productType2List, setProductType2List] = useState([]);
   const [loadingType1, setLoadingType1] = useState(false);
   const [loadingType2, setLoadingType2] = useState(false);
-  const [departmentList, setDepartmentList] = useState([]);
-  const [loadingDepartments, setLoadingDepartments] = useState(false);
-  const [files, setFiles] = useState([]);
-  const [previews, setPreviews] = useState([]);
-  const [imageUrls, setImageUrls] = useState([]);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
 
+  // Load danh sách product type 1 khi dialog mở
   useEffect(() => {
-    console.log('EditDialog opened with item:', item);
-    if (open && item && item.requisition && item.requisition.id) {
-      fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`Failed to fetch requisition data: ${res.status}`);
-          return res.json();
-        })
-        .then((data) => {
-          console.log('API response:', data);
-          const requisition = data.requisition || data;
-          const supplierProduct = data.supplierProduct || {};
-
-          setFormData({
-            itemDescriptionEN: requisition.englishName || '',
-            itemDescriptionVN: requisition.vietnameseName || '',
-            fullItemDescriptionVN: requisition.fullDescription || '',
-            oldSapCode: requisition.oldSapCode || '',
-            newSapCode: requisition.newSapCode || '',
-            stock: requisition.stock || '',
-            purchasingSuggest: requisition.purchasingSuggest || '',
-            reason: requisition.reason || '',
-            remark: requisition.remark || '',
-            supplierId: supplierProduct.id || '',
-            groupId: requisition.groupId || '',
-            productType1Id: requisition.productType1Id || undefined,
-            productType2Id: requisition.productType2Id || undefined,
-            unit: supplierProduct.unit || '',
-            supplierPrice: supplierProduct.price || 0,
-          });
-
-          if (requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object') {
-            const rows = Object.entries(requisition.departmentRequestQty).map(([department, qty]) => ({
-              department,
-              qty: qty.toString(),
-            }));
-            setDeptRows(rows.length ? rows : [{ department: '', qty: '' }]);
-          } else {
-            setDeptRows([{ department: '', qty: '' }]);
-          }
-
-          setImageUrls(requisition.imageUrls || []);
-        })
-        .catch((err) => {
-          console.error('Error fetching requisition data:', err);
-          setSnackbarMessage('Failed to load requisition data. Please try again.');
-          setSnackbarOpen(true);
-        });
-    } else {
-      console.warn('No valid item or item.requisition.id, resetting form. Item:', item);
-      setFormData({
-        itemDescriptionEN: '',
-        itemDescriptionVN: '',
-        fullItemDescriptionVN: '',
-        oldSapCode: '',
-        newSapCode: '',
-        stock: '',
-        purchasingSuggest: '',
-        reason: '',
-        remark: '',
-        supplierId: '',
-        groupId: '',
-        productType1Id: undefined,
-        productType2Id: undefined,
-        unit: '',
-        supplierPrice: 0,
-      });
-      setDeptRows([{ department: '', qty: '' }]);
-      setImageUrls([]);
-    }
-
     if (open) {
       fetchProductType1List();
-      fetchDepartmentList();
     }
+  }, [open]);
 
-    return () => {
-      previews.forEach((preview) => URL.revokeObjectURL(preview));
+  // Cập nhật formData và hình ảnh khi product thay đổi
+  useEffect(() => {
+    if (product) {
+      setFormData({
+        productType1Id: product.productType1Id || '',
+        productType2Id: product.productType2Id || '',
+        supplierCode: product.supplierCode || '',
+        supplierName: product.supplierName || '',
+        sapCode: product.sapCode || '',
+        itemNo: product.itemNo || '',
+        itemDescription: product.itemDescription || '',
+        fullDescription: product.productShortName || '',
+        size: product.size || '',
+        materialGroupFullDescription: product.productFullName || '',
+        unit: product.unit || '',
+        price: product.price || '',
+        currency: product.currency || '',
+      });
+
+      // Load danh sách hình ảnh hiện tại
+      const initialImageUrls = (product.imageUrls || []).map((imgUrl) =>
+        imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`
+      );
+      setKeptImageUrls(initialImageUrls);
+      setPreviews(initialImageUrls);
       setFiles([]);
-      setPreviews([]);
-      setImageUrls([]);
+      setRemovedImageUrls([]);
+    }
+  }, [product]);
+
+  // Load product type 2 khi productType1Id thay đổi
+  useEffect(() => {
+    if (formData.productType1Id) {
+      fetchProductType2List(formData.productType1Id);
+    } else {
+      setProductType2List([]);
+      setFormData((prev) => ({ ...prev, productType2Id: '' }));
+    }
+  }, [formData.productType1Id]);
+
+  // Thu hồi các URL preview khi dialog đóng
+  useEffect(() => {
+    return () => {
+      previews
+        .slice(keptImageUrls.length)
+        .forEach((preview) => URL.revokeObjectURL(preview));
     };
-  }, [item, open]);
+  }, [previews, keptImageUrls.length]);
 
   const fetchProductType1List = async () => {
     setLoadingType1(true);
@@ -157,15 +118,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setLoadingType1(false);
     }
   };
-
-  useEffect(() => {
-    if (!formData.productType1Id) {
-      setProductType2List([]);
-      setFormData((prev) => ({ ...prev, productType2Id: undefined }));
-    } else {
-      fetchProductType2List(formData.productType1Id);
-    }
-  }, [formData.productType1Id]);
 
   const fetchProductType2List = async (type1Id) => {
     setLoadingType2(true);
@@ -184,91 +136,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
   };
 
-  const fetchDepartmentList = async () => {
-    setLoadingDepartments(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/departments`, {
-        headers: { accept: '*/*' },
-      });
-      if (!res.ok) throw new Error('Failed to load department list');
-      const data = await res.json();
-      setDepartmentList(data || []);
-    } catch (error) {
-      console.error('Error fetching department list:', error);
-      setDepartmentList([]);
-    } finally {
-      setLoadingDepartments(false);
-    }
-  };
-
-  const debouncedSearchSupplier = useCallback(
-    debounce((query) => {
-      if (query) {
-        fetch(`${API_BASE_URL}/api/supplier-products/search?productFullName=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data && data.length > 0) {
-              const selected = data.find((s) => s.id === formData.supplierId) || data[0];
-              setFormData((prev) => ({
-                ...prev,
-                supplierId: selected.id,
-                supplierPrice: selected.price || 0,
-                unit: selected.unit || '',
-              }));
-            }
-          })
-          .catch(() => {
-            setFormData((prev) => ({ ...prev, supplierId: '', supplierPrice: 0, unit: '' }));
-          });
-      }
-    }, 500),
-    [formData.supplierId]
-  );
-
-  useEffect(() => {
-    debouncedSearchSupplier(formData.itemDescriptionVN.trim() || formData.itemDescriptionEN.trim());
-    return () => debouncedSearchSupplier.cancel();
-  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedSearchSupplier]);
-
   const handleChange = (field) => (e) => {
-    const value = e.target.value;
-    if (field === 'productType1Id' || field === 'productType2Id') {
-      setFormData((prev) => ({
-        ...prev,
-        [field]: value === '' ? undefined : value,
-      }));
-    } else {
-      const newValue = ['stock', 'purchasingSuggest'].includes(field)
-        ? parseFloat(value) || ''
-        : value;
-      setFormData((prev) => ({ ...prev, [field]: newValue }));
-    }
-  };
-
-  const handleDeptChange = (index, field, value) => {
-    const updated = [...deptRows];
-    updated[index][field] = value;
-    setDeptRows(updated);
-  };
-
-  const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '' }]);
-  };
-
-  const handleDeleteDeptRow = (index) => {
-    const updated = deptRows.filter((_, i) => i !== index);
-    setDeptRows(updated.length > 0 ? updated : [{ department: '', qty: '' }]);
-  };
-
-  const calcTotalRequestQty = () => {
-    return deptRows.reduce((sum, row) => {
-      const q = parseFloat(row.qty);
-      return sum + (isNaN(q) ? 0 : q);
-    }, 0);
-  };
-
-  const calcTotalPrice = () => {
-    return calcTotalRequestQty() * (formData.supplierPrice || 0);
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
   const handleFileChange = (e) => {
@@ -276,141 +145,219 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     if (selectedFiles.length === 0) return;
 
     const newFiles = [...files, ...selectedFiles];
-    if (newFiles.length + imageUrls.length > 10) {
-      setSnackbarMessage('You can upload a maximum of 10 images total.');
-      setSnackbarOpen(true);
+    if (newFiles.length + keptImageUrls.length > 10) {
+      alert('You can upload a maximum of 10 images.');
       return;
     }
 
-    previews.forEach((preview) => URL.revokeObjectURL(preview));
+    // Thu hồi các URL preview cũ của files
+    previews
+      .slice(keptImageUrls.length)
+      .forEach((preview) => URL.revokeObjectURL(preview));
+
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
-    setPreviews(newPreviewUrls);
+    setPreviews([...keptImageUrls, ...newPreviewUrls]);
 
-    e.target.value = null;
+    e.target.value = null; // Reset input
   };
 
-  const handleRemoveFile = (index, isNew) => {
-    if (isNew) {
-      const newFiles = files.filter((_, i) => i !== index);
-      const newPreviews = previews.filter((_, i) => i !== index);
-      URL.revokeObjectURL(previews[index]);
-      setFiles(newFiles);
-      setPreviews(newPreviews);
+  const handleRemoveFile = (index) => {
+    // Thu hồi tất cả các URL preview của files
+    previews
+      .slice(keptImageUrls.length)
+      .forEach((preview) => URL.revokeObjectURL(preview));
+
+    if (index < keptImageUrls.length) {
+      // Xóa hình ảnh hiện tại và thêm vào removedImageUrls
+      const newKeptImageUrls = [...keptImageUrls];
+      const removedUrl = newKeptImageUrls.splice(index, 1)[0];
+      setKeptImageUrls(newKeptImageUrls);
+      setRemovedImageUrls((prev) => [...prev, removedUrl.replace(`${API_BASE_URL}/`, '/').replace(API_BASE_URL, '')]);
+      setPreviews([...newKeptImageUrls, ...files.map((file) => URL.createObjectURL(file))]);
     } else {
-      const newImageUrls = [...imageUrls];
-      newImageUrls.splice(index, 1);
-      setImageUrls(newImageUrls);
+      // Xóa file mới
+      const fileIndex = index - keptImageUrls.length;
+      const newFiles = files.filter((_, i) => i !== fileIndex);
+      setFiles(newFiles);
+      setPreviews([...keptImageUrls, ...newFiles.map((file) => URL.createObjectURL(file))]);
     }
   };
 
-const handleSave = async () => {
-  if (!item || !item.requisition || !item.requisition.id) {
-    setSnackbarMessage('Cannot save: Item or requisition ID is missing.');
-    setSnackbarOpen(true);
-    return;
-  }
-
-  const deptQtyMap = {};
-  deptRows.forEach((row) => {
-    if (row.department && row.qty) {
-      deptQtyMap[row.department] = parseFloat(row.qty);
+  const validateForm = () => {
+    if (keptImageUrls.length === 0 && files.length === 0) {
+      alert('Please select at least one image.');
+      return false;
     }
-  });
+    return true;
+  };
 
-  const formDataToSend = new FormData();
-  Object.entries({
-    englishName: formData.itemDescriptionEN || '',
-    vietnameseName: formData.itemDescriptionVN || '',
-    fullDescription: formData.fullItemDescriptionVN || '',
-    oldSapCode: formData.oldSapCode || '',
-    newSapCode: formData.newSapCode || '',
-    departmentRequestQty: JSON.stringify(deptQtyMap),
-    stock: parseFloat(formData.stock) || 0,
-    purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
-    reason: formData.reason || '',
-    remark: formData.remark || '',
-    supplierId: formData.supplierId || '',
-    groupId: formData.groupId || '',
-    productType1Id: formData.productType1Id,
-    productType2Id: formData.productType2Id,
-    totalRequestQty: calcTotalRequestQty(),
-    totalPrice: calcTotalPrice(),
-  }).forEach(([key, value]) => {
-    if (value !== undefined && value !== '') {
-      formDataToSend.append(key, value);
+  const handleSave = async () => {
+    if (!validateForm()) return;
+
+    const multipartForm = new FormData();
+    if (formData.productType1Id) multipartForm.append('productType1Id', formData.productType1Id);
+    if (formData.productType2Id) multipartForm.append('productType2Id', formData.productType2Id);
+    multipartForm.append('supplierCode', formData.supplierCode);
+    multipartForm.append('supplierName', formData.supplierName);
+    multipartForm.append('sapCode', formData.sapCode);
+    multipartForm.append('itemNo', formData.itemNo);
+    multipartForm.append('itemDescription', formData.itemDescription);
+    multipartForm.append('fullDescription', formData.fullDescription);
+    multipartForm.append('size', formData.size);
+    multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription);
+    multipartForm.append('unit', formData.unit);
+    multipartForm.append('price', formData.price);
+    multipartForm.append('currency', formData.currency);
+
+    // Gửi files (hình ảnh mới)
+    if (files.length > 0) {
+      files.forEach((file) => {
+        multipartForm.append('files', file); // Sử dụng key 'files' để khớp với UpdateProductRequest
+      });
     }
-  });
 
-  // Append existing imageUrls as individual fields
-  console.log('Image URLs before save:', imageUrls);
-  imageUrls.forEach((url, index) => {
-    formDataToSend.append(`imageUrl${index}`, url);
-  });
-  if (imageUrls.length === 0) {
-    formDataToSend.append('imageUrls', '[]');
-  }
-
-  // Append new files
-  console.log('Files before save:', files.map(file => file.name));
-  files.forEach((file) => {
-    formDataToSend.append('images', file);
-  });
-
-  // Log all FormData entries for debugging
-  for (let [key, value] of formDataToSend.entries()) {
-    console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
-  }
-
-  setSaving(true);
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
-      method: 'PUT',
-      headers: {
-        accept: '*/*',
-      },
-      body: formDataToSend,
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Update failed: ${res.status} - ${errorText}`);
+    // Gửi imagesToDelete (URL hình ảnh cần xóa)
+    if (removedImageUrls.length > 0) {
+      removedImageUrls.forEach((url) => {
+        multipartForm.append('imagesToDelete', url); // Sử dụng key 'imagesToDelete'
+      });
     }
-    const data = await res.json();
-    setSnackbarMessage('Request updated successfully!');
-    setSnackbarOpen(true);
-    await onRefresh();
-    onClose();
-  } catch (err) {
-    console.error('Update error:', err);
-    setSnackbarMessage(`Failed to update item: ${err.message}`);
-    setSnackbarOpen(true);
-  } finally {
-    setSaving(false);
-  }
-};
+
+    // Debug: Log dữ liệu FormData trước khi gửi
+    console.log('FormData entries:');
+    for (let pair of multipartForm.entries()) {
+      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/supplier-products/${product.id}`, {
+        method: 'PUT',
+        body: multipartForm,
+      });
+
+      if (!res.ok) throw new Error(`Edit failed status ${res.status}`);
+
+      const updatedProduct = await res.json();
+      console.log('Backend response:', updatedProduct);
+      if (updatedProduct && updatedProduct.imageUrls) {
+        const newImageUrls = updatedProduct.imageUrls.map((imgUrl) =>
+          imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`
+        );
+        setKeptImageUrls(newImageUrls);
+        setPreviews(newImageUrls);
+        setFiles([]);
+        setRemovedImageUrls([]);
+      }
+
+      await onRefresh();
+      onClose();
+    } catch (err) {
+      console.error('Edit error:', err);
+      alert('Edit failed. Please try again!');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle
-        sx={{
-          bgcolor: (theme) => theme.palette.primary.main,
-          color: (theme) => theme.palette.primary.contrastText,
-          fontWeight: 'bold',
-          fontSize: '1.25rem',
-          textTransform: 'capitalize',
-          letterSpacing: 1,
-        }}
-      >
-        Edit request
+      <DialogTitle sx={{ backgroundColor: '#4680FF', color: 'white' }}>
+        Edit Product
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
+          <TextField
+            label="Supplier Code"
+            value={formData.supplierCode}
+            onChange={handleChange('supplierCode')}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Supplier Name"
+            value={formData.supplierName}
+            onChange={handleChange('supplierName')}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="SAP Code"
+            value={formData.sapCode}
+            onChange={handleChange('sapCode')}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Item No"
+            value={formData.itemNo}
+            onChange={handleChange('itemNo')}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Item Description"
+            value={formData.itemDescription}
+            onChange={handleChange('itemDescription')}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Full Description"
+            value={formData.fullDescription}
+            onChange={handleChange('fullDescription')}
+            size="small"
+            fullWidth
+            multiline
+            rows={4}
+          />
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="Size"
+              value={formData.size}
+              onChange={handleChange('size')}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Material Group Full Description"
+              value={formData.materialGroupFullDescription}
+              onChange={handleChange('materialGroupFullDescription')}
+              size="small"
+              fullWidth
+            />
+          </Stack>
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="Unit"
+              value={formData.unit}
+              onChange={handleChange('unit')}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Price"
+              value={formData.price}
+              onChange={handleChange('price')}
+              size="small"
+              fullWidth
+              type="number"
+            />
+          </Stack>
+          <TextField
+            label="Currency"
+            value={formData.currency}
+            onChange={handleChange('currency')}
+            size="small"
+            fullWidth
+          />
           <FormControl fullWidth size="small">
-            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+            <InputLabel id="product-type-1-label">Group Item 1</InputLabel>
             <Select
               labelId="product-type-1-label"
-              value={formData.productType1Id || ''}
-              label="Product Type 1"
+              value={formData.productType1Id}
+              label="Group Item 1"
               onChange={handleChange('productType1Id')}
               disabled={loadingType1}
             >
@@ -425,17 +372,16 @@ const handleSave = async () => {
             </Select>
             {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
           </FormControl>
-
           <FormControl
             fullWidth
             size="small"
             disabled={!formData.productType1Id || loadingType2}
           >
-            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+            <InputLabel id="product-type-2-label">Group Item 2</InputLabel>
             <Select
               labelId="product-type-2-label"
-              value={formData.productType2Id || ''}
-              label="Product Type 2"
+              value={formData.productType2Id}
+              label="Group Item 2"
               onChange={handleChange('productType2Id')}
             >
               <MenuItem value="">
@@ -449,186 +395,10 @@ const handleSave = async () => {
             </Select>
             {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
           </FormControl>
-
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Old SAP Code"
-              value={formData.oldSapCode}
-              onChange={handleChange('oldSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="New SAP Code"
-              value={formData.newSapCode}
-              onChange={handleChange('newSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-            />
-          </Stack>
-
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Item Description (VN)"
-              value={formData.itemDescriptionVN}
-              onChange={handleChange('itemDescriptionVN')}
-              fullWidth
-              size="small"
-            />
-            <TextField
-              label="Item Description (EN)"
-              value={formData.itemDescriptionEN}
-              onChange={handleChange('itemDescriptionEN')}
-              fullWidth
-              size="small"
-            />
-          </Stack>
-
-          <TextField
-            label="Full Item Description (VN)"
-            value={formData.fullItemDescriptionVN}
-            onChange={handleChange('fullItemDescriptionVN')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Department Request Qty:
-            </Typography>
-            {deptRows.map((row, index) => (
-              <Stack
-                direction="row"
-                spacing={2}
-                alignItems="center"
-                key={index}
-                sx={{ mb: 1 }}
-              >
-                <FormControl fullWidth size="small" disabled={loadingDepartments}>
-                  <InputLabel id={`department-label-${index}`}>Department</InputLabel>
-                  <Select
-                    labelId={`department-label-${index}`}
-                    value={row.department}
-                    label="Department"
-                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
-                  >
-                    <MenuItem value="">
-                      <em>None</em>
-                    </MenuItem>
-                    {departmentList.length > 0 ? (
-                      departmentList.map((dept) => (
-                        <MenuItem key={dept.id} value={dept.id}>
-                          {dept.departmentName}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>No departments available</MenuItem>
-                    )}
-                  </Select>
-                  {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
-                </FormControl>
-                <TextField
-                  label="Qty"
-                  type="number"
-                  value={row.qty}
-                  onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
-                <IconButton
-                  aria-label="delete department"
-                  onClick={() => handleDeleteDeptRow(index)}
-                  size="small"
-                  color="error"
-                  sx={{ ml: 1 }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-            ))}
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={handleAddDeptRow}
-              sx={{ mt: 1 }}
-            >
-              Add Department
-            </Button>
-
-            <Stack
-              direction="row"
-              spacing={4}
-              sx={{
-                mt: 2,
-                bgcolor: '#f5f5f5',
-                p: 2,
-                borderRadius: 1,
-                boxShadow: 1,
-                justifyContent: 'space-between',
-                textTransform: 'capitalize',
-              }}
-            >
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Request Qty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN')} ₫</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('vi-VN')} ₫</span>
-              </Typography>
-            </Stack>
-          </Paper>
-
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            <TextField
-              label="Stock"
-              value={formData.stock}
-              onChange={handleChange('stock')}
-              size="small"
-              fullWidth
-              type="number"
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Purchasing Suggest"
-              value={formData.purchasingSuggest}
-              onChange={handleChange('purchasingSuggest')}
-              size="small"
-              fullWidth
-              type="number"
-              sx={{ flex: 1 }}
-            />
-          </Stack>
-
-          <TextField
-            label="Reason"
-            value={formData.reason}
-            onChange={handleChange('reason')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <TextField
-            label="Remark"
-            value={formData.remark}
-            onChange={handleChange('remark')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-
           <Box>
-            <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
+            <InputLabel sx={{ mb: 1 }}>
+              Product Images (Max 10, leave empty to keep current)
+            </InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
               <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
                 Choose Image
@@ -640,46 +410,30 @@ const handleSave = async () => {
                   onChange={handleFileChange}
                 />
               </Button>
-              {(files.length + imageUrls.length) > 0 && (
+              {(files.length > 0 || keptImageUrls.length > 0) && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  {files.length + imageUrls.length} image(s) selected
+                  {files.length + keptImageUrls.length} image(s) selected
                 </Typography>
               )}
             </Stack>
-            {(previews.length > 0 || imageUrls.length > 0) && (
+            {previews.length > 0 && (
               <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {imageUrls.map((url, index) => (
-                  <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
-                    <img
-                      src={`${API_BASE_URL}${url}`}
-                      alt={`Existing ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      onError={(e) => {
-                        console.error(`Image load failed for ${url}`, e);
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                    <IconButton
-                      sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
-                      onClick={() => handleRemoveFile(index, false)}
-                    >
-                      <CloseIcon color="error" />
-                    </IconButton>
-                  </Box>
-                ))}
                 {previews.map((preview, index) => (
-                  <Box key={`new-${index}`} sx={{ position: 'relative' }}>
+                  <Box key={index} sx={{ position: 'relative' }}>
                     <img
                       src={preview}
-                      alt={`New ${index + 1}`}
+                      alt={`Preview ${index + 1}`}
                       style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
                     />
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
-                      onClick={() => handleRemoveFile(index, true)}
+                      onClick={() => handleRemoveFile(index)}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
+                    <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
+                      {index < keptImageUrls.length ? 'Current Image' : files[index - keptImageUrls.length]?.name || 'New Image'}
+                    </Typography>
                   </Box>
                 ))}
               </Box>
@@ -687,7 +441,7 @@ const handleSave = async () => {
           </Box>
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ px: 3, py: 1.5 }}>
+      <DialogActions>
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
@@ -695,16 +449,6 @@ const handleSave = async () => {
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSnackbarOpen(false)} severity="success" sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
     </Dialog>
   );
 }

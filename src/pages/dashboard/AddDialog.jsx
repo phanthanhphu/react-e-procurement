@@ -107,7 +107,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     } catch (error) {
       console.error('Translation error:', error);
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      alert('Failed to translate text. Please try again.');
+      setSnackbarMessage('Failed to translate text. Please try again.');
+      setSnackbarOpen(true);
     } finally {
       setTranslating(false);
     }
@@ -238,57 +239,77 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0) {
+      setSnackbarMessage('No files selected.');
+      setSnackbarOpen(true);
+      return;
+    }
 
-    const newFiles = [...files, ...selectedFiles];
+    const validFiles = selectedFiles.filter(file => 
+      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024 // Max 5MB
+    );
+    if (validFiles.length !== selectedFiles.length) {
+      setSnackbarMessage('Only image files under 5MB are allowed.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const newFiles = [...files, ...validFiles];
     if (newFiles.length > 10) {
-      alert('You can upload a maximum of 10 images.');
+      setSnackbarMessage('You can upload a maximum of 10 images.');
+      setSnackbarOpen(true);
       return;
     }
 
     previews.forEach((preview) => URL.revokeObjectURL(preview));
-
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-
-    e.target.value = null;
+    console.log('Updated files:', newFiles.map(file => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })));
+    e.target.value = null; // Reset input
   };
 
   const handleRemoveFile = (index) => {
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
-
     URL.revokeObjectURL(previews[index]);
-
     setFiles(newFiles);
     setPreviews(newPreviews);
+    console.log('Updated files:', newFiles.map(file => file.name));
   };
 
   const handleAdd = async () => {
     if (!groupId) {
-      alert('Group ID is missing.');
+      setSnackbarMessage('Group ID is missing.');
+      setSnackbarOpen(true);
       return;
     }
     if (!formData.itemDescriptionVN) {
-      alert('Item Description (VN) is required.');
+      setSnackbarMessage('Item Description (VN) is required.');
+      setSnackbarOpen(true);
       return;
     }
     if (deptRows.every((row) => !row.department || !row.qty)) {
-      alert('At least one department and quantity must be provided.');
+      setSnackbarMessage('At least one department and quantity must be provided.');
+      setSnackbarOpen(true);
       return;
     }
 
     const deptQtyMap = {};
     deptRows.forEach((row) => {
       if (row.department && row.qty) {
-        deptQtyMap[row.department] = parseFloat(row.qty);
+        deptQtyMap[row.department] = parseFloat(row.qty) || 0;
       }
     });
 
     const totalRequestQty = Object.values(deptQtyMap).reduce((sum, val) => sum + val, 0);
 
-    const formDataToSend = {
+    const formDataToSend = new FormData();
+    Object.entries({
       englishName: formData.itemDescriptionEN || '',
       vietnameseName: formData.itemDescriptionVN || '',
       fullDescription: formData.fullItemDescriptionVN || '',
@@ -304,27 +325,25 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       productType1Id: formData.productType1Id || undefined,
       productType2Id: formData.productType2Id || undefined,
       totalRequestQty,
-      totalPrice: parseFloat(formData.totalPrice) || totalRequestQty,
-    };
-
-    const multipartForm = new FormData();
-    Object.entries(formDataToSend).forEach(([key, value]) => {
+      totalPrice: calcTotalPrice(),
+    }).forEach(([key, value]) => {
       if (value !== undefined) {
-        multipartForm.append(key, value);
+        formDataToSend.append(key, value);
       }
     });
     files.forEach((file) => {
-      multipartForm.append('files', file);
+      formDataToSend.append('imageUrls', file); // Sử dụng 'imageUrls' thay vì 'files' để khớp với backend
     });
+
+    for (let [key, value] of formDataToSend.entries()) {
+      console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
+    }
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/create`, {
         method: 'POST',
-        headers: {
-          'accept': '*/*',
-        },
-        body: multipartForm,
+        body: formDataToSend,
       });
       if (!res.ok) {
         const errorData = await res.json();
@@ -349,7 +368,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setPreviews([]);
     } catch (err) {
       console.error('Add error:', err);
-      alert(`Add failed: ${err.message}`);
+      setSnackbarMessage(`Add failed: ${err.message}`);
+      setSnackbarOpen(true);
     } finally {
       setSaving(false);
     }
@@ -656,11 +676,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 ))}
               </Box>
             )}
+            {files.length === 0 && (
+              <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                No images selected
+              </Typography>
+            )}
           </Box>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClose={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button variant="contained" onClick={handleAdd} disabled={saving}>
@@ -673,7 +698,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarOpen(false)} severity="success" sx={{ width: '100%' }}>
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') ? 'error' : 'success'} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

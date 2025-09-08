@@ -53,9 +53,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [loadingType2, setLoadingType2] = useState(false);
   const [departmentList, setDepartmentList] = useState([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
+  const [imageUrls, setImageUrls] = useState([]);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [imageUrls, setImageUrls] = useState([]);
+  const [imagesToDelete, setImagesToDelete] = useState([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
@@ -101,6 +102,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           }
 
           setImageUrls(requisition.imageUrls || []);
+          setImagesToDelete([]);
+          setFiles([]);
+          setPreviews([]);
           console.log('Initial imageUrls:', requisition.imageUrls || []);
         })
         .catch((err) => {
@@ -129,6 +133,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       });
       setDeptRows([{ department: '', qty: '' }]);
       setImageUrls([]);
+      setImagesToDelete([]);
+      setFiles([]);
+      setPreviews([]);
     }
 
     if (open) {
@@ -138,7 +145,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   }, [item, open]);
 
   useEffect(() => {
-    // Cleanup only when dialog closes
+    // Cleanup previews when dialog closes
     return () => {
       if (!open) {
         previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
@@ -310,13 +317,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     e.target.value = null; // Reset input
   };
 
-  const handleRemoveFile = (index) => {
-    console.log('Removing file at index:', index);
+  const handleRemoveImage = (index) => {
+    console.log('Removing image at index:', index);
     if (index < imageUrls.length) {
       const newImageUrls = [...imageUrls];
-      newImageUrls.splice(index, 1);
+      const removedUrl = newImageUrls.splice(index, 1)[0];
       setImageUrls(newImageUrls);
+      setImagesToDelete([...imagesToDelete, removedUrl]);
       console.log('Updated imageUrls:', newImageUrls);
+      console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
     } else {
       const adjustedIndex = index - imageUrls.length;
       if (adjustedIndex >= 0 && adjustedIndex < previews.length) {
@@ -327,31 +336,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         setPreviews(newPreviews);
         console.log('Updated files:', newFiles.map(file => file.name));
       }
-    }
-  };
-
-  const uploadFiles = async () => {
-    if (files.length === 0) return [];
-    const uploadFormData = new FormData();
-    files.forEach(file => uploadFormData.append('files', file));
-    console.log('Uploading files:', files.map(file => file.name));
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        body: uploadFormData,
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`File upload failed: ${res.status} - ${errorText}`);
-      }
-      const data = await res.json();
-      console.log('Upload response:', data);
-      return data.imageUrls || []; // Giả sử backend trả về danh sách URL
-    } catch (err) {
-      console.error('File upload error:', err);
-      setSnackbarMessage(`Failed to upload images: ${err.message}`);
-      setSnackbarOpen(true);
-      return [];
     }
   };
 
@@ -369,15 +353,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
     });
 
-    // Upload new files and get URLs
-    let updatedImageUrls = [...imageUrls];
-    if (files.length > 0) {
-      const newUrls = await uploadFiles();
-      updatedImageUrls = [...imageUrls, ...newUrls];
-      console.log('Updated imageUrls with new URLs:', updatedImageUrls);
-    }
-
     const formDataToSend = new FormData();
+    files.forEach(file => formDataToSend.append('imageUrls', file));
+    imagesToDelete.forEach(url => formDataToSend.append('imagesToDelete', url));
     Object.entries({
       englishName: formData.itemDescriptionEN || '',
       vietnameseName: formData.itemDescriptionVN || '',
@@ -395,14 +373,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       productType2Id: formData.productType2Id || undefined,
       totalRequestQty: calcTotalRequestQty(),
       totalPrice: calcTotalPrice(),
-      imageUrls: JSON.stringify(updatedImageUrls), // Gửi danh sách imageUrls đầy đủ
     }).forEach(([key, value]) => {
       if (value !== undefined) {
         formDataToSend.append(key, value);
       }
     });
 
-    // Log FormData contents for debugging
     for (let [key, value] of formDataToSend.entries()) {
       console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
     }
@@ -423,15 +399,14 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       console.log('Save successful, response:', data);
       setSnackbarMessage('Request updated successfully!');
       setSnackbarOpen(true);
-      // Update imageUrls with response from backend if provided
       if (data.requisition && data.requisition.imageUrls) {
         setImageUrls(data.requisition.imageUrls);
         console.log('Updated imageUrls from response:', data.requisition.imageUrls);
       }
-      // Clear files and previews after successful save
       previews.forEach(preview => preview && URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
+      setImagesToDelete([]);
       await onRefresh();
       onClose();
     } catch (err) {
@@ -691,10 +666,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   type="file"
                   accept="image/*"
                   multiple
-                  onChange={(e) => {
-                    console.log('File input changed', e.target.files);
-                    handleFileChange(e);
-                  }}
+                  onChange={handleFileChange}
                 />
               </Button>
               {(files.length + imageUrls.length) > 0 && (
@@ -709,7 +681,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
                     <img
                       src={`${API_BASE_URL}${url}`}
-                      alt={`Existing ${index + 1}`}
+                      alt={`Image ${index + 1}`}
                       style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
                       onError={(e) => {
                         console.error(`Image load failed for ${url}`, e);
@@ -718,7 +690,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     />
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveFile(index)}
+                      onClick={() => handleRemoveImage(index)}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
@@ -733,13 +705,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     />
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveFile(index + imageUrls.length)}
+                      onClick={() => handleRemoveImage(index + imageUrls.length)}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
                   </Box>
                 ))}
               </Box>
+            )}
+            {files.length === 0 && imageUrls.length === 0 && (
+              <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                No images selected
+              </Typography>
             )}
           </Box>
         </Stack>

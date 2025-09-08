@@ -20,14 +20,18 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import ExportComparisonExcelButton from './ExportComparisonExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
 import AddDialog from './AddDialog.jsx';
+import ComparisonSearch from './ComparisonSearch.jsx';
 import { API_BASE_URL } from '../../config';
 
 const headers = [
   { label: 'No', key: 'no' },
-  { label: 'Item Description (EN)', key: 'englishName' },
+  { label: 'Group Type 1', key: 'type1Name' },
+  { label: 'Group Type 2', key: 'type2Name' },
   { label: 'Item Description (VN)', key: 'vietnameseName' },
+  { label: 'Item Description (EN)', key: 'englishName' },
   { label: 'Old SAP Code', key: 'oldSapCode' },
   { label: 'SAP Code in New SAP', key: 'newSapCode' },
+  { label: 'Order Unit', key: 'unit' },
   { label: 'Suppliers', key: 'suppliers' },
   { label: 'Department Requests', key: 'departmentRequests' },
   { label: 'Selected Price (VND)', key: 'price' },
@@ -137,7 +141,7 @@ function SupplierTable({ suppliers }) {
       <Table
         size="small"
         sx={{
-          minWidth: 200,
+          minWidth: 250,
           border: '1px solid #ddd',
           borderRadius: 1,
           overflow: 'hidden',
@@ -153,7 +157,7 @@ function SupplierTable({ suppliers }) {
                 py: 0.6,
                 px: 1,
                 color: '#1976d2',
-                width: '60%', // Increase the width of Supplier Name column
+                width: '50%',
               }}
             >
               Supplier Name
@@ -166,7 +170,7 @@ function SupplierTable({ suppliers }) {
                 py: 0.6,
                 px: 1,
                 color: '#1976d2',
-                width: '20%', // Adjust width for Price column
+                width: '20%',
               }}
             >
               Price (VND)
@@ -179,7 +183,20 @@ function SupplierTable({ suppliers }) {
                 py: 0.6,
                 px: 1,
                 color: '#1976d2',
-                width: '20%', // Adjust width for Selected column
+                width: '15%',
+              }}
+            >
+              Unit
+            </TableCell>
+            <TableCell
+              align="center"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1,
+                color: '#1976d2',
+                width: '15%',
               }}
             >
               Selected
@@ -196,13 +213,16 @@ function SupplierTable({ suppliers }) {
                 fontSize: '0.75rem',
               }}
             >
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1', width: '60%' }}>
+              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1', width: '50%' }}>
                 {supplier.supplierName}
               </TableCell>
               <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, width: '20%' }}>
                 {supplier.price ? supplier.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
               </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600, width: '20%' }}>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, width: '15%' }}>
+                {supplier.unit || 'N/A'}
+              </TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600, width: '15%' }}>
                 {supplier.isSelected === 1 ? 'Yes' : 'No'}
               </TableCell>
             </TableRow>
@@ -233,41 +253,115 @@ export default function ComparisonPage() {
   const { groupId } = useParams();
 
   const [data, setData] = useState([]);
+  const [unfilteredTotals, setUnfilteredTotals] = useState({
+    totalAmtVnd: 0,
+    totalAmtDifference: 0,
+    totalDifferencePercentage: 0,
+  });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [searchValues, setSearchValues] = useState({
+    productType1Name: '',
+    productType2Name: '',
+    englishName: '',
+    vietnameseName: '',
+    oldSapCode: '',
+    newSapCode: '',
+    unit: '',
+    departmentName: '',
+  });
 
-  const fetchData = useCallback(async () => {
+  const fetchUnfilteredTotals = useCallback(async () => {
     if (!groupId) return;
-    setLoading(true);
-    setError(null);
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&page=${page}&size=${rowsPerPage}`,
+        `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}`,
         {
           headers: { Accept: '*/*' },
         }
       );
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      setData(result.content || []);
-      setTotalElements(result.totalElements || 0);
+      setUnfilteredTotals({
+        totalAmtVnd: result.totalAmtVnd || 0,
+        totalAmtDifference: result.totalAmtDifference || 0,
+        totalDifferencePercentage: result.totalDifferencePercentage || 0,
+      });
+    } catch (err) {
+      console.error('Fetch unfiltered totals error:', err);
+      setError('Failed to fetch unfiltered totals. Please try again.');
+    }
+  }, [groupId]);
+
+  const fetchData = useCallback(async (filters = {}) => {
+    if (!groupId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const queryParams = new URLSearchParams({
+        groupId,
+        ...(filters.productType1Name && { productType1Name: filters.productType1Name }),
+        ...(filters.productType2Name && { productType2Name: filters.productType2Name }),
+        ...(filters.englishName && { englishName: filters.englishName }),
+        ...(filters.vietnameseName && { vietnameseName: filters.vietnameseName }),
+        ...(filters.oldSapCode && { oldSapCode: filters.oldSapCode }),
+        ...(filters.newSapCode && { newSapCode: filters.newSapCode }),
+        ...(filters.unit && { unit: filters.unit }),
+        ...(filters.departmentName && { departmentName: filters.departmentName }),
+        filter: true,
+      }).toString();
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/summary-requisitions/search/comparison?${queryParams}`,
+        {
+          headers: { Accept: '*/*' },
+        }
+      );
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const result = await response.json();
+      setData(result.requisitions || []);
+      setTotalElements(result.requisitions ? result.requisitions.length : 0);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
     }
-  }, [groupId, page, rowsPerPage]);
+  }, [groupId]);
 
   useEffect(() => {
+    fetchUnfilteredTotals();
     fetchData();
-  }, [fetchData]);
+  }, [fetchUnfilteredTotals, fetchData]);
+
+  const handleSearchChange = (newSearchValues) => {
+    setSearchValues(newSearchValues);
+  };
+
+  const handleSearch = (filters) => {
+    setPage(0);
+    fetchData(filters);
+  };
+
+  const handleReset = () => {
+    setSearchValues({
+      productType1Name: '',
+      productType2Name: '',
+      englishName: '',
+      vietnameseName: '',
+      oldSapCode: '',
+      newSapCode: '',
+      unit: '',
+      departmentName: '',
+    });
+    setPage(0);
+    fetchData();
+  };
 
   const handleDelete = async (oldSapCode) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
@@ -277,7 +371,8 @@ export default function ComparisonPage() {
         headers: { Accept: '*/*' },
       });
       if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
-      await fetchData();
+      await fetchUnfilteredTotals(); // Update totals after deletion
+      await fetchData(searchValues);
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
     } catch (error) {
@@ -302,6 +397,9 @@ export default function ComparisonPage() {
     setPage(0);
   };
 
+  // Client-side pagination
+  const paginatedData = data.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
   return (
     <Box
       sx={{
@@ -312,6 +410,12 @@ export default function ComparisonPage() {
         minHeight: '100vh',
       }}
     >
+      <ComparisonSearch
+        searchValues={searchValues}
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearch}
+        onReset={handleReset}
+      />
       <Stack
         direction="row"
         alignItems="center"
@@ -338,6 +442,48 @@ export default function ComparisonPage() {
 
       {!loading && !error && (
         <>
+          {/* Display totals at the top of the table */}
+          <Box
+            sx={{
+              mb: 2,
+              p: 2,
+              backgroundColor: '#e3f2fd',
+              borderRadius: 2,
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                color: '#1976d2',
+              }}
+            >
+              Total Amount (VND): {unfilteredTotals.totalAmtVnd ? unfilteredTotals.totalAmtVnd.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                color: unfilteredTotals.totalAmtDifference < 0 ? theme.palette.error.main : '#1976d2',
+              }}
+            >
+              Total Difference (VND): {unfilteredTotals.totalAmtDifference ? unfilteredTotals.totalAmtDifference.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                color: unfilteredTotals.totalDifferencePercentage < 0 ? theme.palette.error.main : '#1976d2',
+              }}
+            >
+              Total Difference (%): {unfilteredTotals.totalDifferencePercentage ? unfilteredTotals.totalDifferencePercentage.toFixed(2) + '%' : '0%'}
+            </Typography>
+          </Box>
+
           <TableContainer
             component={Paper}
             elevation={4}
@@ -348,14 +494,14 @@ export default function ComparisonPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1200 }}>
+            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Selected Price (VND)', 'Total Amount (VND)', 'Highest Price (VND)', 'Amount Difference (VND)', 'Difference (%)'].includes(label)
+                        ['No', 'Old SAP Code', 'SAP Code in New SAP', 'Order Unit', 'Selected Price (VND)', 'Total Amount (VND)', 'Highest Price (VND)', 'Amount Difference (VND)', 'Difference (%)'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -371,7 +517,7 @@ export default function ComparisonPage() {
                         position: 'sticky',
                         top: 0,
                         zIndex: 1,
-                        backgroundColor: '#027aff', // Fallback color
+                        backgroundColor: '#027aff',
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -382,8 +528,8 @@ export default function ComparisonPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.length > 0 ? (
-                  data.map((item, idx) => {
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((item, idx) => {
                     const rowBackgroundColor = idx % 2 === 0 ? '#fff' : '#f7f9fc';
                     return (
                       <TableRow
@@ -407,22 +553,31 @@ export default function ComparisonPage() {
                             position: 'sticky',
                             left: 0,
                             zIndex: 1,
-                            backgroundColor: rowBackgroundColor, // Match row background
+                            backgroundColor: rowBackgroundColor,
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {item.englishName || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                          {item.type1Name || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                          {item.type2Name || 'N/A'}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
                           {item.vietnameseName || 'N/A'}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                          {item.englishName || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {item.oldSapCode || 'N/A'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
                           {item.newSapCode || 'N/A'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                          {item.unit || 'N/A'}
                         </TableCell>
                         <TableCell sx={{ px: 2, py: 1.2 }}>
                           <SupplierTable suppliers={item.suppliers} />
@@ -493,7 +648,10 @@ export default function ComparisonPage() {
         open={openEditDialog}
         item={selectedItem}
         onClose={handleCloseEditDialog}
-        onSave={fetchData}
+        onSave={() => {
+          fetchUnfilteredTotals(); // Update totals after edit
+          fetchData(searchValues);
+        }}
       />
     </Box>
   );
