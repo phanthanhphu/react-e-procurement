@@ -5,26 +5,30 @@ import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
-export default function ExportComparisonExcelButton({ disabled, groupId }) { // THÊM: Thêm prop groupId
+export default function ExportComparisonExcelButton({ disabled, groupId }) {
   const [data, setData] = useState([]);
+  const [totalAmtVnd, setTotalAmtVnd] = useState(0); // THÊM: State để lưu totalAmtVnd từ API
+  const [totalAmtDifference, setTotalAmtDifference] = useState(0); // THÊM: State để lưu totalAmtDifference từ API
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&filter=false`, // CẬP NHẬT: Sử dụng groupId từ props
+          `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&filter=false`,
           { headers: { Accept: '*/*' } }
         );
         if (!response.ok) throw new Error('Network response was not ok');
         const result = await response.json();
         setData(result.requisitions || []);
+        setTotalAmtVnd(result.totalAmtVnd || 0); // THÊM: Lấy totalAmtVnd từ API
+        setTotalAmtDifference(result.totalAmtDifference || 0); // THÊM: Lấy totalAmtDifference từ API
       } catch (error) {
         console.error('Failed to fetch data:', error);
         alert('Failed to fetch data for export. Please try again.');
       }
     };
     fetchData();
-  }, [groupId]); // THÊM: Thêm groupId vào dependency array của useEffect
+  }, [groupId]);
 
   const exportToExcel = () => {
     if (!data || data.length === 0) {
@@ -115,18 +119,8 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) { // 
     // Total row
     const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'TOTAL';
-    totalRow[7 + allSupplierKeys.length + 2] = data.reduce((sum, item) => {
-      const selectedSupplier = item.suppliers?.find((sup) => sup.isSelected === 1) || {};
-      return sum + (selectedSupplier.amtVnd || (selectedSupplier.price || 0) * (item.departmentRequests?.reduce((s, dept) => s + (dept.quantity || 0), 0) || 0));
-    }, 0).toLocaleString('vi-VN');
-    totalRow[7 + allSupplierKeys.length + 3] = data.reduce((sum, item) => {
-      const selectedSupplier = item.suppliers?.find((sup) => sup.isSelected === 1) || {};
-      const selectedAmt = selectedSupplier.amtVnd || (selectedSupplier.price || 0) * (item.departmentRequests?.reduce((s, dept) => s + (dept.quantity || 0), 0) || 0);
-      const otherAmts = item.suppliers?.filter((sup) => sup.supplierName !== selectedSupplier.supplierName)
-        .map((sup) => sup.amtVnd || (sup.price || 0) * (item.departmentRequests?.reduce((s, dept) => s + (dept.quantity || 0), 0) || 0)) || [];
-      const avgOtherAmt = otherAmts.length > 0 ? otherAmts.reduce((s, amt) => s + amt, 0) / otherAmts.length : 0;
-      return sum + (selectedAmt - avgOtherAmt);
-    }, 0).toLocaleString('vi-VN');
+    totalRow[7 + allSupplierKeys.length + 2] = totalAmtVnd.toLocaleString('vi-VN'); // THÊM: Sử dụng totalAmtVnd từ API
+    totalRow[7 + allSupplierKeys.length + 3] = totalAmtDifference.toLocaleString('vi-VN'); // THÊM: Sử dụng totalAmtDifference từ API
     wsData.push(totalRow);
 
     // Signature rows
@@ -274,7 +268,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) { // 
     ws['!cols'][7 + allSupplierKeys.length + 5] = { wch: 30 }; // Remark
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`); // CẬP NHẬT: Sử dụng groupId trong tên file
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`);
   };
 
   return (
