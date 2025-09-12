@@ -3,15 +3,16 @@ import * as XLSX from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
 import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
+import { API_BASE_URL } from '../../config';
 
-export default function ExportComparisonExcelButton({ disabled }) {
+export default function ExportComparisonExcelButton({ disabled, groupId }) { // THÊM: Thêm prop groupId
   const [data, setData] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const response = await fetch(
-          'http://localhost:8080/api/summary-requisitions/search/comparison?groupId=689dbaddf1bf4d67a76ebae5&filter=false',
+          `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&filter=false`, // CẬP NHẬT: Sử dụng groupId từ props
           { headers: { Accept: '*/*' } }
         );
         if (!response.ok) throw new Error('Network response was not ok');
@@ -23,7 +24,7 @@ export default function ExportComparisonExcelButton({ disabled }) {
       }
     };
     fetchData();
-  }, []);
+  }, [groupId]); // THÊM: Thêm groupId vào dependency array của useEffect
 
   const exportToExcel = () => {
     if (!data || data.length === 0) {
@@ -273,7 +274,7 @@ export default function ExportComparisonExcelButton({ disabled }) {
     ws['!cols'][7 + allSupplierKeys.length + 5] = { wch: 30 }; // Remark
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'comparison_price.xlsx');
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`); // CẬP NHẬT: Sử dụng groupId trong tên file
   };
 
   return (

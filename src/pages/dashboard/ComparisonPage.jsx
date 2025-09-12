@@ -426,16 +426,20 @@ export default function ComparisonPage() {
         onSearch={handleSearch}
         onReset={handleReset}
       />
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="flex-end"
-        mb={3}
-        sx={{ userSelect: 'none' }}
-      >
-        {console.log('Data passed to ExportComparisonExcelButton:', mappedDataForExport)}
-        <ExportComparisonExcelButton data={mappedDataForExport} disabled={loading} />
-      </Stack>
+    <Stack
+      direction="row"
+      alignItems="center"
+      justifyContent="flex-end"
+      mb={3}
+      sx={{ userSelect: 'none' }}
+    >
+      {console.log('Data passed to ExportComparisonExcelButton:', mappedDataForExport)}
+      <ExportComparisonExcelButton
+        data={mappedDataForExport}
+        disabled={loading}
+        groupId={groupId} // Pass groupId as a prop
+      />
+    </Stack>
 
       {loading && (
         <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
