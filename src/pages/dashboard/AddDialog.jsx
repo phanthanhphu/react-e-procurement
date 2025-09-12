@@ -498,8 +498,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           />
 
           <SupplierSelector
-            itemDescriptionVN={formData.itemDescriptionVN}
-            itemDescriptionEN={formData.itemDescriptionEN}
             oldSapCode={formData.oldSapCode}
             onSelectSupplier={handleSelectSupplier}
           />

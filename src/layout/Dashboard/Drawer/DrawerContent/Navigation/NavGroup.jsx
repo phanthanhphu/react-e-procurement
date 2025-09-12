@@ -1,25 +1,15 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { matchPath, useLocation } from 'react-router';
-
-// material-ui
+import { matchPath } from 'react-router';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import Divider from '@mui/material/Divider';
 import List from '@mui/material/List';
-
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-
-// project-imports
 import NavItem from './NavItem';
-
 import { useGetMenuMaster } from 'api/menu';
 
-// ==============================|| NAVIGATION - GROUP ||============================== //
-
-export default function NavGroup({ item, lastItem, remItems, lastItemId, setSelectedID }) {
-  const { pathname } = useLocation();
-
+export default function NavGroup({ item, lastItem, remItems, lastItemId, setSelectedID, pathname }) {
   const { menuMaster } = useGetMenuMaster();
   const drawerOpen = menuMaster.isDashboardDrawerOpened;
 
@@ -41,7 +31,6 @@ export default function NavGroup({ item, lastItem, remItems, lastItemId, setSele
         setCurrentItem(item);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, lastItem, downLG]);
 
   const checkOpenForParent = (child, id) => {
@@ -55,6 +44,7 @@ export default function NavGroup({ item, lastItem, remItems, lastItemId, setSele
       }
     });
   };
+
   const checkSelectedOnload = (data) => {
     const childrens = data.children ? data.children : [];
     childrens.forEach((itemCheck) => {
@@ -71,7 +61,6 @@ export default function NavGroup({ item, lastItem, remItems, lastItemId, setSele
   useEffect(() => {
     checkSelectedOnload(currentItem);
     if (openMini) setAnchorEl(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, currentItem]);
 
   const navCollapse = item.children?.map((menuItem, index) => {
@@ -83,7 +72,7 @@ export default function NavGroup({ item, lastItem, remItems, lastItemId, setSele
           </Typography>
         );
       case 'item':
-        return <NavItem key={menuItem.id} item={menuItem} level={1} />;
+        return <NavItem key={menuItem.id} item={menuItem} level={1} pathname={pathname} />;
       default:
         return (
           <Typography key={index} variant="h6" color="error" align="center">
@@ -141,5 +130,6 @@ NavGroup.propTypes = {
   setSelectedItems: PropTypes.oneOfType([PropTypes.string, PropTypes.any]),
   selectedItems: PropTypes.oneOfType([PropTypes.string, PropTypes.any]),
   setSelectedLevel: PropTypes.object,
-  selectedLevel: PropTypes.number
+  selectedLevel: PropTypes.number,
+  pathname: PropTypes.string // Thêm pathname vào propTypes
 };

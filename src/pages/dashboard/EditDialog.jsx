@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -25,7 +25,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../../config';
-import { debounce } from 'lodash';
+import SupplierSelector from './SupplierSelector';
 
 export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
@@ -59,6 +59,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [imagesToDelete, setImagesToDelete] = useState([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item);
@@ -68,7 +69,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           if (!res.ok) throw new Error(`Failed to fetch requisition data: ${res.status}`);
           return res.json();
         })
-        .then((data) => {
+      .then((data) => {
           console.log('API response:', data);
           const requisition = data.requisition || data;
           const supplierProduct = data.supplierProduct || {};
@@ -105,6 +106,17 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           setImagesToDelete([]);
           setFiles([]);
           setPreviews([]);
+          setSelectedSupplier(supplierProduct.id ? {
+            id: supplierProduct.id,
+            sapCode: supplierProduct.sapCode || '',
+            itemNo: supplierProduct.itemNo || '',
+            itemDescription: supplierProduct.itemDescription || '',
+            supplierCode: supplierProduct.supplierCode || '',
+            supplierName: supplierProduct.supplierName || '',
+            price: supplierProduct.price || 0,
+            unit: supplierProduct.unit || '',
+            fullDescription: supplierProduct.fullDescription || '',
+          } : null);
           console.log('Initial imageUrls:', requisition.imageUrls || []);
         })
         .catch((err) => {
@@ -136,6 +148,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setImagesToDelete([]);
       setFiles([]);
       setPreviews([]);
+      setSelectedSupplier(null);
     }
 
     if (open) {
@@ -214,40 +227,48 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
   };
 
-  const debouncedSearchSupplier = useCallback(
-    debounce((query) => {
-      if (query) {
-        fetch(`${API_BASE_URL}/api/supplier-products/search?productFullName=${encodeURIComponent(query)}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data && data.length > 0) {
-              const selected = data.find((s) => s.id === formData.supplierId) || data[0];
-              setFormData((prev) => ({
-                ...prev,
-                supplierId: selected.id,
-                supplierPrice: selected.price || 0,
-                unit: selected.unit || '',
-              }));
-            }
-          })
-          .catch(() => {
-            setFormData((prev) => ({ ...prev, supplierId: '', supplierPrice: 0, unit: '' }));
-          });
-      }
-    }, 500),
-    [formData.supplierId]
-  );
-
-  useEffect(() => {
-    debouncedSearchSupplier(formData.itemDescriptionVN.trim() || formData.itemDescriptionEN.trim());
-    return () => debouncedSearchSupplier.cancel();
-  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedSearchSupplier]);
+  const handleSelectSupplier = (supplierData) => {
+    if (supplierData) {
+      setFormData((prev) => ({
+        ...prev,
+        fullItemDescriptionVN: supplierData.fullItemDescriptionVN,
+        oldSapCode: supplierData.oldSapCode,
+        supplierId: supplierData.supplierId,
+        unit: supplierData.unit || '',
+        supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
+      }));
+      setSelectedSupplier({
+        id: supplierData.supplierId,
+        sapCode: supplierData.oldSapCode || '',
+        itemNo: supplierData.itemDescriptionEN || '',
+        itemDescription: supplierData.itemDescriptionVN || '',
+        supplierCode: supplierData.supplierCode || '',
+        supplierName: supplierData.supplierName || '',
+        price: supplierData.supplierPrice || 0,
+        unit: supplierData.unit || '',
+        fullDescription: supplierData.fullItemDescriptionVN || '',
+      });
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        fullItemDescriptionVN: '',
+        oldSapCode: '',
+        supplierId: '',
+        unit: '',
+        supplierPrice: 0,
+      }));
+      setSelectedSupplier(null);
+    }
+  };
 
   const handleChange = (field) => (e) => {
     const value = ['stock', 'purchasingSuggest'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'oldSapCode' && !value) {
+      setSelectedSupplier(null); // Clear selected supplier when oldSapCode is cleared
+    }
   };
 
   const handleDeptChange = (index, field, value) => {
@@ -523,6 +544,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             size="small"
             multiline
             rows={2}
+          />
+
+          <SupplierSelector
+            oldSapCode={formData.oldSapCode}
+            onSelectSupplier={handleSelectSupplier}
+            selectedSupplier={selectedSupplier}
           />
 
           <Paper variant="outlined" sx={{ p: 2 }}>

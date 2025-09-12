@@ -1,19 +1,15 @@
 import { Fragment, useState } from 'react';
-
-// material-ui
+import { useLocation } from 'react-router-dom'; // Thêm useLocation
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-
-// project-imports
 import NavGroup from './NavGroup';
 import NavItem from './NavItem';
 import { useGetMenuMaster } from 'api/menu';
 import menuItems from 'menu-items';
 
-// ==============================|| DRAWER CONTENT - NAVIGATION ||============================== //
-
 export default function Navigation() {
+  const { pathname } = useLocation(); // Lấy pathname
   const { menuMaster } = useGetMenuMaster();
   const drawerOpen = menuMaster.isDashboardDrawerOpened;
 
@@ -46,7 +42,7 @@ export default function Navigation() {
           return (
             <Fragment key={item.id}>
               {<Divider sx={{ my: 0.5 }} />}
-              <NavItem item={item} level={1} isParents setSelectedID={setSelectedID} />
+              <NavItem item={item} level={1} isParents setSelectedID={setSelectedID} pathname={pathname} />
             </Fragment>
           );
         }
@@ -63,6 +59,7 @@ export default function Navigation() {
             remItems={remItems}
             lastItemId={lastItemId}
             item={item}
+            pathname={pathname} // Truyền pathname
           />
         );
       default:

@@ -11,19 +11,22 @@ export default function ExportExcelButton({ data }) {
       return;
     }
 
+    // Generate department keys from departmentRequests array
     const allDeptKeysSet = new Set();
     data.forEach((item) => {
-      const deptQty = item.requisition.departmentRequestQty || {};
-      Object.keys(deptQty).forEach((key) => allDeptKeysSet.add(key));
+      const deptRequests = item.departmentRequests || [];
+      deptRequests.forEach((dept) => allDeptKeysSet.add(dept.departmentName));
     });
     const allDeptKeys = Array.from(allDeptKeysSet);
 
     const wsData = [];
 
+    // Title row
     const titleRow = new Array(6 + allDeptKeys.length + 5).fill('');
-    titleRow[6] = 'SUMMARY REQUISITION';
+    titleRow[0] = 'SUMMARY REQUISITION';
     wsData.push(titleRow);
 
+    // Header rows
     wsData.push([
       'No',
       'Description',
@@ -54,23 +57,27 @@ export default function ExportExcelButton({ data }) {
       '',
     ]);
 
+    // Data rows
     data.forEach((item, index) => {
-      const { requisition, supplierProduct } = item;
-      const deptQty = requisition.departmentRequestQty || {};
-      const totalQty = allDeptKeys.reduce((sum, key) => sum + (deptQty[key] || 0), 0);
+      const { requisition, supplierProduct, departmentRequests } = item;
+      const deptQty = {};
+      (departmentRequests || []).forEach((dept) => {
+        deptQty[dept.departmentName] = dept.quantity;
+      });
+      const totalQty = (departmentRequests || []).reduce((sum, dept) => sum + (dept.quantity || 0), 0);
 
       const row = [
         index + 1,
-        requisition.englishName,
-        requisition.vietnameseName,
-        requisition.oldSapCode,
-        requisition.newSapCode,
-        supplierProduct.unit,
+        requisition.englishName || '',
+        requisition.vietnameseName || '',
+        requisition.oldSapCode || '',
+        requisition.newSapCode || '',
+        supplierProduct?.unit || '',
         ...allDeptKeys.map((key) => deptQty[key] || ''),
         totalQty,
-        requisition.stock,
-        requisition.purchasingSuggest,
-        requisition.reason,
+        requisition.stock || 0,
+        requisition.purchasingSuggest || '',
+        requisition.reason || '',
         requisition.remark || '',
       ];
 
@@ -78,31 +85,56 @@ export default function ExportExcelButton({ data }) {
     });
 
     const totalCols = 6 + allDeptKeys.length + 5;
+    const dataEndRow = 3 + data.length - 1; // 0-based index of last data row
 
+    // Signature rows (below the table, distributed within table width)
     const signatureTitles = new Array(totalCols).fill('');
-    signatureTitles[0] = 'Request by';
-    signatureTitles[5] = 'Purchasing Teamleader';
-    signatureTitles[10] = 'Purchasing Manager';
-    signatureTitles[14] = 'Approval by';
-
+    const signatureNames = new Array(totalCols).fill('');
     const blankLine = new Array(totalCols).fill('');
     const signBlank1 = [...blankLine];
     const signBlank2 = [...blankLine];
-
-    const signatureNames = new Array(totalCols).fill('');
-    signatureNames[0] = 'DANG THI NHU NGOC';
-    signatureNames[5] = 'Ms. SELENA TAM';
-    signatureNames[10] = 'Mr. EJ KIM';
-    signatureNames[14] = 'Mr. YONGUK LEE';
-
     const signBlank3 = [...blankLine];
 
-    wsData.push(signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
+    // Define signatures
+    const signaturePositions = [
+      { title: 'Request by', name: 'DANG THI NHU NGOC' },
+      { title: 'Purchasing Teamleader', name: 'Ms. SELENA TAM' },
+      { title: 'Purchasing Manager', name: 'Mr. EJ KIM' },
+      { title: 'Approval by', name: 'Mr. YONGUK LEE' },
+    ];
+
+    // Calculate dynamic signature positions
+    const sigWidth = 3; // Number of columns to merge for each signature
+    const totalSigWidth = signaturePositions.length * sigWidth;
+    const availableCols = totalCols;
+    const colStep = Math.floor((availableCols - totalSigWidth) / (signaturePositions.length + 1)); // Space between signatures
+    const startPositions = [];
+
+    // Calculate start positions for each signature
+    let currentCol = colStep; // Start after some padding
+    signaturePositions.forEach((_, index) => {
+      if (currentCol + sigWidth - 1 < totalCols) {
+        startPositions.push(currentCol);
+        currentCol += sigWidth + colStep; // Move to next position
+      }
+    });
+
+    // Assign signatures to calculated positions
+    signaturePositions.forEach((sig, index) => {
+      if (index < startPositions.length) {
+        const startCol = startPositions[index];
+        signatureTitles[startCol] = sig.title;
+        signatureNames[startCol] = sig.name;
+      }
+    });
+
+    wsData.push(blankLine, signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Summary');
 
+    // Styles
     const commonBorder = {
       top: { style: 'thin', color: { rgb: '000000' } },
       bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -149,16 +181,17 @@ export default function ExportExcelButton({ data }) {
 
         if (r === 0) ws[cellRef].s = titleStyle;
         else if (r === 1 || r === 2) ws[cellRef].s = boldHeaderStyle;
-        else if (r >= 3 && r < totalRows - 5) ws[cellRef].s = normalCellStyle;
-        else if (r === totalRows - 5) ws[cellRef].s = signatureHeaderStyle;
-        else if (r === totalRows - 2) ws[cellRef].s = signatureNameStyle;
+        else if (r >= 3 && r <= dataEndRow) ws[cellRef].s = normalCellStyle;
+        else if (r === dataEndRow + 2) ws[cellRef].s = signatureHeaderStyle;
+        else if (r === dataEndRow + 5) ws[cellRef].s = signatureNameStyle;
         else ws[cellRef].s = signatureNameStyle;
       }
     }
 
+    // Merges
     const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // Title from No to Remark
       { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-      { s: { r: 0, c: 6 }, e: { r: 0, c: 6 + allDeptKeys.length - 1 } }, // Title
       { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } }, // Description
       { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
       { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
@@ -169,32 +202,27 @@ export default function ExportExcelButton({ data }) {
       { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } },
       { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } },
       { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } },
-
-      // Merge ô tiêu đề chữ ký
-      { s: { r: totalRows - 5, c: 0 }, e: { r: totalRows - 5, c: 2 } },
-      { s: { r: totalRows - 5, c: 5 }, e: { r: totalRows - 5, c: 7 } },
-      { s: { r: totalRows - 5, c: 10 }, e: { r: totalRows - 5, c: 12 } },
-      { s: { r: totalRows - 5, c: 14 }, e: { r: totalRows - 5, c: 16 } },
-
-      // Merge ô tên người ký
-      { s: { r: totalRows - 2, c: 0 }, e: { r: totalRows - 2, c: 2 } },
-      { s: { r: totalRows - 2, c: 5 }, e: { r: totalRows - 2, c: 7 } },
-      { s: { r: totalRows - 2, c: 10 }, e: { r: totalRows - 2, c: 12 } },
-      { s: { r: totalRows - 2, c: 14 }, e: { r: totalRows - 2, c: 16 } },
     ];
+
+    // Add signature merges dynamically
+    startPositions.forEach((startCol, index) => {
+      const endCol = Math.min(startCol + sigWidth - 1, totalCols - 1);
+      if (startCol < totalCols) {
+        merges.push({ s: { r: dataEndRow + 2, c: startCol }, e: { r: dataEndRow + 2, c: endCol } });
+        merges.push({ s: { r: dataEndRow + 5, c: startCol }, e: { r: dataEndRow + 5, c: endCol } });
+      }
+    });
 
     ws['!merges'] = merges;
 
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
     ws['!cols'][0] = { wch: 5 };
-
-    // Giảm độ rộng cột cho các cột "Department Request Q'ty"
     allDeptKeys.forEach((_, idx) => {
-      ws['!cols'][6 + idx] = { wch: 12 }; // Cột Department Request Q'ty
+      ws['!cols'][6 + idx] = { wch: 12 };
     });
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-
+    console.log('wbout size:', wbout.length); // Debug output
     saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'summary_requisition.xlsx');
   };
 

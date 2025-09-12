@@ -32,7 +32,7 @@
     "react-dom": "19.1.0",
     "react-i18next": "^15.6.1",
     "react-router": "7.6.0",
-    "react-router-dom": "^7.6.0",
+    "react-router-dom": "^7.8.2",
     "react-select": "^5.10.2",
     "react-toastify": "^11.0.5",
     "simplebar-react": "3.3.1",

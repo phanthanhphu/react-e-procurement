@@ -371,7 +371,7 @@ export default function ComparisonPage() {
         headers: { Accept: '*/*' },
       });
       if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
-      await fetchUnfilteredTotals(); // Update totals after deletion
+      await fetchUnfilteredTotals();
       await fetchData(searchValues);
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
@@ -397,8 +397,18 @@ export default function ComparisonPage() {
     setPage(0);
   };
 
-  // Client-side pagination
   const paginatedData = data.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
+  // Map data to match ExportComparisonExcelButton structure
+  const mappedDataForExport = paginatedData.map(item => ({
+    englishName: item.englishName || '',
+    vietnameseName: item.vietnameseName || '',
+    oldSapCode: item.oldSapCode || '',
+    newSapCode: item.newSapCode || '',
+    suppliers: item.suppliers || [],
+    remark: item.remark || '',
+    unit: item.unit || '',
+  }));
 
   return (
     <Box
@@ -423,7 +433,8 @@ export default function ComparisonPage() {
         mb={3}
         sx={{ userSelect: 'none' }}
       >
-        <ExportComparisonExcelButton data={data} />
+        {console.log('Data passed to ExportComparisonExcelButton:', mappedDataForExport)}
+        <ExportComparisonExcelButton data={mappedDataForExport} disabled={loading} />
       </Stack>
 
       {loading && (
@@ -442,7 +453,6 @@ export default function ComparisonPage() {
 
       {!loading && !error && (
         <>
-          {/* Display totals at the top of the table */}
           <Box
             sx={{
               mb: 2,
@@ -649,7 +659,7 @@ export default function ComparisonPage() {
         item={selectedItem}
         onClose={handleCloseEditDialog}
         onSave={() => {
-          fetchUnfilteredTotals(); // Update totals after edit
+          fetchUnfilteredTotals();
           fetchData(searchValues);
         }}
       />

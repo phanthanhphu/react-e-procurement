@@ -1,7 +1,5 @@
 import PropTypes from 'prop-types';
-import { matchPath, useLocation, Link } from 'react-router-dom';
-
-// material-ui
+import { matchPath, Link } from 'react-router-dom';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import Avatar from '@mui/material/Avatar';
 import Chip from '@mui/material/Chip';
@@ -10,16 +8,11 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-
-// project-imports
 import Dot from 'components/@extended/Dot';
 import IconButton from 'components/@extended/IconButton';
-
 import { handlerDrawerOpen, useGetMenuMaster } from 'api/menu';
 
-// ==============================|| NAVIGATION - ITEM ||============================== //
-
-export default function NavItem({ item, level, isParents = false, setSelectedID }) {
+export default function NavItem({ item, level, isParents = false, setSelectedID, pathname }) {
   const downLG = useMediaQuery((theme) => theme.breakpoints.down('lg'));
 
   const { menuMaster } = useGetMenuMaster();
@@ -37,7 +30,6 @@ export default function NavItem({ item, level, isParents = false, setSelectedID 
     false
   );
 
-  const { pathname } = useLocation();
   const isSelected = !!matchPath({ path: item?.link ? item.link : item.url, end: false }, pathname);
 
   const iconSelectedColor = 'primary.main';
@@ -155,13 +147,13 @@ export default function NavItem({ item, level, isParents = false, setSelectedID 
             return (
               <IconButton
                 key={index}
-                {...(action.type === NavActionType.FUNCTION && {
+                {...(action.type === 'function' && {
                   onClick: (event) => {
                     event.stopPropagation();
                     callAction();
                   }
                 })}
-                {...(action.type === NavActionType.LINK && {
+                {...(action.type === 'link' && {
                   component: Link,
                   to: action.url,
                   target: action.target ? '_blank' : '_self'
@@ -189,4 +181,10 @@ export default function NavItem({ item, level, isParents = false, setSelectedID 
   );
 }
 
-NavItem.propTypes = { item: PropTypes.any, level: PropTypes.number, isParents: PropTypes.bool, setSelectedID: PropTypes.any };
+NavItem.propTypes = {
+  item: PropTypes.any,
+  level: PropTypes.number,
+  isParents: PropTypes.bool,
+  setSelectedID: PropTypes.any,
+  pathname: PropTypes.string // Thêm pathname vào propTypes
+};

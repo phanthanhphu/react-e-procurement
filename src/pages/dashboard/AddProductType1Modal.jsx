@@ -22,6 +22,7 @@ const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
       });
       if (!res.ok) throw new Error('Failed to add product type 1');
       message.success('Added successfully');
+      setInputName(''); // Reset input after successful submission
       onSuccess();
     } catch (error) {
       message.error(error.message);
@@ -29,12 +30,17 @@ const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
     setLoading(false);
   };
 
+  const handleClose = () => {
+    setInputName(''); // Reset input when modal is closed
+    onClose();
+  };
+
   return (
     <Modal
       title="Add New Product Type 1"
       visible={visible}
       onOk={handleSubmit}
-      onCancel={onClose}
+      onCancel={handleClose}
       okText="Add"
       destroyOnClose
       confirmLoading={loading}

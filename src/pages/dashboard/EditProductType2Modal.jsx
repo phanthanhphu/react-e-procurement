@@ -17,7 +17,7 @@ const EditProductType2Modal = ({ visible, record, onClose, onSuccess }) => {
     }
     setLoading(true);
     try {
-      const url = `${API_BASE_URL}/product-type-2/${record.id}?name=${encodeURIComponent(name)}`;
+      const url = `${API_BASE_URL}/api/product-type-2/${record.id}?name=${encodeURIComponent(name)}`;
       const res = await fetch(url, { method: 'PUT', headers: { accept: '*/*' } });
       if (!res.ok) throw new Error('Failed to update product type 2');
       message.success('Sub-type updated successfully');

@@ -48,7 +48,7 @@ const headers = [
   { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
   { label: 'Reason', key: 'reason' },
   { label: 'Remark', key: 'remark' },
-  { label: 'Images', key: 'image' }, // Added Images column
+  { label: 'Images', key: 'image' },
   { label: 'Actions', key: 'actions' },
 ];
 
@@ -141,16 +141,21 @@ export default function SummaryPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null); // Fixed: Removed 'state' typo
-  const [popoverImgSrcs, setPopoverImgSrcs] = useState([]); // Image URLs for popover
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
 
   const fetchData = useCallback(async () => {
-    if (!groupId) return;
+    if (!groupId) {
+      console.warn('No groupId, skipping fetchData');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const result = await response.json();
       const filteredData = result.filter(item => {
         return (
@@ -236,13 +241,18 @@ export default function SummaryPage() {
     fetchData();
   };
 
-  // Popover handlers for image display
+  const handleNavigateToComparison = () => {
+    console.log('Navigating to:', `/dashboard/comparison/${groupId}`);
+    // Bỏ qua cảnh báo và chỉ cần điều hướng đến trang
+    navigate(`/dashboard/comparison/${groupId}`);
+  };
+
   const handlePopoverOpen = (event, imageUrls) => {
     setAnchorEl(event.currentTarget);
     const fullSrcs = imageUrls?.map((imgSrc) =>
       imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
     ) || [];
-    console.log('Image URLs:', fullSrcs); // Debug log
+    console.log('Image URLs:', fullSrcs);
     setPopoverImgSrcs(fullSrcs);
   };
 
@@ -291,16 +301,15 @@ export default function SummaryPage() {
         <Stack direction="row" spacing={2}>
           <ExportExcelButton data={data} />
           <ImportExcelButton
-              onImport={(importedData) => {
-                console.log('Imported data:', importedData);
-                // Gọi fetchData để làm mới dữ liệu sau khi import
-                fetchData();
-              }}
-              groupId={groupId} // Thêm prop groupId
+            onImport={(importedData) => {
+              console.log('Imported data:', importedData);
+              fetchData();
+            }}
+            groupId={groupId}
           />
           <Button
             variant="contained"
-            onClick={() => navigate(`/dashboard/comparison/${groupId}`)}
+            onClick={handleNavigateToComparison}
             sx={{
               textTransform: 'none',
               borderRadius: 2,
@@ -400,7 +409,7 @@ export default function SummaryPage() {
                         position: 'sticky',
                         top: 0,
                         zIndex: 20,
-                        backgroundColor: '#027aff', // Fallback color
+                        backgroundColor: '#027aff',
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -441,7 +450,7 @@ export default function SummaryPage() {
                             position: 'sticky',
                             left: 0,
                             zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', // Match row background
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
                           }}
                         >
                           {page * rowsPerPage + idx + 1}

@@ -62,8 +62,7 @@ const ProductType1Page = () => {
       // Update Type 2 data if a row is expanded
       if (expandedType1Id) {
         const expandedRecord = json.data.find(item => item.id === expandedType1Id);
-        const type2Items = expandedRecord ? expandedRecord.code : [];
-        // Apply client-side pagination for Type 2
+        const type2Items = expandedRecord ? expandedRecord.code || [] : [];
         const start = type2Page * PAGE_SIZE;
         const end = start + PAGE_SIZE;
         setType2Data(type2Items.slice(start, end));
@@ -373,7 +372,7 @@ const ProductType1Page = () => {
                 />
               </Card>
             ),
-            rowExpandable: rec => rec.code && rec.code.length > 0,
+            rowExpandable: () => true, // Allow all rows to be expandable
             expandedRowKeys: expandedType1Id ? [expandedType1Id] : [],
             onExpand: (exp, rec) => exp ? handleExpand(rec.id) : (setExpandedType1Id(null), setType2Data([]), setType2Page(0), setType2Total(0)),
           }}

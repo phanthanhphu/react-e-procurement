@@ -14,8 +14,6 @@ import {
 import { API_BASE_URL } from '../../config';
 
 export default function SupplierSelector({
-  itemDescriptionVN,
-  itemDescriptionEN,
   oldSapCode,
   onSelectSupplier,
 }) {
@@ -25,13 +23,11 @@ export default function SupplierSelector({
   const [filterValue, setFilterValue] = useState('');
 
   // Hàm tìm kiếm nhà cung cấp
-  const searchSupplier = async (itemDescriptionVN, itemDescriptionEN, sapCode, filter = '') => {
+  const searchSupplier = async (sapCode, filter = '') => {
     setSearchLoading(true);
     try {
       const queryParams = new URLSearchParams({ page: '0', size: '100' });
       if (sapCode.trim()) queryParams.append('sapCode', sapCode.trim());
-      if (itemDescriptionVN.trim()) queryParams.append('itemDescription', itemDescriptionVN.trim());
-      if (itemDescriptionEN.trim()) queryParams.append('itemNo', itemDescriptionEN.trim());
       if (filter.trim()) queryParams.append('itemDescription', filter.trim());
 
       const endpoint = queryParams.toString()
@@ -52,10 +48,10 @@ export default function SupplierSelector({
     }
   };
 
-  // Gọi tìm kiếm khi các props hoặc filter thay đổi
+  // Gọi tìm kiếm khi oldSapCode hoặc filter thay đổi
   useEffect(() => {
-    searchSupplier(itemDescriptionVN, itemDescriptionEN, oldSapCode, filterValue);
-  }, [itemDescriptionVN, itemDescriptionEN, oldSapCode, filterValue]);
+    searchSupplier(oldSapCode, filterValue);
+  }, [oldSapCode, filterValue]);
 
   // Xử lý khi chọn nhà cung cấp từ bảng
   const handleSelectSupplier = (opt) => {
