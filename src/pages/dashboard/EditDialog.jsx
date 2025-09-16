@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -26,6 +26,7 @@ import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
+import { debounce } from 'lodash';
 
 export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
@@ -60,114 +61,173 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [showSupplierSelector, setShowSupplierSelector] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
+  const [initialVNDescription, setInitialVNDescription] = useState('');
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item);
     if (open && item && item.requisition && item.requisition.id) {
-      fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`Failed to fetch requisition data: ${res.status}`);
-          return res.json();
-        })
-      .then((data) => {
-          console.log('API response:', data);
-          const requisition = data.requisition || data;
-          const supplierProduct = data.supplierProduct || {};
-
-          setFormData({
-            itemDescriptionEN: requisition.englishName || '',
-            itemDescriptionVN: requisition.vietnameseName || '',
-            fullItemDescriptionVN: requisition.fullDescription || '',
-            oldSapCode: requisition.oldSapCode || '',
-            newSapCode: requisition.newSapCode || '',
-            stock: requisition.stock || '',
-            purchasingSuggest: requisition.purchasingSuggest || '',
-            reason: requisition.reason || '',
-            remark: requisition.remark || '',
-            supplierId: supplierProduct.id || '',
-            groupId: requisition.groupId || '',
-            productType1Id: requisition.productType1Id || '',
-            productType2Id: requisition.productType2Id || '',
-            unit: supplierProduct.unit || '',
-            supplierPrice: supplierProduct.price || 0,
-          });
-
-          if (requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object') {
-            const rows = Object.entries(requisition.departmentRequestQty).map(([department, qty]) => ({
-              department,
-              qty: qty.toString(),
-            }));
-            setDeptRows(rows.length ? rows : [{ department: '', qty: '' }]);
-          } else {
-            setDeptRows([{ department: '', qty: '' }]);
-          }
-
-          setImageUrls(requisition.imageUrls || []);
-          setImagesToDelete([]);
-          setFiles([]);
-          setPreviews([]);
-          setSelectedSupplier(supplierProduct.id ? {
-            id: supplierProduct.id,
-            sapCode: supplierProduct.sapCode || '',
-            itemNo: supplierProduct.itemNo || '',
-            itemDescription: supplierProduct.itemDescription || '',
-            supplierCode: supplierProduct.supplierCode || '',
-            supplierName: supplierProduct.supplierName || '',
-            price: supplierProduct.price || 0,
-            unit: supplierProduct.unit || '',
-            fullDescription: supplierProduct.fullDescription || '',
-          } : null);
-          console.log('Initial imageUrls:', requisition.imageUrls || []);
-        })
-        .catch((err) => {
-          console.error('Error fetching requisition data:', err);
-          setSnackbarMessage(`Failed to load requisition data: ${err.message}`);
-          setSnackbarOpen(true);
-        });
+      fetchData();
     } else {
-      console.warn('No valid item or item.requisition.id, resetting form. Item:', item);
-      setFormData({
-        itemDescriptionEN: '',
-        itemDescriptionVN: '',
-        fullItemDescriptionVN: '',
-        oldSapCode: '',
-        newSapCode: '',
-        stock: '',
-        purchasingSuggest: '',
-        reason: '',
-        remark: '',
-        supplierId: '',
-        groupId: '',
-        productType1Id: '',
-        productType2Id: '',
-        unit: '',
-        supplierPrice: 0,
-      });
-      setDeptRows([{ department: '', qty: '' }]);
-      setImageUrls([]);
-      setImagesToDelete([]);
-      setFiles([]);
-      setPreviews([]);
-      setSelectedSupplier(null);
+      resetForm();
+      setShowSupplierSelector(true);
     }
-
     if (open) {
       fetchProductType1List();
       fetchDepartmentList();
     }
-  }, [item, open]);
+  }, [open, item]);
+
+  const fetchData = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`);
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      const data = await res.json();
+      console.log('API response:', data);
+      const requisition = data.requisition || data;
+      const supplierProduct = data.supplierProduct || {};
+      const vietnameseName = requisition.vietnameseName || '';
+      setFormData({
+        itemDescriptionEN: requisition.englishName || '',
+        itemDescriptionVN: vietnameseName,
+        fullItemDescriptionVN: requisition.fullDescription || '',
+        oldSapCode: requisition.oldSapCode || '',
+        newSapCode: requisition.newSapCode || '',
+        stock: requisition.stock || '',
+        purchasingSuggest: requisition.purchasingSuggest || '',
+        reason: requisition.reason || '',
+        remark: requisition.remark || '',
+        supplierId: supplierProduct.id || '',
+        groupId: requisition.groupId || '',
+        productType1Id: requisition.productType1Id || '',
+        productType2Id: requisition.productType2Id || '',
+        unit: supplierProduct.unit || '',
+        supplierPrice: supplierProduct.price || 0,
+      });
+      setDeptRows(
+        requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object'
+          ? Object.entries(requisition.departmentRequestQty).map(([dept, qty]) => ({
+              department: dept,
+              qty: qty.toString(),
+            }))
+          : [{ department: '', qty: '' }]
+      );
+      setImageUrls(requisition.imageUrls || []);
+      setImagesToDelete([]);
+      setFiles([]);
+      setPreviews([]);
+      setSelectedSupplier(supplierProduct.id ? { id: supplierProduct.id, ...supplierProduct } : null);
+      if (supplierProduct.id) {
+        setShowSupplierSelector(false);
+      }
+      setIsEnManuallyEdited(false);
+      setInitialVNDescription(vietnameseName);
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setSnackbarMessage(`Failed: ${err.message}`);
+      setSnackbarOpen(true);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      itemDescriptionEN: '',
+      itemDescriptionVN: '',
+      fullItemDescriptionVN: '',
+      oldSapCode: '',
+      newSapCode: '',
+      stock: '',
+      purchasingSuggest: '',
+      reason: '',
+      remark: '',
+      supplierId: '',
+      groupId: '',
+      productType1Id: '',
+      productType2Id: '',
+      unit: '',
+      supplierPrice: 0,
+    });
+    setDeptRows([{ department: '', qty: '' }]);
+    setImageUrls([]);
+    setImagesToDelete([]);
+    setFiles([]);
+    setPreviews([]);
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setIsEnManuallyEdited(false);
+    setInitialVNDescription('');
+  };
+
+  const translateText = async (text) => {
+    if (!text) {
+      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
+      setSnackbarMessage('Vietnamese description has been cleared.');
+      setSnackbarOpen(true);
+      setIsEnManuallyEdited(false);
+      return;
+    }
+
+    setTranslating(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': '*/*',
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Translation failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.translatedText && !data.text) {
+        throw new Error('Invalid translation response: missing translated text');
+      }
+
+      const translatedText = data.translatedText || data.text;
+      setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
+      setIsEnManuallyEdited(false);
+    } catch (error) {
+      console.error('Translation error:', error.message);
+      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
+      setSnackbarMessage('Unable to translate text. Please try again or enter manually.');
+      setSnackbarOpen(true);
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const debouncedTranslate = useCallback(
+    debounce((text) => {
+      if (text !== initialVNDescription && !isEnManuallyEdited) {
+        translateText(text);
+      }
+    }, 500),
+    [initialVNDescription, isEnManuallyEdited]
+  );
 
   useEffect(() => {
-    // Cleanup previews when dialog closes
+    if (formData.itemDescriptionVN !== initialVNDescription) {
+      debouncedTranslate(formData.itemDescriptionVN);
+    }
+    return () => debouncedTranslate.cancel();
+  }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
+
+  useEffect(() => {
     return () => {
       if (!open) {
         previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
         setFiles([]);
         setPreviews([]);
-        console.log('Cleanup: Cleared files and previews');
+        console.log('Cleanup: Files and previews cleared');
       }
     };
-  }, [open, previews]);
+  }, [open]);
 
   const fetchProductType1List = async () => {
     setLoadingType1(true);
@@ -189,7 +249,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       fetchProductType2List(formData.productType1Id);
     } else {
       setProductType2List([]);
-      setFormData((prev) => ({ ...prev, productType2Id: '' }));
     }
   }, [formData.productType1Id]);
 
@@ -220,7 +279,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const data = await res.json();
       setDepartmentList(data || []);
     } catch (error) {
-      console.error('Error fetching department list:', error);
+      console.error('Error loading department list:', error);
       setDepartmentList([]);
     } finally {
       setLoadingDepartments(false);
@@ -248,6 +307,13 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         unit: supplierData.unit || '',
         fullDescription: supplierData.fullItemDescriptionVN || '',
       });
+      setShowSupplierSelector(false);
+      if (supplierData.itemDescriptionVN) {
+        setFormData((prev) => ({ ...prev, itemDescriptionVN: supplierData.itemDescriptionVN }));
+        if (supplierData.itemDescriptionVN !== initialVNDescription && !isEnManuallyEdited) {
+          translateText(supplierData.itemDescriptionVN);
+        }
+      }
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -258,6 +324,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         supplierPrice: 0,
       }));
       setSelectedSupplier(null);
+      setShowSupplierSelector(true);
     }
   };
 
@@ -266,8 +333,17 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (field === 'oldSapCode' && !value) {
-      setSelectedSupplier(null); // Clear selected supplier when oldSapCode is cleared
+    if (field === 'itemDescriptionEN') {
+      setIsEnManuallyEdited(true);
+    } else if (field === 'itemDescriptionVN') {
+      setIsEnManuallyEdited(false);
+    } else if (field === 'oldSapCode') {
+      if (!value) {
+        setSelectedSupplier(null);
+        setShowSupplierSelector(true);
+      } else if (value !== formData.oldSapCode) {
+        setShowSupplierSelector(true);
+      }
     }
   };
 
@@ -311,17 +387,17 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
 
     const validFiles = selectedFiles.filter(file => 
-      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024 // Max 5MB
+      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
     );
     if (validFiles.length !== selectedFiles.length) {
-      setSnackbarMessage('Only image files under 5MB are allowed.');
+      setSnackbarMessage('Only image files under 5MB are accepted.');
       setSnackbarOpen(true);
       return;
     }
 
     const newFiles = [...files, ...validFiles];
     if (newFiles.length + imageUrls.length > 10) {
-      setSnackbarMessage('You can upload a maximum of 10 images total.');
+      setSnackbarMessage('You can only upload a maximum of 10 images.');
       setSnackbarOpen(true);
       return;
     }
@@ -335,7 +411,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       size: file.size,
       type: file.type,
     })));
-    e.target.value = null; // Reset input
+    e.target.value = null;
   };
 
   const handleRemoveImage = (index) => {
@@ -362,7 +438,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const handleSave = async () => {
     if (!item || !item.requisition || !item.requisition.id) {
-      setSnackbarMessage('Cannot save: Item or requisition ID is missing.');
+      setSnackbarMessage('Cannot save: Missing item or requisition ID.');
       setSnackbarOpen(true);
       return;
     }
@@ -432,7 +508,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       onClose();
     } catch (err) {
       console.error('Update error:', err);
-      setSnackbarMessage(`Failed to update item: ${err.message}`);
+      setSnackbarMessage(`Unable to update item: ${err.message}`);
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
@@ -451,7 +527,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           letterSpacing: 1,
         }}
       >
-        Edit request
+        Edit Request
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -521,23 +597,35 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Item Description (VN)"
+              label="Product Description (VN)"
               value={formData.itemDescriptionVN}
               onChange={handleChange('itemDescriptionVN')}
               fullWidth
               size="small"
+              InputLabelProps={{
+                style: { color: 'inherit' },
+              }}
             />
             <TextField
-              label="Item Description (EN)"
+              label="Product Description (EN)"
               value={formData.itemDescriptionEN}
               onChange={handleChange('itemDescriptionEN')}
               fullWidth
               size="small"
+              InputLabelProps={{
+                style: { color: 'inherit' },
+              }}
+              disabled={translating}
+              InputProps={{
+                endAdornment: translating ? (
+                  <CircularProgress size={16} />
+                ) : null,
+              }}
             />
           </Stack>
 
           <TextField
-            label="Full Item Description (VN)"
+            label="Full Description (VN)"
             value={formData.fullItemDescriptionVN}
             onChange={handleChange('fullItemDescriptionVN')}
             fullWidth
@@ -546,15 +634,28 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             rows={2}
           />
 
-          <SupplierSelector
-            oldSapCode={formData.oldSapCode}
-            onSelectSupplier={handleSelectSupplier}
-            selectedSupplier={selectedSupplier}
-          />
+          {showSupplierSelector ? (
+            <SupplierSelector
+              oldSapCode={formData.oldSapCode}
+              onSelectSupplier={handleSelectSupplier}
+              selectedSupplier={selectedSupplier}
+            />
+          ) : (
+            selectedSupplier && (
+              <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
+                <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
+                <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
+                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('en-US')} ₫</Typography>
+                <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
+                  Change Supplier
+                </Button>
+              </Box>
+            )
+          )}
 
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Department Request Qty:
+              Requested Quantity by Department:
             </Typography>
             {deptRows.map((row, index) => (
               <Stack
@@ -588,7 +689,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                 </FormControl>
                 <TextField
-                  label="Qty"
+                  label="Quantity"
                   type="number"
                   value={row.qty}
                   onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
@@ -629,16 +730,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               }}
             >
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Request Qty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+                Total Requested Quantity: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN')} ₫</span>
+                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('en-US')} ₫</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('vi-VN')} ₫</span>
+                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('en-US')} ₫</span>
               </Typography>
             </Stack>
           </Paper>
@@ -654,7 +755,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               sx={{ flex: 1 }}
             />
             <TextField
-              label="Purchasing Suggest"
+              label="Purchase Suggestion"
               value={formData.purchasingSuggest}
               onChange={handleChange('purchasingSuggest')}
               size="small"
@@ -684,10 +785,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           />
 
           <Box>
-            <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
+            <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
               <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                Choose Image
+                Select Images
                 <input
                   hidden
                   type="file"
@@ -698,7 +799,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               </Button>
               {(files.length + imageUrls.length) > 0 && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  {files.length + imageUrls.length} image(s) selected
+                  Selected {files.length + imageUrls.length} images
                 </Typography>
               )}
             </Stack>
@@ -711,7 +812,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                       alt={`Image ${index + 1}`}
                       style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
                       onError={(e) => {
-                        console.error(`Image load failed for ${url}`, e);
+                        console.error(`Failed to load image for ${url}`, e);
                         e.target.style.display = 'none';
                       }}
                     />
@@ -762,7 +863,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('Failed') ? 'error' : 'success'} sx={{ width: '100%' }}>
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') ? 'error' : 'success'} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>
