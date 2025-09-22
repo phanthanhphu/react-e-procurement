@@ -123,11 +123,11 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
     <Paper
       elevation={3}
       sx={{
-        p: { xs: 1, md: 1.5 },
-        mb: 4,
+        p: 1.5,
+        mb: 1.5,
         background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 3,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
         border: `1px solid ${theme.palette.divider}`,
         width: '100%',
         boxSizing: 'border-box',
@@ -136,7 +136,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
       }}
     >
       <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
-        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%', fontSize: '0.65rem' }}>
           {error}
         </Alert>
       </Snackbar>
@@ -151,7 +151,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Autocomplete
             freeSolo
             options={filteredProductType1Options}
@@ -165,12 +165,16 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
                 label="Product Type 1 Name"
                 variant="outlined"
                 size="small"
-                sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+                sx={{
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                  width: '100%',
+                }}
               />
             )}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Autocomplete
             freeSolo
             options={filteredProductType2Options}
@@ -184,32 +188,44 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
                 label="Product Type 2 Name"
                 variant="outlined"
                 size="small"
-                sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+                sx={{
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                  width: '100%',
+                }}
               />
             )}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="English Name"
             variant="outlined"
             size="small"
             value={searchValues.englishName || ''}
             onChange={handleInputChange('englishName')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Vietnamese Name"
             variant="outlined"
             size="small"
             value={searchValues.vietnameseName || ''}
             onChange={handleInputChange('vietnameseName')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Button
             variant="contained"
             onClick={handleSearch}
@@ -218,10 +234,11 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
               fontWeight: 500,
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              height: '40px',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
+              height: '30px',
               width: '100%',
             }}
           >
@@ -239,59 +256,76 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Old SAP Code"
             variant="outlined"
             size="small"
             value={searchValues.oldSapCode || ''}
             onChange={handleInputChange('oldSapCode')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="New SAP Code"
             variant="outlined"
             size="small"
             value={searchValues.newSapCode || ''}
             onChange={handleInputChange('newSapCode')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Unit"
             variant="outlined"
             size="small"
             value={searchValues.unit || ''}
             onChange={handleInputChange('unit')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Department Name"
             variant="outlined"
             size="small"
             value={searchValues.departmentName || ''}
             onChange={handleInputChange('departmentName')}
-            sx={{ '& .MuiInputBase-root': { height: '40px', borderRadius: '8px', width: '100%' } }}
+            sx={{
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+              width: '100%',
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Button
             variant="outlined"
             onClick={handleReset}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
-              height: '40px',
+              height: '30px',
               width: '100%',
             }}
           >

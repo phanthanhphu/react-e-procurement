@@ -19,7 +19,9 @@ const fetchGroups = async (
   createdBy = '',
   type = '',
   startDate = null,
-  endDate = null
+  endDate = null,
+  stockStartDate = null,
+  stockEndDate = null
 ) => {
   try {
     const params = new URLSearchParams({
@@ -30,8 +32,10 @@ const fetchGroups = async (
       createdBy: createdBy || '',
       type: type || '',
     });
-    if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DDTHH:mm:ss'));
-    if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DDTHH:mm:ss'));
+    if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DD'));
+    if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DD'));
+    if (stockStartDate && stockStartDate.isValid()) params.append('stockStartDate', stockStartDate.format('YYYY-MM-DD'));
+    if (stockEndDate && stockEndDate.isValid()) params.append('stockEndDate', stockEndDate.format('YYYY-MM-DD'));
 
     const response = await fetch(`${apiUrl}/filter?${params.toString()}`, {
       method: 'GET',
@@ -75,6 +79,7 @@ const GroupRequestPage = () => {
   const [createdByFilter, setCreatedByFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
+  const [stockDateRange, setStockDateRange] = useState([]);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -87,6 +92,7 @@ const GroupRequestPage = () => {
   useEffect(() => {
     const loadData = async () => {
       const [startDate, endDate] = dateRange || [];
+      const [stockStartDate, stockEndDate] = stockDateRange || [];
       const { content, totalPages } = await fetchGroups(
         page,
         limit,
@@ -95,16 +101,19 @@ const GroupRequestPage = () => {
         createdByFilter,
         typeFilter,
         startDate,
-        endDate
+        endDate,
+        stockStartDate,
+        stockEndDate
       );
       setData(content);
       setTotalPages(totalPages);
     };
     loadData();
-  }, [page, limit, nameFilter, statusFilter, createdByFilter, typeFilter, dateRange]);
+  }, [page, limit, nameFilter, statusFilter, createdByFilter, typeFilter, dateRange, stockDateRange]);
 
   const reloadTableData = async () => {
     const [startDate, endDate] = dateRange || [];
+    const [stockStartDate, stockEndDate] = stockDateRange || [];
     const { content, totalPages } = await fetchGroups(
       page,
       limit,
@@ -113,7 +122,9 @@ const GroupRequestPage = () => {
       createdByFilter,
       typeFilter,
       startDate,
-      endDate
+      endDate,
+      stockStartDate,
+      stockEndDate
     );
     setData(content);
     setTotalPages(totalPages);
@@ -149,32 +160,33 @@ const GroupRequestPage = () => {
     setCreatedByFilter('');
     setTypeFilter('');
     setDateRange([]);
+    setStockDateRange([]);
     reloadTableData();
   };
 
   // Hàm chuyển đổi mảng ngày thành chuỗi ISO
-  const formatCreatedDate = (dateArray) => {
-    if (!Array.isArray(dateArray) || dateArray.length < 6) return null;
-    const [year, month, day, hour, minute, second] = dateArray;
-    return dayjs(`${year}-${month}-${day}T${hour}:${minute}:${second}`).toISOString();
+  const formatDate = (dateArray) => {
+    if (!Array.isArray(dateArray) || dateArray.length < 3) return null;
+    const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
+    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div style={{ padding: '30px 50px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div style={{ padding: '15px 25px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       <h2
         style={{
           textAlign: 'left',
           fontSize: '1rem',
           fontWeight: 600,
-          marginBottom: '12px',
+          marginBottom: '8px',
           color: '#1976d2',
           lineHeight: 1.5,
           fontFamily: 'Inter, sans-serif',
         }}
       >
-        Supplier Group Management
+        Group Management
       </h2>
-      <div style={{ marginBottom: '20px', textAlign: 'right' }}>
+      <div style={{ marginBottom: '10px', textAlign: 'right' }}>
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -184,9 +196,9 @@ const GroupRequestPage = () => {
             borderColor: '#0288d1',
             color: '#fff',
             fontWeight: 600,
-            fontSize: '14px',
-            borderRadius: '10px',
-            padding: '8px 20px',
+            fontSize: '0.65rem',
+            borderRadius: '8px',
+            padding: '4px 10px',
             boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
           }}
         >
@@ -205,24 +217,27 @@ const GroupRequestPage = () => {
         setTypeFilter={setTypeFilter}
         dateRange={dateRange}
         setDateRange={setDateRange}
+        stockDateRange={stockDateRange}
+        setStockDateRange={setStockDateRange}
         setPage={setPage}
         handleSearch={handleSearch}
         handleReset={handleReset}
       />
 
-      <Row gutter={[12, 12]} wrap>
+      <Row gutter={[8, 8]} wrap>
         {Array.isArray(data) && data.length > 0 ? (
           data.map((group) => {
-            const createdDateIso = formatCreatedDate(group.createdDate);
+            const createdDateIso = formatDate(group.createdDate);
+            const stockDateIso = formatDate(group.stockDate);
             const typeStyle = {
-              padding: '3px 10px',
-              borderRadius: '6px',
-              fontSize: '12px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: '0.55rem',
               fontWeight: 600,
               color: '#fff',
               display: 'inline-block',
-              marginRight: '8px',
-              marginBottom: '6px',
+              marginRight: '4px',
+              marginBottom: '4px',
             };
             const bgColor =
               group.type === 'Requisition_urgent'
@@ -237,7 +252,7 @@ const GroupRequestPage = () => {
                   bordered={false}
                   size="small"
                   style={{
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
                     textAlign: 'center',
                     height: '100%',
@@ -249,8 +264,8 @@ const GroupRequestPage = () => {
                   <div
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                   >
-                    <span style={{ fontSize: '14px', fontWeight: 600 }}>{group.name}</span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>{group.name}</span>
+                    <div style={{ display: 'flex', gap: '4px' }}>
                       <Button
                         size="small"
                         icon={<EditOutlined />}
@@ -263,7 +278,8 @@ const GroupRequestPage = () => {
                           borderColor: '#388e3c',
                           color: '#fff',
                           fontWeight: 500,
-                          fontSize: '0.75rem',
+                          fontSize: '0.55rem',
+                          padding: '2px',
                         }}
                       />
                       <Button
@@ -275,19 +291,19 @@ const GroupRequestPage = () => {
                           borderColor: '#c62828',
                           color: '#fff',
                           fontWeight: 500,
-                          fontSize: '0.75rem',
+                          fontSize: '0.55rem',
+                          padding: '2px',
                         }}
                       />
                     </div>
                   </div>
-                  <br />
-                  <div style={{ textAlign: 'left', display: 'flex', alignItems: 'center' }}>
+                  <div style={{ textAlign: 'left', display: 'flex', alignItems: 'center', marginTop: '4px' }}>
                     <p
                       style={{
-                        fontSize: '12px',
+                        fontSize: '0.55rem',
                         margin: 0,
                         fontWeight: 600,
-                        marginRight: '8px',
+                        marginRight: '4px',
                       }}
                     >
                       <strong>Type:</strong>
@@ -300,19 +316,23 @@ const GroupRequestPage = () => {
                         : 'Unknown'}
                     </span>
                   </div>
-                  <div style={{ fontSize: '12px', textAlign: 'left', marginTop: '8px', flexGrow: 1 }}>
-                    <p style={{ margin: '2px 0' }}>
+                  <div style={{ fontSize: '0.55rem', textAlign: 'left', marginTop: '4px', flexGrow: 1 }}>
+                    <p style={{ margin: '1px 0' }}>
                       <strong>Status:</strong> {group.status}
                     </p>
-                    <p style={{ margin: '2px 0' }}>
+                    <p style={{ margin: '1px 0' }}>
                       <strong>Created By:</strong> {group.createdBy}
                     </p>
-                    <p style={{ margin: '2px 0' }}>
-                      <strong>Date:</strong>{' '}
+                    <p style={{ margin: '1px 0' }}>
+                      <strong>Created Date:</strong>{' '}
                       {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
                     </p>
+                    <p style={{ margin: '1px 0' }}>
+                      <strong>Stock Date:</strong>{' '}
+                      {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
+                    </p>
                   </div>
-                  <div style={{ marginTop: '8px' }}>
+                  <div style={{ marginTop: '4px' }}>
                     <Button
                       size="small"
                       icon={<EyeOutlined />}
@@ -331,9 +351,9 @@ const GroupRequestPage = () => {
                         borderColor: '#0288d1',
                         color: '#fff',
                         fontWeight: 600,
-                        fontSize: '0.75rem',
-                        borderRadius: '8px',
-                        padding: '6px 0',
+                        fontSize: '0.65rem',
+                        borderRadius: '6px',
+                        padding: '3px 0',
                         boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
                       }}
                     >
@@ -349,7 +369,7 @@ const GroupRequestPage = () => {
             );
           })
         ) : (
-          <div>No data available</div>
+          <div style={{ fontSize: '0.7rem', textAlign: 'center', color: '#90a4ae' }}>No data available</div>
         )}
       </Row>
 
@@ -365,15 +385,23 @@ const GroupRequestPage = () => {
         onOk={handleEditOk}
       />
 
-      <div style={{ marginTop: '20px', textAlign: 'center' }}>
+      <div style={{ marginTop: '10px', textAlign: 'center' }}>
         <Space>
-          <Button onClick={() => setPage(page > 0 ? page - 1 : 0)} disabled={page === 0}>
+          <Button 
+            onClick={() => setPage(page > 0 ? page - 1 : 0)} 
+            disabled={page === 0}
+            style={{ fontSize: '0.65rem', padding: '4px 10px' }}
+          >
             Previous
           </Button>
-          <Button onClick={() => setPage(page < totalPages - 1 ? page + 1 : page)} disabled={page >= totalPages - 1}>
+          <Button 
+            onClick={() => setPage(page < totalPages - 1 ? page + 1 : page)} 
+            disabled={page >= totalPages - 1}
+            style={{ fontSize: '0.65rem', padding: '4px 10px' }}
+          >
             Next
           </Button>
-          <span>
+          <span style={{ fontSize: '0.65rem' }}>
             Page {page + 1} of {totalPages}
           </span>
         </Space>

@@ -39,6 +39,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     purchasingSuggest: '',
     reason: '',
     remark: '',
+    remarkComparison: '',
     supplierId: '',
     groupId: groupId || '',
     productType1Id: '',
@@ -48,7 +49,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const [formData, setFormData] = useState(defaultFormData);
-  const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
+  const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
+  const [deptErrors, setDeptErrors] = useState(['']); // Lưu lỗi trùng lặp cho từng hàng
   const [saving, setSaving] = useState(false);
   const [productType1List, setProductType1List] = useState([]);
   const [productType2List, setProductType2List] = useState([]);
@@ -59,7 +61,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [translating, setTranslating] = useState(false);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [imageUrls, setImageUrls] = useState([]); // Thêm state imageUrls
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
@@ -71,13 +72,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         ...defaultFormData,
         groupId: groupId || '',
       }));
-      // Cleanup previews and imageUrls only if there are existing previews
       if (previews.length > 0) {
         previews.forEach((preview) => URL.revokeObjectURL(preview));
         setFiles([]);
         setPreviews([]);
       }
-      setImageUrls([]); // Reset imageUrls khi mở dialog
+      setDeptRows([{ department: '', qty: '', buy: '' }]);
+      setDeptErrors(['']); // Reset lỗi
     }
   }, [open, groupId]);
 
@@ -102,7 +103,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
       if (!response.ok) throw new Error('Translation failed');
       const data = await response.json();
-      const translatedText = data.translatedText || data.text || ''; // Điều chỉnh dựa trên cấu trúc phản hồi của API
+      const translatedText = data.translatedText || data.text || '';
       setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
     } catch (error) {
       console.error('Translation error:', error);
@@ -212,29 +213,45 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const handleDeptChange = (index, field, value) => {
-    const updated = [...deptRows];
-    updated[index][field] = value;
-    setDeptRows(updated);
+    const updatedRows = [...deptRows];
+    updatedRows[index][field] = field === 'department' ? value : parseFloat(value) || '';
+    setDeptRows(updatedRows);
+
+    // Kiểm tra trùng lặp phòng ban
+    const updatedErrors = deptRows.map((row, i) => {
+      if (i === index && field === 'department' && value) {
+        const isDuplicate = deptRows.some(
+          (otherRow, otherIndex) =>
+            otherIndex !== i && otherRow.department === value && value !== ''
+        );
+        return isDuplicate ? 'This department is already selected' : '';
+      }
+      return deptErrors[i] || '';
+    });
+    setDeptErrors(updatedErrors);
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '' }]);
+    setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
+    setDeptErrors([...deptErrors, '']);
   };
 
   const handleDeleteDeptRow = (index) => {
-    const updated = deptRows.filter((_, i) => i !== index);
-    setDeptRows(updated.length > 0 ? updated : [{ department: '', qty: '' }]);
+    const updatedRows = deptRows.filter((_, i) => i !== index);
+    const updatedErrors = deptErrors.filter((_, i) => i !== index);
+    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
+    setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
   };
 
-  const calcTotalRequestQty = () => {
+  const calcTotalBuy = () => {
     return deptRows.reduce((sum, row) => {
-      const q = parseFloat(row.qty);
-      return sum + (isNaN(q) ? 0 : q);
+      const b = parseFloat(row.buy);
+      return sum + (isNaN(b) ? 0 : b);
     }, 0);
   };
 
   const calcTotalPrice = () => {
-    return calcTotalRequestQty() * (formData.supplierPrice || 0);
+    return calcTotalBuy() * (formData.supplierPrice || 0);
   };
 
   const handleFileChange = (e) => {
@@ -244,7 +261,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return;
     }
 
-    const validFiles = selectedFiles.filter(file => 
+    const validFiles = selectedFiles.filter(file =>
       file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024 // Max 5MB
     );
     if (validFiles.length !== selectedFiles.length) {
@@ -254,13 +271,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     }
 
     const newFiles = [...files, ...validFiles];
-    if (newFiles.length + imageUrls.length > 10) {
-      setSnackbarMessage('You can upload a maximum of 10 images total.');
+    if (newFiles.length > 10) {
+      setSnackbarMessage('You can upload a maximum of 10 images.');
       setSnackbarOpen(true);
       return;
     }
 
-    previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
+    // Update previews
+    previews.forEach((preview) => URL.revokeObjectURL(preview));
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
@@ -274,22 +292,12 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   const handleRemoveFile = (index) => {
     console.log('Removing file at index:', index);
-    if (index < imageUrls.length) {
-      const newImageUrls = [...imageUrls];
-      const removedUrl = newImageUrls.splice(index, 1)[0];
-      setImageUrls(newImageUrls);
-      console.log('Updated imageUrls:', newImageUrls);
-    } else {
-      const adjustedIndex = index - imageUrls.length;
-      if (adjustedIndex >= 0 && adjustedIndex < previews.length) {
-        URL.revokeObjectURL(previews[adjustedIndex]);
-        const newFiles = files.filter((_, i) => i !== adjustedIndex);
-        const newPreviews = previews.filter((_, i) => i !== adjustedIndex);
-        setFiles(newFiles);
-        setPreviews(newPreviews);
-        console.log('Updated files:', newFiles.map(file => file.name));
-      }
-    }
+    URL.revokeObjectURL(previews[index]);
+    const newFiles = files.filter((_, i) => i !== index);
+    const newPreviews = previews.filter((_, i) => i !== index);
+    setFiles(newFiles);
+    setPreviews(newPreviews);
+    console.log('Updated files:', newFiles.map(file => file.name));
   };
 
   const handleAdd = async () => {
@@ -303,57 +311,62 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setSnackbarOpen(true);
       return;
     }
-    if (deptRows.every((row) => !row.department || !row.qty)) {
-      setSnackbarMessage('At least one department and quantity must be provided.');
+    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
+      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
       setSnackbarOpen(true);
       return;
     }
 
-    const deptQtyMap = {};
+    // Kiểm tra trùng lặp phòng ban
+    const departmentIds = deptRows
+      .filter((row) => row.department)
+      .map((row) => row.department);
+    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
+    if (hasDuplicates) {
+      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const deptQtyMap = { quantities: {} };
     deptRows.forEach((row) => {
-      if (row.department && row.qty) {
-        deptQtyMap[row.department] = parseFloat(row.qty) || 0;
+      if (row.department && row.qty && row.buy) {
+        deptQtyMap.quantities[row.department] = {
+          qty: parseFloat(row.qty) || 0,
+          buy: parseFloat(row.buy) || 0,
+        };
       }
     });
-
-    const totalRequestQty = Object.values(deptQtyMap).reduce((sum, val) => sum + val, 0);
 
     const formDataToSend = new FormData();
-    Object.entries({
-      englishName: formData.itemDescriptionEN || '',
-      vietnameseName: formData.itemDescriptionVN || '',
-      fullDescription: formData.fullItemDescriptionVN || '',
-      oldSapCode: formData.oldSapCode || '',
-      newSapCode: formData.newSapCode || '',
-      departmentRequestQty: JSON.stringify(deptQtyMap),
-      stock: parseFloat(formData.stock) || 0,
-      purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
-      reason: formData.reason || '',
-      remark: formData.remark || '',
-      supplierId: formData.supplierId || '',
-      groupId: formData.groupId || '',
-      productType1Id: formData.productType1Id || undefined,
-      productType2Id: formData.productType2Id || undefined,
-      totalRequestQty,
-      totalPrice: calcTotalPrice(),
-    }).forEach(([key, value]) => {
-      if (value !== undefined) {
-        formDataToSend.append(key, value);
-      }
-    });
-    files.forEach((file, index) => {
-      formDataToSend.append('files', file);
-      console.log(`Appending file ${index}: ${file.name}`);
-    });
+    formDataToSend.append('englishName', formData.itemDescriptionEN || '');
+    formDataToSend.append('vietnameseName', formData.itemDescriptionVN || '');
+    formDataToSend.append('fullDescription', formData.fullItemDescriptionVN || '');
+    formDataToSend.append('oldSapCode', formData.oldSapCode || '');
+    formDataToSend.append('newSapCode', formData.newSapCode || '');
+    formDataToSend.append('departmentRequestQty', JSON.stringify(deptQtyMap));
+    formDataToSend.append('stock', parseFloat(formData.stock) || 0);
+    formDataToSend.append('purchasingSuggest', parseFloat(formData.purchasingSuggest) || 0);
+    formDataToSend.append('reason', formData.reason || '');
+    formDataToSend.append('remark', formData.remark || '');
+    formDataToSend.append('remarkComparison', formData.remarkComparison || '');
+    formDataToSend.append('supplierId', formData.supplierId || '');
+    formDataToSend.append('groupId', formData.groupId || '');
+    formDataToSend.append('productType1Id', formData.productType1Id || '');
+    formDataToSend.append('productType2Id', formData.productType2Id || '');
 
-    for (let [key, value] of formDataToSend.entries()) {
-      console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
-    }
+    // Append files
+    files.forEach((file) => {
+      formDataToSend.append('files', file);
+    });
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/create`, {
         method: 'POST',
+        headers: {
+          'accept': '*/*',
+        },
         body: formDataToSend,
       });
       if (!res.ok) {
@@ -361,16 +374,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         throw new Error(errorData.message || `Add failed with status ${res.status}`);
       }
 
-      const data = await res.json();
-      console.log('API response:', data);
       setSnackbarMessage('Request added successfully!');
       setSnackbarOpen(true);
-
-      // Cập nhật imageUrls từ phản hồi giống EditDialog
-      if (data.requisition && data.requisition.imageUrls) {
-        setImageUrls(data.requisition.imageUrls);
-        console.log('Updated imageUrls from response:', data.requisition.imageUrls);
-      }
 
       if (typeof onRefresh === 'function') {
         await onRefresh();
@@ -378,10 +383,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       onClose();
 
       setFormData(defaultFormData);
-      setDeptRows([{ department: '', qty: '' }]);
+      setDeptRows([{ department: '', qty: '', buy: '' }]);
+      setDeptErrors(['']); // Reset lỗi
       setProductType1List([]);
       setProductType2List([]);
-      previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
+      previews.forEach((preview) => URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
     } catch (err) {
@@ -532,7 +538,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 key={index}
                 sx={{ mb: 1 }}
               >
-                <FormControl fullWidth size="small" disabled={loadingDepartments}>
+                <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
                   <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                   <Select
                     labelId={`department-label-${index}`}
@@ -553,6 +559,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                       <MenuItem disabled>No departments available</MenuItem>
                     )}
                   </Select>
+                  {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
                   {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                 </FormControl>
                 <TextField
@@ -560,6 +567,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   type="number"
                   value={row.qty}
                   onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
+                  size="small"
+                  fullWidth
+                />
+                <TextField
+                  label="Buy"
+                  type="number"
+                  value={row.buy}
+                  onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
                   size="small"
                   fullWidth
                 />
@@ -597,7 +612,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               }}
             >
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Request Qty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+                Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
@@ -650,6 +665,15 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
             multiline
             rows={2}
           />
+          <TextField
+            label="Remark Comparison"
+            value={formData.remarkComparison}
+            onChange={handleChange('remarkComparison')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
 
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
@@ -664,33 +688,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   onChange={handleFileChange}
                 />
               </Button>
-              {(files.length + imageUrls.length) > 0 && (
+              {files.length > 0 && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  {files.length + imageUrls.length} image(s) selected
+                  {files.length} image(s) selected
                 </Typography>
               )}
             </Stack>
-            {(previews.length > 0 || imageUrls.length > 0) && (
+            {previews.length > 0 && (
               <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {imageUrls.map((url, index) => (
-                  <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
-                    <img
-                      src={`${API_BASE_URL}${url}`}
-                      alt={`Image ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      onError={(e) => {
-                        console.error(`Image load failed for ${url}`, e);
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                    <IconButton
-                      sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveFile(index)}
-                    >
-                      <CloseIcon color="error" />
-                    </IconButton>
-                  </Box>
-                ))}
                 {previews.map((preview, index) => (
                   <Box key={`new-${index}`} sx={{ position: 'relative' }}>
                     <img
@@ -700,7 +705,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     />
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveFile(index + imageUrls.length)}
+                      onClick={() => handleRemoveFile(index)}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
@@ -708,8 +713,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 ))}
               </Box>
             )}
-            {files.length === 0 && imageUrls.length === 0 && (
-              <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+            {files.length === 0 && (
+              <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
                 No images selected
               </Typography>
             )}
@@ -720,7 +725,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleAdd} disabled={saving}>
+        <Button variant="contained" onClick={handleAdd} disabled={saving || deptErrors.some((error) => error)}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
         </Button>
       </DialogActions>
@@ -730,7 +735,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') ? 'error' : 'success'} sx={{ width: '100%' }}>
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

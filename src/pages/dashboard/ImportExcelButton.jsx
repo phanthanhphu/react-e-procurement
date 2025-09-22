@@ -1,34 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
-import { Button, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Select, InputLabel, FormControl, Typography } from '@mui/material';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Box } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
 export default function ImportExcelButton({ onImport, groupId }) {
   const [open, setOpen] = useState(false);
-  const [departments, setDepartments] = useState([]);
-  const [selectedDept, setSelectedDept] = useState('');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (open) {
-      setLoading(true);
-      axios
-        .get(`${API_BASE_URL}/api/departments/filter?page=0&size=10`)
-        .then((res) => {
-          const deptData = res.data.content || [];
-          setDepartments(deptData);
-          if (deptData.length > 0) setSelectedDept(deptData[0].id);
-        })
-        .catch(() => {
-          setDepartments([]);
-          setSelectedDept('');
-          setError('Failed to load departments. Please try again.');
-        })
-        .finally(() => setLoading(false));
+      setFile(null); // Reset file when dialog opens
+      setError(null); // Reset error when dialog opens
     }
   }, [open]);
 
@@ -37,7 +24,6 @@ export default function ImportExcelButton({ onImport, groupId }) {
   const handleClose = () => {
     setOpen(false);
     setFile(null);
-    setSelectedDept(departments.length > 0 ? departments[0].id : '');
     setError(null);
   };
 
@@ -64,15 +50,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
     }
   };
 
-  const handleDeptChange = (e) => {
-    setSelectedDept(e.target.value);
-  };
-
   const handleSubmit = async () => {
-    if (!selectedDept) {
-      setError('Please select a department');
-      return;
-    }
     if (!file) {
       setError('Please select an Excel file');
       return;
@@ -85,7 +63,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const url = `${API_BASE_URL}/api/summary-requisitions/upload-requisition?idPhongBan=${selectedDept}&groupId=${groupId}`;
+      const url = `${API_BASE_URL}/api/summary-requisitions/upload-requisition?groupId=${groupId}`;
 
       const response = await axios.post(url, formData, {
         headers: {
@@ -152,41 +130,31 @@ export default function ImportExcelButton({ onImport, groupId }) {
               {error}
             </Typography>
           )}
-          <FormControl fullWidth margin="normal" disabled={loading}>
-            <InputLabel id="dept-select-label">Select Department</InputLabel>
-            <Select
-              labelId="dept-select-label"
-              value={selectedDept}
-              label="Select Department"
-              onChange={handleDeptChange}
-            >
-              {departments.length > 0 ? (
-                departments.map((dept) => (
-                  <MenuItem key={dept.id} value={dept.id}>
-                    {dept.departmentName} ({dept.division})
-                  </MenuItem>
-                ))
-              ) : (
-                <MenuItem disabled>No departments available</MenuItem>
-              )}
-            </Select>
-          </FormControl>
-
           <Typography variant="subtitle1" sx={{ mt: 2 }}>
             Choose Excel File (.xlsx, .xls)
           </Typography>
-          <input
-            type="file"
-            accept=".xlsx, .xls"
-            onChange={handleFileChange}
-            style={{ marginTop: 8 }}
-            disabled={loading}
-          />
-          {file && (
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              Selected file: {file.name}
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+            <Button
+              variant="outlined"
+              component="label"
+              startIcon={<CloudUploadIcon />}
+              sx={{ mr: 2 }}
+            >
+              Upload File
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={handleFileChange}
+                hidden
+                disabled={loading}
+              />
+            </Button>
+            {file && (
+              <Typography variant="body2">
+                Selected file: {file.name}
+              </Typography>
+            )}
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={loading}>
@@ -195,7 +163,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
           <Button
             variant="contained"
             onClick={handleSubmit}
-            disabled={loading || !file || !selectedDept}
+            disabled={loading || !file}
             sx={{
               backgroundColor: 'rgba(70, 128, 255, 0.9)',
               color: '#fff',

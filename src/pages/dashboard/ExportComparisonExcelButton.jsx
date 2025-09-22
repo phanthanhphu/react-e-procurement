@@ -7,8 +7,8 @@ import { API_BASE_URL } from '../../config';
 
 export default function ExportComparisonExcelButton({ disabled, groupId }) {
   const [data, setData] = useState([]);
-  const [totalAmtVnd, setTotalAmtVnd] = useState(0); // THÊM: State để lưu totalAmtVnd từ API
-  const [totalAmtDifference, setTotalAmtDifference] = useState(0); // THÊM: State để lưu totalAmtDifference từ API
+  const [totalAmtVnd, setTotalAmtVnd] = useState(0);
+  const [totalAmtDifference, setTotalAmtDifference] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -20,8 +20,8 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
         if (!response.ok) throw new Error('Network response was not ok');
         const result = await response.json();
         setData(result.requisitions || []);
-        setTotalAmtVnd(result.totalAmtVnd || 0); // THÊM: Lấy totalAmtVnd từ API
-        setTotalAmtDifference(result.totalAmtDifference || 0); // THÊM: Lấy totalAmtDifference từ API
+        setTotalAmtVnd(result.totalAmtVnd || 0);
+        setTotalAmtDifference(result.totalAmtDifference || 0);
       } catch (error) {
         console.error('Failed to fetch data:', error);
         alert('Failed to fetch data for export. Please try again.');
@@ -43,7 +43,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
     });
     const allSupplierKeys = Array.from(allSupplierKeysSet);
 
-    const totalCols = 7 + allSupplierKeys.length + 6; // 7 fixed + n suppliers + 6 final columns
+    const totalCols = 7 + allSupplierKeys.length + 6;
     const wsData = [];
 
     // Header Row 1: COMPARISON PRICE (merged A to Z)
@@ -54,46 +54,33 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
     // Header Row 2: Item Description (merge 1-2), other fixed columns, List of Suppliers, Selected Supplier, Difference, Remark
     const headerRow2 = new Array(totalCols).fill('');
     headerRow2[0] = 'No';
-    headerRow2[1] = 'Item Description'; // Merge 1-2 for English Name and Vietnamese Name
+    headerRow2[1] = 'Item Description';
     headerRow2[3] = 'Old SAP Code';
     headerRow2[4] = 'SAP Code in New SAP';
     headerRow2[5] = 'Unit';
-    headerRow2[6] = 'Order Q\'ty';
-    headerRow2[7] = 'SUPPLIER'; // Merge 7 to 6+n
-    headerRow2[7 + allSupplierKeys.length] = 'Selected Supplier'; // Merge 7+n to 7+n+2
-    headerRow2[7 + allSupplierKeys.length + 3] = 'Difference'; // Merge 7+n+3 to 7+n+4
-    headerRow2[7 + allSupplierKeys.length + 5] = 'Remark'; // Single column for Remark
+    headerRow2[6] = 'Order Buy';
+    headerRow2[7] = 'SUPPLIER';
+    headerRow2[7 + allSupplierKeys.length] = 'Selected Supplier';
+    headerRow2[7 + allSupplierKeys.length + 3] = 'Difference';
+    headerRow2[7 + allSupplierKeys.length + 5] = 'Remark';
     wsData.push(headerRow2);
 
     // Header Row 3: Detailed columns
-    const fixedColumns = ['No', 'English Name', 'Vietnamese Name', 'Old SAP Code', 'SAP Code in New SAP', 'Unit', 'Order Q\'ty'];
-    const dynamicColumns = allSupplierKeys; // Supplier names as detailed headers
+    const fixedColumns = ['No', 'English Name', 'Vietnamese Name', 'Old SAP Code', 'SAP Code in New SAP', 'Unit', 'Order Buy'];
+    const dynamicColumns = allSupplierKeys;
     const finalColumns = ['Supplier Name', 'Price', 'Amt(VND) (Selected)', 'Amt(VND) (Difference)', '%', ''];
     wsData.push([...fixedColumns, ...dynamicColumns, ...finalColumns]);
 
     // Data rows
     data.forEach((item, index) => {
-      const { englishName, vietnameseName, oldSapCode, newSapCode, suppliers, remark, departmentRequests, unit } = item;
+      const { englishName, vietnameseName, oldSapCode, newSapCode, suppliers, remarkComparison, departmentRequests, unit, amtVnd, amtDifference, percentage } = item;
       const selectedSupplier = suppliers?.find((sup) => sup.isSelected === 1) || null;
-      const totalQty = departmentRequests?.reduce((sum, dept) => sum + (dept.quantity || 0), 0) || 0;
+      const totalBuy = departmentRequests?.reduce((sum, dept) => sum + (dept.buy || 0), 0) || 0;
 
       const supplierInfo = {};
       (suppliers || []).forEach((sup) => {
-        const amtVND = sup.amtVnd || (sup.price || 0) * totalQty;
-        supplierInfo[sup.supplierName] = `${sup.price || ''}`;
+        supplierInfo[sup.supplierName] = sup.price ? sup.price.toLocaleString('vi-VN') : '';
       });
-
-      let differenceAmt = 0;
-      let differencePercent = 0;
-      if (selectedSupplier && suppliers?.length > 1) {
-        const selectedAmt = selectedSupplier.amtVnd || (selectedSupplier.price || 0) * totalQty;
-        const otherAmts = suppliers
-          .filter((sup) => sup.supplierName !== selectedSupplier.supplierName)
-          .map((sup) => (sup.amtVnd || (sup.price || 0) * totalQty));
-        const avgOtherAmt = otherAmts.length > 0 ? otherAmts.reduce((sum, amt) => sum + amt, 0) / otherAmts.length : 0;
-        differenceAmt = selectedAmt - avgOtherAmt;
-        differencePercent = avgOtherAmt ? (differenceAmt / avgOtherAmt) * 100 : 0;
-      }
 
       const row = [
         index + 1,
@@ -102,14 +89,14 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
         oldSapCode || '',
         newSapCode || '',
         unit || '',
-        totalQty,
+        totalBuy,
         ...allSupplierKeys.map((key) => supplierInfo[key] || ''),
         selectedSupplier ? selectedSupplier.supplierName : '',
-        selectedSupplier ? selectedSupplier.price || '' : '',
-        selectedSupplier ? (selectedSupplier.amtVnd || (selectedSupplier.price || 0) * totalQty).toLocaleString('vi-VN') : '',
-        differenceAmt.toLocaleString('vi-VN'),
-        `${differencePercent.toFixed(2)}%`,
-        remark || '',
+        selectedSupplier ? selectedSupplier.price?.toLocaleString('vi-VN') || '' : '',
+        amtVnd ? amtVnd.toLocaleString('vi-VN') : '',
+        amtDifference ? amtDifference.toLocaleString('vi-VN') : '',
+        percentage ? `${percentage.toFixed(2)}%` : '0%',
+        remarkComparison || '',
       ];
       wsData.push(row);
     });
@@ -119,8 +106,8 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
     // Total row
     const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'TOTAL';
-    totalRow[7 + allSupplierKeys.length + 2] = totalAmtVnd.toLocaleString('vi-VN'); // THÊM: Sử dụng totalAmtVnd từ API
-    totalRow[7 + allSupplierKeys.length + 3] = totalAmtDifference.toLocaleString('vi-VN'); // THÊM: Sử dụng totalAmtDifference từ API
+    totalRow[7 + allSupplierKeys.length + 2] = totalAmtVnd.toLocaleString('vi-VN');
+    totalRow[7 + allSupplierKeys.length + 3] = totalAmtDifference.toLocaleString('vi-VN');
     wsData.push(totalRow);
 
     // Signature rows
@@ -137,7 +124,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
       { title: 'Purchasing Manager', name: 'Mr. EJ KIM' },
     ];
 
-    const sigWidth = 3; // Width of each signature
+    const sigWidth = 3;
     const totalSigWidth = signaturePositions.length * sigWidth;
     const colStep = Math.floor((totalCols - totalSigWidth) / (signaturePositions.length + 1));
     const startPositions = [];
@@ -221,25 +208,23 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
       }
     }
 
-    // Updated merges
     const supplierStartCol = 7;
     const supplierEndCol = 6 + allSupplierKeys.length;
     const merges = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // COMPARISON PRICE
-      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } }, // Item Description (merge English Name and Vietnamese Name horizontally)
-      { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } }, // Old SAP Code
-      { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } }, // SAP Code in New SAP
-      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } }, // Unit
-      { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } }, // Order Q'ty
-      { s: { r: 1, c: supplierStartCol }, e: { r: 1, c: supplierEndCol } }, // List of Suppliers
-      { s: { r: 1, c: 7 + allSupplierKeys.length }, e: { r: 1, c: 7 + allSupplierKeys.length + 2 } }, // Selected Supplier
-      { s: { r: 1, c: 7 + allSupplierKeys.length + 3 }, e: { r: 1, c: 7 + allSupplierKeys.length + 4 } }, // Difference
-      { s: { r: 1, c: 7 + allSupplierKeys.length + 5 }, e: { r: 2, c: 7 + allSupplierKeys.length + 5 } }, // Remark
-      { s: { r: dataEndRow, c: 0 }, e: { r: dataEndRow, c: 6 } }, // TOTAL
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
+      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } },
+      { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
+      { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
+      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
+      { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } },
+      { s: { r: 1, c: supplierStartCol }, e: { r: 1, c: supplierEndCol } },
+      { s: { r: 1, c: 7 + allSupplierKeys.length }, e: { r: 1, c: 7 + allSupplierKeys.length + 2 } },
+      { s: { r: 1, c: 7 + allSupplierKeys.length + 3 }, e: { r: 1, c: 7 + allSupplierKeys.length + 4 } },
+      { s: { r: 1, c: 7 + allSupplierKeys.length + 5 }, e: { r: 2, c: 7 + allSupplierKeys.length + 5 } },
+      { s: { r: dataEndRow, c: 0 }, e: { r: dataEndRow, c: 6 } },
     ];
 
-    // Signature merges
     startPositions.forEach((startCol, index) => {
       const endCol = Math.min(startCol + sigWidth - 1, totalCols - 1);
       if (startCol < totalCols) {
@@ -250,22 +235,21 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
 
     ws['!merges'] = merges;
 
-    // Set column widths
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
-    ws['!cols'][0] = { wch: 5 }; // No
-    ws['!cols'][1] = { wch: 20 }; // English Name
-    ws['!cols'][2] = { wch: 20 }; // Vietnamese Name
-    ws['!cols'][3] = { wch: 15 }; // Old SAP Code
-    ws['!cols'][4] = { wch: 15 }; // SAP Code in New SAP
-    ws['!cols'][5] = { wch: 10 }; // Unit
-    ws['!cols'][6] = { wch: 10 }; // Order Q'ty
-    allSupplierKeys.forEach((_, idx) => { ws['!cols'][7 + idx] = { wch: 15 }; }); // Supplier columns
-    ws['!cols'][7 + allSupplierKeys.length] = { wch: 20 }; // Selected Supplier Name
-    ws['!cols'][7 + allSupplierKeys.length + 1] = { wch: 15 }; // Price
-    ws['!cols'][7 + allSupplierKeys.length + 2] = { wch: 20 }; // Amt(VND) (Selected)
-    ws['!cols'][7 + allSupplierKeys.length + 3] = { wch: 15 }; // Amt(VND) (Difference)
-    ws['!cols'][7 + allSupplierKeys.length + 4] = { wch: 10 }; // Difference %
-    ws['!cols'][7 + allSupplierKeys.length + 5] = { wch: 30 }; // Remark
+    ws['!cols'][0] = { wch: 5 };
+    ws['!cols'][1] = { wch: 20 };
+    ws['!cols'][2] = { wch: 20 };
+    ws['!cols'][3] = { wch: 15 };
+    ws['!cols'][4] = { wch: 15 };
+    ws['!cols'][5] = { wch: 10 };
+    ws['!cols'][6] = { wch: 10 };
+    allSupplierKeys.forEach((_, idx) => { ws['!cols'][7 + idx] = { wch: 15 }; });
+    ws['!cols'][7 + allSupplierKeys.length] = { wch: 20 };
+    ws['!cols'][7 + allSupplierKeys.length + 1] = { wch: 15 };
+    ws['!cols'][7 + allSupplierKeys.length + 2] = { wch: 20 };
+    ws['!cols'][7 + allSupplierKeys.length + 3] = { wch: 15 };
+    ws['!cols'][7 + allSupplierKeys.length + 4] = { wch: 10 };
+    ws['!cols'][7 + allSupplierKeys.length + 5] = { wch: 30 };
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`);

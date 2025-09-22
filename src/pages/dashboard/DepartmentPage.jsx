@@ -195,7 +195,7 @@ export default function DepartmentManagement() {
   };
 
   return (
-    <div style={{ padding: '40px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div style={{ padding: '15px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       <Typography
         variant="h4"
         gutterBottom
@@ -203,7 +203,7 @@ export default function DepartmentManagement() {
           textAlign: 'left',
           fontSize: '1rem',
           fontWeight: 600,
-          marginBottom: '12px',
+          marginBottom: '8px',
           color: '#1976d2',
           lineHeight: 1.5,
           fontFamily: 'Inter, sans-serif',
@@ -213,7 +213,7 @@ export default function DepartmentManagement() {
       </Typography>
 
       {/* Search + Add Button Row */}
-      <Grid container alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Grid container alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
         <Grid item>
           <DepartmentSearch
             searchValue={divisionFilter}
@@ -235,10 +235,10 @@ export default function DepartmentManagement() {
               fontWeight: 500,
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              height: '40px',
+              px: 1.5,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
+              height: '30px',
             }}
           >
             Add Department
@@ -247,12 +247,12 @@ export default function DepartmentManagement() {
       </Grid>
 
       {/* Department List */}
-      <Grid container spacing={3} justifyContent="flex-start">
+      <Grid container spacing={1.5} justifyContent="flex-start">
         {loading ? (
           <Typography
             variant="h6"
             align="center"
-            sx={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', mt: 4 }}
+            sx={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', fontSize: '0.7rem', mt: 1.5 }}
           >
             Loading departments...
           </Typography>
@@ -260,24 +260,24 @@ export default function DepartmentManagement() {
           <Typography
             variant="h6"
             align="center"
-            sx={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', mt: 4 }}
+            sx={{ width: '100%', color: '#9ca3af', fontStyle: 'italic', fontSize: '0.7rem', mt: 1.5 }}
           >
             No departments found.
           </Typography>
         ) : (
           departments.map((dep) => (
             <Grid item xs={12} sm={6} md={1.5} key={dep.id}>
-              <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
-                <Stack spacing={2} alignItems="center">
+              <Paper elevation={3} sx={{ p: 1, height: '100%' }}>
+                <Stack spacing={1} alignItems="center">
                   <img
                     src={dep.image}
                     alt={dep.departmentName}
                     style={{
-                      width: '72px',
-                      height: '72px',
+                      width: '48px',
+                      height: '48px',
                       objectFit: 'cover',
-                      borderRadius: '12px',
-                      border: '2px solid #e0f2fe',
+                      borderRadius: '8px',
+                      border: '1px solid #e0f2fe',
                       background: '#f0f9ff',
                     }}
                   />
@@ -288,6 +288,7 @@ export default function DepartmentManagement() {
                       fontFamily: 'Poppins, sans-serif',
                       color: '#374151',
                       textAlign: 'center',
+                      fontSize: '0.55rem',
                     }}
                   >
                     {dep.departmentName}
@@ -298,21 +299,22 @@ export default function DepartmentManagement() {
                       fontFamily: 'Poppins, sans-serif',
                       color: '#6b7280',
                       textAlign: 'center',
+                      fontSize: '0.55rem',
                     }}
                   >
                     {dep.division}
                   </Typography>
-                  <Stack direction="row" spacing={2}>
+                  <Stack direction="row" spacing={1}>
                     <IconButton
                       onClick={() => handleEdit(dep)}
                       sx={{
                         background: 'linear-gradient(135deg, #90caf9 0%, #42a5f5 100%)',
                         color: '#fff',
                         borderRadius: '50%',
-                        p: 1,
+                        p: 0.5,
                       }}
                     >
-                      <EditIcon />
+                      <EditIcon fontSize="small" />
                     </IconButton>
                     <IconButton
                       onClick={() => handleDelete(dep)}
@@ -320,10 +322,10 @@ export default function DepartmentManagement() {
                         background: 'linear-gradient(135deg, #ef9a9a 0%, #e57373 100%)',
                         color: '#fff',
                         borderRadius: '50%',
-                        p: 1,
+                        p: 0.5,
                       }}
                     >
-                      <DeleteIcon />
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
                   </Stack>
                 </Stack>
@@ -334,15 +336,18 @@ export default function DepartmentManagement() {
       </Grid>
 
       {/* Pagination Controls */}
-      <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 3 }}>
+      <Stack direction="row" spacing={0.5} justifyContent="center" sx={{ mt: 1.5 }}>
         <Button
           onClick={() => handlePageChange(page - 1)}
           disabled={page === 0}
           sx={{
             bgcolor: '#f0f0f0',
             color: '#9e9e9e',
-            borderRadius: '8px',
+            borderRadius: '6px',
             textTransform: 'none',
+            fontSize: '0.65rem',
+            px: 1,
+            py: 0.3,
             '&:hover': {
               bgcolor: '#d6d6d6',
             },
@@ -355,7 +360,7 @@ export default function DepartmentManagement() {
         >
           Previous
         </Button>
-        <Typography variant="body1" sx={{ alignSelf: 'center' }}>
+        <Typography variant="body1" sx={{ alignSelf: 'center', fontSize: '0.65rem' }}>
           Page {page + 1} / {totalPages}
         </Typography>
         <Button
@@ -364,8 +369,11 @@ export default function DepartmentManagement() {
           sx={{
             bgcolor: '#f0f0f0',
             color: '#9e9e9e',
-            borderRadius: '8px',
+            borderRadius: '6px',
             textTransform: 'none',
+            fontSize: '0.65rem',
+            px: 1,
+            py: 0.3,
             '&:hover': {
               bgcolor: '#d6d6d6',
             },
@@ -381,6 +389,23 @@ export default function DepartmentManagement() {
       </Stack>
 
       {/* Dialogs */}
+      <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
+        <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Department</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
+            Are you sure you want to delete this department?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} variant="contained" color="error" sx={{ fontSize: '0.65rem' }}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <EditDepartmentDialog
         open={editDialogOpen}
         onClose={handleCancelEdit}
@@ -393,23 +418,6 @@ export default function DepartmentManagement() {
         onClose={() => setAddDialogOpen(false)}
         onAdd={handleAdd}
       />
-
-      <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
-        <DialogTitle>Delete Department</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151' }}>
-            Are you sure you want to delete this department?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={handleConfirmDelete} variant="contained" color="error">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
     </div>
   );
 }

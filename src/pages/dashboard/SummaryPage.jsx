@@ -40,7 +40,7 @@ const headers = [
   { label: 'SAP Code in New SAP', key: 'newSapCode' },
   { label: 'Order Unit', key: 'unit' },
   { label: 'Department', key: 'departmentRequests' },
-  { label: 'Total qty', key: 'totalRequestQty' },
+  { label: 'Buying Qty', key: 'sumBuy' },
   { label: 'Supplier', key: 'supplierName' },
   { label: 'Sup. price', key: 'supplierPrice' },
   { label: 'Total price', key: 'totalPrice' },
@@ -54,14 +54,14 @@ const headers = [
 
 function DeptRequestTable({ departmentRequests }) {
   if (!departmentRequests || departmentRequests.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Data</Typography>;
   }
 
   return (
     <Table
       size="small"
       sx={{
-        minWidth: 180,
+        minWidth: 160,
         border: '1px solid #ddd',
         borderRadius: 1,
         overflow: 'hidden',
@@ -73,9 +73,9 @@ function DeptRequestTable({ departmentRequests }) {
           <TableCell
             sx={{
               fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
+              fontSize: '0.55rem',
+              py: 0.2,
+              px: 0.3,
               color: '#1976d2',
             }}
           >
@@ -85,13 +85,25 @@ function DeptRequestTable({ departmentRequests }) {
             align="center"
             sx={{
               fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
+              fontSize: '0.55rem',
+              py: 0.2,
+              px: 0.3,
               color: '#1976d2',
             }}
           >
-            Qty
+            Request Qty
+          </TableCell>
+          <TableCell
+            align="center"
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.55rem',
+              py: 0.2,
+              px: 0.3,
+              color: '#1976d2',
+            }}
+          >
+            Buy
           </TableCell>
         </TableRow>
       </TableHead>
@@ -102,14 +114,17 @@ function DeptRequestTable({ departmentRequests }) {
             sx={{
               '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
               '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
-              fontSize: '0.75rem',
+              fontSize: '0.55rem',
             }}
           >
-            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>
+            <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1' }}>
               {dept.departmentName}
             </TableCell>
-            <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
-              {dept.quantity}
+            <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600 }}>
+              {dept.qty}
+            </TableCell>
+            <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600 }}>
+              {dept.buy}
             </TableCell>
           </TableRow>
         ))}
@@ -243,7 +258,6 @@ export default function SummaryPage() {
 
   const handleNavigateToComparison = () => {
     console.log('Navigating to:', `/dashboard/comparison/${groupId}`);
-    // Bỏ qua cảnh báo và chỉ cần điều hướng đến trang
     navigate(`/dashboard/comparison/${groupId}`);
   };
 
@@ -273,8 +287,8 @@ export default function SummaryPage() {
   return (
     <Box
       sx={{
-        p: 3,
-        fontSize: '0.85rem',
+        p: 1,
+        fontSize: '0.65rem',
         fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
         backgroundColor: '#f5f8fa',
         minHeight: '100vh',
@@ -284,7 +298,7 @@ export default function SummaryPage() {
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        mb={3}
+        mb={1}
         sx={{ userSelect: 'none' }}
       >
         <Typography
@@ -293,13 +307,14 @@ export default function SummaryPage() {
             fontWeight: 700,
             color: theme.palette.primary.dark,
             letterSpacing: '0.05em',
+            fontSize: '1rem',
           }}
         >
           Requisition Urgent
         </Typography>
 
-        <Stack direction="row" spacing={2}>
-          <ExportExcelButton data={data} />
+        <Stack direction="row" spacing={0.5}>
+          <ExportExcelButton data={data} groupId={groupId} />
           <ImportExcelButton
             onImport={(importedData) => {
               console.log('Imported data:', importedData);
@@ -313,10 +328,10 @@ export default function SummaryPage() {
             sx={{
               textTransform: 'none',
               borderRadius: 2,
-              px: 3,
-              py: 0.75,
+              px: 1,
+              py: 0.2,
               fontWeight: 700,
-              fontSize: '0.85rem',
+              fontSize: '0.65rem',
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
               boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
@@ -335,10 +350,10 @@ export default function SummaryPage() {
             sx={{
               textTransform: 'none',
               borderRadius: 2,
-              px: 3,
-              py: 0.75,
+              px: 1,
+              py: 0.2,
               fontWeight: 700,
-              fontSize: '0.85rem',
+              fontSize: '0.65rem',
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
               boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
@@ -361,14 +376,14 @@ export default function SummaryPage() {
       />
 
       {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
           Loading data...
         </Typography>
       )}
       {error && (
         <Typography
           align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.9rem', mt: 4 }}
+          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}
         >
           {error}
         </Typography>
@@ -380,29 +395,28 @@ export default function SummaryPage() {
             component={Paper}
             elevation={4}
             sx={{
-              borderRadius: 2,
               overflowX: 'auto',
-              maxHeight: 640,
+              maxHeight: 450,
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1800 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total qty', 'Stock', 'Images', 'Actions'].includes(label)
+                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total Buy', 'Stock', 'Images', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
                       sx={{
                         fontWeight: 'bold',
-                        fontSize: '0.75rem',
+                        fontSize: '0.55rem',
                         color: '#ffffff',
-                        py: 1,
-                        px: 1,
+                        py: 0.2,
+                        px: 0.4,
                         whiteSpace: 'nowrap',
                         borderRight: '1px solid rgba(255,255,255,0.15)',
                         '&:last-child': { borderRight: 'none' },
@@ -410,6 +424,7 @@ export default function SummaryPage() {
                         top: 0,
                         zIndex: 20,
                         backgroundColor: '#027aff',
+                        ...(key === 'no' && { left: 0, zIndex: 21 }), // Cố định cột "No" với left: 0 và tăng zIndex
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -422,10 +437,7 @@ export default function SummaryPage() {
               <TableBody>
                 {displayData.length > 0 ? (
                   displayData.map((item, idx) => {
-                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests } = item;
-                    const totalRequestQty = departmentRequests.reduce((sum, dept) => sum + dept.quantity, 0);
-                    const price = supplierProduct?.price ?? 0;
-                    const totalPrice = price * totalRequestQty;
+                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests, sumBuy, totalPrice } = item;
                     const imageUrls = requisition.imageUrls || supplierProduct?.imageUrls || [];
 
                     return (
@@ -437,7 +449,7 @@ export default function SummaryPage() {
                             backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
                           },
-                          fontSize: '0.8rem',
+                          fontSize: '0.55rem',
                           cursor: 'default',
                           userSelect: 'none',
                         }}
@@ -445,65 +457,66 @@ export default function SummaryPage() {
                         <TableCell
                           align="center"
                           sx={{
-                            px: 2,
-                            py: 1.2,
+                            px: 0.4,
+                            py: 0.2,
                             position: 'sticky',
                             left: 0,
                             zIndex: 1,
                             backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            fontSize: '0.55rem',
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {productType1Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {productType2Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
                           {requisition.englishName || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.vietnameseName || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.oldSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.newSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {supplierProduct?.unit || ''}
                         </TableCell>
-                        <TableCell sx={{ px: 2, py: 1.2 }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={departmentRequests} />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 600 }}>
-                          {totalRequestQty}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
+                          {sumBuy || 0}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {supplierProduct?.supplierName || ''}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2 }}>
-                          {price ? price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+                        <TableCell align="right" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {supplierProduct?.price ? supplierProduct.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
+                        <TableCell align="right" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
                           {totalPrice ? totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.stock || 0}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.purchasingSuggest || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.reason || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.remark || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
                           {imageUrls.length > 0 ? (
                             <IconButton
                               size="small"
@@ -514,13 +527,13 @@ export default function SummaryPage() {
                               <ImageIcon fontSize="small" />
                             </IconButton>
                           ) : (
-                            <Typography sx={{ fontSize: '0.7rem', color: '#888' }}>
+                            <Typography sx={{ fontSize: '0.55rem', color: '#888' }}>
                               No Images
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          <Stack direction="row" spacing={1} justifyContent="center">
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
+                          <Stack direction="row" spacing={0.2} justifyContent="center">
                             <IconButton
                               aria-label="edit"
                               color="primary"
@@ -529,6 +542,7 @@ export default function SummaryPage() {
                                 backgroundColor: 'rgba(25, 118, 210, 0.1)',
                                 '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
                                 borderRadius: 1,
+                                p: 0.2,
                               }}
                               onClick={() => handleOpenEditDialog(item)}
                             >
@@ -542,6 +556,7 @@ export default function SummaryPage() {
                                 backgroundColor: 'rgba(211, 47, 47, 0.1)',
                                 '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
                                 borderRadius: 1,
+                                p: 0.2,
                               }}
                               onClick={() => handleDelete(requisition.id)}
                             >
@@ -554,10 +569,10 @@ export default function SummaryPage() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 6, color: '#90a4ae' }}>
-                      <Stack direction="column" alignItems="center" spacing={2}>
-                        <InboxIcon fontSize="large" />
-                        <Typography>No data available.</Typography>
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
+                      <Stack direction="column" alignItems="center" spacing={0.5}>
+                        <InboxIcon fontSize="small" />
+                        <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -578,16 +593,16 @@ export default function SummaryPage() {
           >
             <Box
               sx={{
-                p: 2,
-                maxWidth: 400,
-                maxHeight: 400,
+                p: 0.5,
+                maxWidth: 250,
+                maxHeight: 250,
                 overflowY: 'auto',
               }}
               onMouseEnter={handlePopoverEnter}
               onMouseLeave={handlePopoverLeave}
             >
               {popoverImgSrcs.length > 0 ? (
-                <Stack direction="column" spacing={2}>
+                <Stack direction="column" spacing={0.5}>
                   {popoverImgSrcs.map((imgSrc, index) => (
                     <Box key={index} sx={{ textAlign: 'center' }}>
                       <img
@@ -595,7 +610,7 @@ export default function SummaryPage() {
                         alt={`Product Image ${index + 1}`}
                         style={{
                           maxWidth: '100%',
-                          maxHeight: 300,
+                          maxHeight: 180,
                           borderRadius: 4,
                           objectFit: 'contain',
                         }}
@@ -606,14 +621,14 @@ export default function SummaryPage() {
                           e.target.alt = 'Failed to load';
                         }}
                       />
-                      <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#555' }}>
+                      <Typography sx={{ mt: 0.2, fontSize: '0.7rem', color: '#555' }}>
                         Image {index + 1}
                       </Typography>
                     </Box>
                   ))}
                 </Stack>
               ) : (
-                <Typography sx={{ p: 2, fontSize: '0.9rem' }}>No images available</Typography>
+                <Typography sx={{ p: 0.5, fontSize: '0.7rem' }}>No images available</Typography>
               )}
             </Box>
           </Popover>
@@ -628,12 +643,12 @@ export default function SummaryPage() {
             onRowsPerPageChange={handleChangeRowsPerPage}
             labelRowsPerPage="Rows per page:"
             sx={{
-              mt: 3,
+              mt: 1,
               '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                fontSize: '0.85rem',
+                fontSize: '0.65rem',
                 color: theme.palette.text.secondary,
               },
-              '.MuiTablePagination-select': { fontSize: '0.85rem' },
+              '.MuiTablePagination-select': { fontSize: '0.65rem' },
               '.MuiTablePagination-actions > button': {
                 color: theme.palette.primary.main,
               },

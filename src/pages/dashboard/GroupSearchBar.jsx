@@ -35,11 +35,11 @@ export default function GroupSearchBar({
     <Paper
       elevation={3}
       sx={{
-        p: 3,
-        mb: 3,
+        p: 1.5,
+        mb: 1.5,
         background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 3,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
         border: `1px solid ${theme.palette.divider}`,
         overflowX: 'auto',
         maxWidth: '100%',
@@ -50,11 +50,12 @@ export default function GroupSearchBar({
         sx={{
           display: 'flex',
           flexWrap: 'nowrap',
-          gap: 2,
+          gap: 1,
           alignItems: 'center',
+          minHeight: '60px', // Tăng chiều cao của toàn bộ thẻ body chứa input
         }}
       >
-        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <TextField
             fullWidth
             label="Request Group Name"
@@ -65,12 +66,16 @@ export default function GroupSearchBar({
               setPage(0);
               setNameFilter(e.target.value);
             }}
-            InputProps={{ sx: { borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
-            <InputLabel>Status</InputLabel>
+            <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Status</InputLabel>
             <Select
               value={statusFilter || ''}
               label="Status"
@@ -78,16 +83,21 @@ export default function GroupSearchBar({
                 setPage(0);
                 setStatusFilter(e.target.value);
               }}
-              sx={{ borderRadius: '8px' }}
+              sx={{
+                height: '30px',
+                borderRadius: '6px',
+                fontSize: '0.55rem',
+                '& .MuiSelect-select': { padding: '8px' },
+              }}
             >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="Not Started">Not Started</MenuItem>
-              <MenuItem value="In Progress">In Progress</MenuItem>
-              <MenuItem value="Completed">Completed</MenuItem>
+              <MenuItem value="" sx={{ fontSize: '0.55rem' }}>All</MenuItem>
+              <MenuItem value="Not Started" sx={{ fontSize: '0.55rem' }}>Not Started</MenuItem>
+              <MenuItem value="In Progress" sx={{ fontSize: '0.55rem' }}>In Progress</MenuItem>
+              <MenuItem value="Completed" sx={{ fontSize: '0.55rem' }}>Completed</MenuItem>
             </Select>
           </FormControl>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 120, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <TextField
             fullWidth
             label="Created By (User)"
@@ -98,12 +108,16 @@ export default function GroupSearchBar({
               setPage(0);
               setCreatedByFilter(e.target.value);
             }}
-            InputProps={{ sx: { borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 150, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
-            <InputLabel>Type</InputLabel>
+            <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Type</InputLabel>
             <Select
               value={typeFilter || ''}
               label="Type"
@@ -111,21 +125,27 @@ export default function GroupSearchBar({
                 setPage(0);
                 setTypeFilter(e.target.value);
               }}
-              sx={{ borderRadius: '8px' }}
+              sx={{
+                height: '30px',
+                borderRadius: '6px',
+                fontSize: '0.55rem',
+                '& .MuiSelect-select': { padding: '8px' },
+              }}
             >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="Requisition_urgent">Requisition Urgent</MenuItem>
-              <MenuItem value="Requisition_monthly">Requisition Monthly</MenuItem>
+              <MenuItem value="" sx={{ fontSize: '0.55rem' }}>All</MenuItem>
+              <MenuItem value="Requisition_urgent" sx={{ fontSize: '0.55rem' }}>Requisition Urgent</MenuItem>
+              <MenuItem value="Requisition_monthly" sx={{ fontSize: '0.55rem' }}>Requisition Monthly</MenuItem>
             </Select>
           </FormControl>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 200, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 150, flexShrink: 1 }}>
           <RangePicker
             style={{
               width: '100%',
-              padding: '8px',
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              padding: '6px',
+              borderRadius: '6px',
+              fontSize: '0.55rem',
+              height: '30px',
             }}
             value={dateRange}
             onChange={(dates) => {
@@ -136,7 +156,7 @@ export default function GroupSearchBar({
             placeholder={['Start Date', 'End Date']}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 80, flexShrink: 1 }}>
           <Button
             variant="contained"
             onClick={() => {
@@ -148,17 +168,18 @@ export default function GroupSearchBar({
               fontWeight: 500,
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              height: '40px',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
+              height: '30px',
               width: '100%',
             }}
           >
             Search
           </Button>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '14.29%', minWidth: 80, flexShrink: 1 }}>
           <Button
             variant="outlined"
             onClick={() => {
@@ -168,12 +189,13 @@ export default function GroupSearchBar({
             sx={{
               textTransform: 'none',
               fontWeight: 500,
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
-              height: '40px',
+              height: '30px',
               width: '100%',
             }}
           >

@@ -72,12 +72,12 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
   const open = Boolean(anchorEl);
 
   if (!supplierProducts || supplierProducts.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.8rem' }}>No Data</Typography>;
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.7rem', color: '#666' }}>No Data</Typography>;
   }
 
   return (
-    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto' }}>
-      <Table size="small" sx={{ minWidth: 180, border: '1px solid #ccc', borderRadius: 1 }}>
+    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
+      <Table size="small" sx={{ minWidth: 1400 }}>
         <TableHead>
           <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
             {headers.map(({ label, key }) => (
@@ -86,10 +86,10 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                 align={label === 'Action' || label === 'Images' ? 'center' : 'left'}
                 sx={{
                   fontWeight: 'bold',
-                  fontSize: '0.75rem',
+                  fontSize: '0.55rem',
                   color: '#ffffff',
-                  py: 1,
-                  px: 1,
+                  py: 0.2,
+                  px: 0.4,
                   whiteSpace: 'nowrap',
                   borderRight: '1px solid rgba(255,255,255,0.15)',
                   '&:last-child': { borderRight: 'none' },
@@ -97,6 +97,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   top: 0,
                   zIndex: 1,
                   backgroundColor: '#027aff',
+                  ...(key === 'no' && { left: 0, zIndex: 2 }), // Cố định cột "No" với left: 0
                 }}
               >
                 {label}
@@ -114,62 +115,62 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                 cursor: 'pointer',
               }}
             >
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>
                 {idx + 1 + page * rowsPerPage}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.supplierName}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.sapCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.itemNo || 'N/A'}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierName}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.sapCode}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.itemNo || 'N/A'}</TableCell>
               <TableCell
                 sx={{
-                  fontSize: '0.75rem',
-                  py: 1,
-                  px: 1,
+                  fontSize: '0.55rem',
+                  py: 0.2,
+                  px: 0.4,
                   whiteSpace: 'normal',
                   wordBreak: 'break-word',
-                  width: '300px',
+                  width: '200px',
                 }}
               >
                 {product.itemDescription || 'N/A'}
               </TableCell>
               <TableCell
                 sx={{
-                  fontSize: '0.75rem',
-                  py: 1,
-                  px: 1,
+                  fontSize: '0.55rem',
+                  py: 0.2,
+                  px: 0.4,
                   whiteSpace: 'normal',
                   wordBreak: 'break-word',
-                  width: '300px',
+                  width: '200px',
                 }}
               >
                 {product.fullDescription || 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.size}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.size}</TableCell>
               <TableCell
                 sx={{
-                  fontSize: '0.75rem',
-                  py: 1,
-                  px: 1,
+                  fontSize: '0.55rem',
+                  py: 0.2,
+                  px: 0.4,
                   whiteSpace: 'normal',
                   wordBreak: 'break-word',
-                  width: '300px',
+                  width: '200px',
                 }}
               >
                 {product.materialGroupFullDescription || 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.unit}</TableCell>
-              <TableCell align="left" sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.unit}</TableCell>
+              <TableCell align="left" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
                 {product.price ? product.price.toLocaleString() : 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>{product.currency || 'N/A'}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.currency || 'N/A'}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
                 {product.productType1Name || 'N/A'}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 1, px: 1 }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
                 {product.productType2Name || 'N/A'}
               </TableCell>
-              <TableCell align="center" sx={{ py: 1, px: 1 }}>
+              <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
                 {product.imageUrls && product.imageUrls.length > 0 ? (
                   <IconButton
                     size="small"
@@ -180,11 +181,11 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                     <ImageIcon fontSize="small" />
                   </IconButton>
                 ) : (
-                  <Typography sx={{ fontSize: '0.7rem', color: '#888' }}>No Images</Typography>
+                  <Typography sx={{ fontSize: '0.55rem', color: '#888' }}>No Images</Typography>
                 )}
               </TableCell>
-              <TableCell align="center" sx={{ py: 1, px: 1 }}>
-                <Stack direction="row" spacing={1} justifyContent="center">
+              <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
+                <Stack direction="row" spacing={0.5} justifyContent="center">
                   <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
                     <EditIcon fontSize="small" />
                   </IconButton>
@@ -209,16 +210,16 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
       >
         <Box
           sx={{
-            p: 2,
-            maxWidth: 400,
-            maxHeight: 400,
+            p: 1,
+            maxWidth: 300,
+            maxHeight: 300,
             overflowY: 'auto',
           }}
           onMouseEnter={handlePopoverEnter}
           onMouseLeave={handlePopoverLeave}
         >
           {popoverImgSrcs.length > 0 ? (
-            <Stack direction="column" spacing={2}>
+            <Stack direction="column" spacing={1}>
               {popoverImgSrcs.map((imgSrc, index) => (
                 <Box key={index} sx={{ textAlign: 'center' }}>
                   <img
@@ -226,7 +227,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                     alt={`Product Image ${index + 1}`}
                     style={{
                       maxWidth: '100%',
-                      maxHeight: 300,
+                      maxHeight: 200,
                       borderRadius: 4,
                       objectFit: 'contain',
                     }}
@@ -237,14 +238,14 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                       e.target.alt = 'Failed to load';
                     }}
                   />
-                  <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#555' }}>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.7rem', color: '#555' }}>
                     Image {index + 1}
                   </Typography>
                 </Box>
               ))}
             </Stack>
           ) : (
-            <Typography sx={{ p: 2, fontSize: '0.9rem' }}>No images available</Typography>
+            <Typography sx={{ p: 1, fontSize: '0.7rem' }}>No images available</Typography>
           )}
         </Box>
       </Popover>
@@ -403,11 +404,11 @@ export default function SupplierProductsPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+    <Box sx={{ p: 1, fontSize: '0.65rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1rem' }}>
         Supplier Products
       </Typography>
-      <Stack direction="row" spacing={2} mb={2} justifyContent="flex-end" alignItems="center">
+      <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end" alignItems="center">
         <Button
           variant="contained"
           startIcon={<FileUploadIcon />}
@@ -416,8 +417,10 @@ export default function SupplierProductsPage() {
             background: 'linear-gradient(to right, #4cb8ff, #027aff)',
             color: '#fff',
             textTransform: 'none',
-            px: 3,
-            borderRadius: '20px',
+            px: 1.5,
+            py: 0.3,
+            borderRadius: '8px',
+            fontSize: '0.65rem',
             '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
         >
@@ -438,8 +441,10 @@ export default function SupplierProductsPage() {
             background: 'linear-gradient(to right, #4cb8ff, #027aff)',
             color: '#fff',
             textTransform: 'none',
-            px: 3,
-            borderRadius: '20px',
+            px: 1.5,
+            py: 0.3,
+            borderRadius: '8px',
+            fontSize: '0.65rem',
             '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
         >
@@ -481,6 +486,19 @@ export default function SupplierProductsPage() {
           fetchData();
         }}
       />
+      {loading && (
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
+          Loading data...
+        </Typography>
+      )}
+      {error && (
+        <Typography
+          align="center"
+          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}
+        >
+          {error}
+        </Typography>
+      )}
       <SupplierProductsTable
         supplierProducts={data}
         handleDelete={handleDelete}
@@ -496,7 +514,17 @@ export default function SupplierProductsPage() {
         page={page}
         onPageChange={handleChangePage}
         onRowsPerPageChange={handleChangeRowsPerPage}
-        sx={{ mt: 1 }}
+        sx={{
+          mt: 1,
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+            fontSize: '0.65rem',
+            color: theme.palette.text.secondary,
+          },
+          '.MuiTablePagination-select': { fontSize: '0.65rem' },
+          '.MuiTablePagination-actions > button': {
+            color: theme.palette.primary.main,
+          },
+        }}
       />
       <AddProductDialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} onRefresh={fetchData} />
       {productToEdit && (

@@ -21,7 +21,7 @@ import ExportComparisonExcelButton from './ExportComparisonExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
 import AddDialog from './AddDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
-import { API_BASE_URL } from '../../config';
+import { API_BASE_URL } from '../../config.js';
 
 const headers = [
   { label: 'No', key: 'no' },
@@ -39,7 +39,7 @@ const headers = [
   { label: 'Highest Price (VND)', key: 'highestPrice' },
   { label: 'Amount Difference (VND)', key: 'amtDifference' },
   { label: 'Difference (%)', key: 'percentage' },
-  { label: 'Remark', key: 'remark' },
+  { label: 'Remark', key: 'remarkComparison' },
 ];
 
 function DeptRequestTable({ departmentRequests }) {
@@ -47,7 +47,111 @@ function DeptRequestTable({ departmentRequests }) {
   const displayDepts = showAllDepts ? departmentRequests : departmentRequests?.slice(0, 3);
 
   if (!departmentRequests || departmentRequests.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Data</Typography>;
+  }
+
+  return (
+    <div>
+      <Table
+        size="small"
+        sx={{
+          minWidth: 160,
+          border: '1px solid #ddd',
+          borderRadius: 1,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        <TableHead>
+          <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
+            <TableCell
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
+                color: '#1976d2',
+                width: '40%',
+              }}
+            >
+              Dept
+            </TableCell>
+            <TableCell
+              align="center"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
+                color: '#1976d2',
+                width: '30%',
+              }}
+            >
+              Request
+            </TableCell>
+            <TableCell
+              align="center"
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
+                color: '#1976d2',
+                width: '30%',
+              }}
+            >
+              Buy
+            </TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {displayDepts.map((dept, idx) => (
+            <TableRow
+              key={dept.departmentId + idx}
+              sx={{
+                '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
+                '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
+                fontSize: '0.55rem',
+              }}
+            >
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '40%' }}>
+                {dept.departmentName}
+              </TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>
+                {dept.qty || 0}
+              </TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>
+                {dept.buy || 0}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {departmentRequests.length > 3 && (
+        <Button
+          size="small"
+          onClick={() => setShowAllDepts(!showAllDepts)}
+          sx={{
+            mt: 0.5,
+            fontSize: '0.65rem',
+            color: '#1976d2',
+            textTransform: 'none',
+            '&:hover': { backgroundColor: '#e3f2fd' },
+          }}
+        >
+          {showAllDepts ? 'Show Less' : 'Show More'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function SupplierTable({ suppliers }) {
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
+  const displaySuppliers = showAllSuppliers ? suppliers : suppliers?.slice(0, 3);
+
+  if (!suppliers || suppliers.length === 0) {
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Suppliers</Typography>;
   }
 
   return (
@@ -67,95 +171,9 @@ function DeptRequestTable({ departmentRequests }) {
             <TableCell
               sx={{
                 fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
-                color: '#1976d2',
-              }}
-            >
-              Dept
-            </TableCell>
-            <TableCell
-              align="center"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
-                color: '#1976d2',
-              }}
-            >
-              Qty
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {displayDepts.map((dept, idx) => (
-            <TableRow
-              key={dept.departmentId + idx}
-              sx={{
-                '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
-                '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
-                fontSize: '0.75rem',
-              }}
-            >
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>
-                {dept.departmentName}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
-                {dept.quantity}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {departmentRequests.length > 3 && (
-        <Button
-          size="small"
-          onClick={() => setShowAllDepts(!showAllDepts)}
-          sx={{
-            mt: 1,
-            fontSize: '0.7rem',
-            color: '#1976d2',
-            textTransform: 'none',
-            '&:hover': { backgroundColor: '#e3f2fd' },
-          }}
-        >
-          {showAllDepts ? 'Show Less' : 'Show More'}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function SupplierTable({ suppliers }) {
-  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
-  const displaySuppliers = showAllSuppliers ? suppliers : suppliers?.slice(0, 3);
-
-  if (!suppliers || suppliers.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Suppliers</Typography>;
-  }
-
-  return (
-    <div>
-      <Table
-        size="small"
-        sx={{
-          minWidth: 250,
-          border: '1px solid #ddd',
-          borderRadius: 1,
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
-        <TableHead>
-          <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-            <TableCell
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
                 color: '#1976d2',
                 width: '50%',
               }}
@@ -166,9 +184,9 @@ function SupplierTable({ suppliers }) {
               align="right"
               sx={{
                 fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
                 color: '#1976d2',
                 width: '20%',
               }}
@@ -179,9 +197,9 @@ function SupplierTable({ suppliers }) {
               align="center"
               sx={{
                 fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
                 color: '#1976d2',
                 width: '15%',
               }}
@@ -192,9 +210,9 @@ function SupplierTable({ suppliers }) {
               align="center"
               sx={{
                 fontWeight: 700,
-                fontSize: '0.75rem',
-                py: 0.6,
-                px: 1,
+                fontSize: '0.55rem',
+                py: 0.2,
+                px: 0.3,
                 color: '#1976d2',
                 width: '15%',
               }}
@@ -210,19 +228,19 @@ function SupplierTable({ suppliers }) {
               sx={{
                 backgroundColor: supplier.isSelected === 1 ? '#d0f0c0' : idx % 2 === 0 ? '#fff' : '#f9fbff',
                 '&:hover': { backgroundColor: supplier.isSelected === 1 ? '#b8e6a3' : '#bbdefb', transition: 'background-color 0.3s' },
-                fontSize: '0.75rem',
+                fontSize: '0.55rem',
               }}
             >
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1', width: '50%' }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '50%' }}>
                 {supplier.supplierName}
               </TableCell>
-              <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, width: '20%' }}>
+              <TableCell align="right" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '20%' }}>
                 {supplier.price ? supplier.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
               </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, width: '15%' }}>
-                {supplier.unit || 'N/A'}
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '15%' }}>
+                {supplier.unit || ''}
               </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600, width: '15%' }}>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '15%' }}>
                 {supplier.isSelected === 1 ? 'Yes' : 'No'}
               </TableCell>
             </TableRow>
@@ -234,8 +252,8 @@ function SupplierTable({ suppliers }) {
           size="small"
           onClick={() => setShowAllSuppliers(!showAllSuppliers)}
           sx={{
-            mt: 1,
-            fontSize: '0.7rem',
+            mt: 0.5,
+            fontSize: '0.65rem',
             color: '#1976d2',
             textTransform: 'none',
             '&:hover': { backgroundColor: '#e3f2fd' },
@@ -399,22 +417,21 @@ export default function ComparisonPage() {
 
   const paginatedData = data.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
 
-  // Map data to match ExportComparisonExcelButton structure
   const mappedDataForExport = paginatedData.map(item => ({
     englishName: item.englishName || '',
     vietnameseName: item.vietnameseName || '',
     oldSapCode: item.oldSapCode || '',
     newSapCode: item.newSapCode || '',
     suppliers: item.suppliers || [],
-    remark: item.remark || '',
+    remarkComparison: item.remarkComparison || '',
     unit: item.unit || '',
   }));
 
   return (
     <Box
       sx={{
-        p: 3,
-        fontSize: '0.85rem',
+        p: 1,
+        fontSize: '0.65rem',
         fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
         backgroundColor: '#f5f8fa',
         minHeight: '100vh',
@@ -426,30 +443,29 @@ export default function ComparisonPage() {
         onSearch={handleSearch}
         onReset={handleReset}
       />
-    <Stack
-      direction="row"
-      alignItems="center"
-      justifyContent="flex-end"
-      mb={3}
-      sx={{ userSelect: 'none' }}
-    >
-      {console.log('Data passed to ExportComparisonExcelButton:', mappedDataForExport)}
-      <ExportComparisonExcelButton
-        data={mappedDataForExport}
-        disabled={loading}
-        groupId={groupId} // Pass groupId as a prop
-      />
-    </Stack>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="flex-end"
+        mb={1}
+        sx={{ userSelect: 'none' }}
+      >
+        <ExportComparisonExcelButton
+          data={mappedDataForExport}
+          disabled={loading}
+          groupId={groupId}
+        />
+      </Stack>
 
       {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
           Loading data...
         </Typography>
       )}
       {error && (
         <Typography
           align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.9rem', mt: 4 }}
+          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}
         >
           {error}
         </Typography>
@@ -459,8 +475,8 @@ export default function ComparisonPage() {
         <>
           <Box
             sx={{
-              mb: 2,
-              p: 2,
+              mb: 1,
+              p: 0.5,
               backgroundColor: '#e3f2fd',
               borderRadius: 2,
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
@@ -471,7 +487,7 @@ export default function ComparisonPage() {
           >
             <Typography
               sx={{
-                fontSize: '0.9rem',
+                fontSize: '0.7rem',
                 fontWeight: 700,
                 color: '#1976d2',
               }}
@@ -480,7 +496,7 @@ export default function ComparisonPage() {
             </Typography>
             <Typography
               sx={{
-                fontSize: '0.9rem',
+                fontSize: '0.7rem',
                 fontWeight: 700,
                 color: unfilteredTotals.totalAmtDifference < 0 ? theme.palette.error.main : '#1976d2',
               }}
@@ -489,7 +505,7 @@ export default function ComparisonPage() {
             </Typography>
             <Typography
               sx={{
-                fontSize: '0.9rem',
+                fontSize: '0.7rem',
                 fontWeight: 700,
                 color: unfilteredTotals.totalDifferencePercentage < 0 ? theme.palette.error.main : '#1976d2',
               }}
@@ -502,13 +518,12 @@ export default function ComparisonPage() {
             component={Paper}
             elevation={4}
             sx={{
-              borderRadius: 2,
               overflowX: 'auto',
-              maxHeight: 640,
+              maxHeight: 450,
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1400 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
@@ -521,16 +536,16 @@ export default function ComparisonPage() {
                       }
                       sx={{
                         fontWeight: 'bold',
-                        fontSize: '0.75rem',
+                        fontSize: '0.55rem',
                         color: '#ffffff',
-                        py: 1,
-                        px: 1,
+                        py: 0.2,
+                        px: 0.4,
                         whiteSpace: 'nowrap',
                         borderRight: '1px solid rgba(255,255,255,0.15)',
                         '&:last-child': { borderRight: 'none' },
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 1,
+                        position: label === 'No' ? 'sticky' : 'static',
+                        left: label === 'No' ? 0 : undefined,
+                        zIndex: label === 'No' ? 2 : 1,
                         backgroundColor: '#027aff',
                       }}
                     >
@@ -553,79 +568,85 @@ export default function ComparisonPage() {
                           '&:hover': {
                             backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
+                            '& .sticky-no-column': {
+                              backgroundColor: '#e1f0ff',
+                            },
                           },
-                          fontSize: '0.8rem',
+                          fontSize: '0.55rem',
                           cursor: 'default',
                           userSelect: 'none',
                         }}
                       >
                         <TableCell
                           align="center"
+                          className="sticky-no-column"
                           sx={{
-                            px: 2,
-                            py: 1.2,
+                            px: 0.4,
+                            py: 0.2,
                             position: 'sticky',
                             left: 0,
                             zIndex: 1,
                             backgroundColor: rowBackgroundColor,
+                            fontSize: '0.55rem',
+                            borderRight: '1px solid rgba(224, 224, 224, 1)',
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {item.type1Name || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.type1Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {item.type2Name || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.type2Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
-                          {item.vietnameseName || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
+                          {item.vietnameseName || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
-                          {item.englishName || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.englishName || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {item.oldSapCode || 'N/A'}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.oldSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {item.newSapCode || 'N/A'}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.newSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                          {item.unit || 'N/A'}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.unit || ''}
                         </TableCell>
-                        <TableCell sx={{ px: 2, py: 1.2 }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <SupplierTable suppliers={item.suppliers} />
                         </TableCell>
-                        <TableCell sx={{ px: 2, py: 1.2 }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={item.departmentRequests} />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.price ? item.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2, fontWeight: 700, color: theme.palette.primary.dark }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
                           {item.amtVnd ? item.amtVnd.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.highestPrice ? item.highestPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.amtDifference ? item.amtDifference.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.percentage ? item.percentage.toFixed(2) + '%' : '0%'}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 2, py: 1.2 }}>
-                          {item.remark || 'N/A'}
+                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.remarkComparison || ''}
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 6, color: '#90a4ae' }}>
-                      <Stack direction="column" alignItems="center" spacing={2}>
-                        <InboxIcon fontSize="large" />
-                        <Typography>No data available.</Typography>
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
+                      <Stack direction="column" alignItems="center" spacing={0.5}>
+                        <InboxIcon fontSize="small" />
+                        <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -644,12 +665,12 @@ export default function ComparisonPage() {
             onRowsPerPageChange={handleChangeRowsPerPage}
             labelRowsPerPage="Rows per page:"
             sx={{
-              mt: 3,
+              mt: 1,
               '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                fontSize: '0.85rem',
+                fontSize: '0.65rem',
                 color: theme.palette.text.secondary,
               },
-              '.MuiTablePagination-select': { fontSize: '0.85rem' },
+              '.MuiTablePagination-select': { fontSize: '0.65rem' },
               '.MuiTablePagination-actions > button': {
                 color: theme.palette.primary.main,
               },

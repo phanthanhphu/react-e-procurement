@@ -39,6 +39,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     purchasingSuggest: '',
     reason: '',
     remark: '',
+    remarkComparison: '',
     supplierId: '',
     groupId: '',
     productType1Id: '',
@@ -46,7 +47,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     unit: '',
     supplierPrice: 0,
   });
-  const [deptRows, setDeptRows] = useState([{ department: '', qty: '' }]);
+  const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
+  const [deptErrors, setDeptErrors] = useState([]); // Lưu lỗi trùng lặp cho từng hàng
   const [saving, setSaving] = useState(false);
   const [productType1List, setProductType1List] = useState([]);
   const [productType2List, setProductType2List] = useState([]);
@@ -89,6 +91,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const requisition = data.requisition || data;
       const supplierProduct = data.supplierProduct || {};
       const vietnameseName = requisition.vietnameseName || '';
+
       setFormData({
         itemDescriptionEN: requisition.englishName || '',
         itemDescriptionVN: vietnameseName,
@@ -99,6 +102,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         purchasingSuggest: requisition.purchasingSuggest || '',
         reason: requisition.reason || '',
         remark: requisition.remark || '',
+        remarkComparison: requisition.remarkComparison || '',
         supplierId: supplierProduct.id || '',
         groupId: requisition.groupId || '',
         productType1Id: requisition.productType1Id || '',
@@ -106,14 +110,22 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         unit: supplierProduct.unit || '',
         supplierPrice: supplierProduct.price || 0,
       });
+
       setDeptRows(
-        requisition.departmentRequestQty && typeof requisition.departmentRequestQty === 'object'
-          ? Object.entries(requisition.departmentRequestQty).map(([dept, qty]) => ({
-              department: dept,
-              qty: qty.toString(),
+        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
+          ? data.departmentRequestQuantities.map((dept) => ({
+              department: dept.departmentId,
+              qty: dept.qty?.toString() || '',
+              buy: dept.buy?.toString() || '',
             }))
-          : [{ department: '', qty: '' }]
+          : [{ department: '', qty: '', buy: '' }]
       );
+      setDeptErrors(
+        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
+          ? data.departmentRequestQuantities.map(() => '') // Khởi tạo lỗi rỗng
+          : ['']
+      );
+
       setImageUrls(requisition.imageUrls || []);
       setImagesToDelete([]);
       setFiles([]);
@@ -142,6 +154,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       purchasingSuggest: '',
       reason: '',
       remark: '',
+      remarkComparison: '',
       supplierId: '',
       groupId: '',
       productType1Id: '',
@@ -149,7 +162,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       unit: '',
       supplierPrice: 0,
     });
-    setDeptRows([{ department: '', qty: '' }]);
+    setDeptRows([{ department: '', qty: '', buy: '' }]);
+    setDeptErrors(['']); // Reset lỗi
     setImageUrls([]);
     setImagesToDelete([]);
     setFiles([]);
@@ -348,18 +362,34 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleDeptChange = (index, field, value) => {
-    const updated = [...deptRows];
-    updated[index][field] = value;
-    setDeptRows(updated);
+    const updatedRows = [...deptRows];
+    updatedRows[index][field] = value;
+    setDeptRows(updatedRows);
+
+    // Kiểm tra trùng lặp phòng ban
+    const updatedErrors = deptRows.map((row, i) => {
+      if (i === index && field === 'department' && value) {
+        const isDuplicate = deptRows.some(
+          (otherRow, otherIndex) =>
+            otherIndex !== i && otherRow.department === value && value !== ''
+        );
+        return isDuplicate ? 'This department is already selected' : '';
+      }
+      return deptErrors[i] || '';
+    });
+    setDeptErrors(updatedErrors);
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '' }]);
+    setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
+    setDeptErrors([...deptErrors, '']);
   };
 
   const handleDeleteDeptRow = (index) => {
-    const updated = deptRows.filter((_, i) => i !== index);
-    setDeptRows(updated.length > 0 ? updated : [{ department: '', qty: '' }]);
+    const updatedRows = deptRows.filter((_, i) => i !== index);
+    const updatedErrors = deptErrors.filter((_, i) => i !== index);
+    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
+    setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
   };
 
   const calcTotalRequestQty = () => {
@@ -369,8 +399,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }, 0);
   };
 
+  const calcTotalBuy = () => {
+    return deptRows.reduce((sum, row) => {
+      const b = parseFloat(row.buy) || 0;
+      return sum + b;
+    }, 0);
+  };
+
   const calcTotalPrice = () => {
-    return calcTotalRequestQty() * (formData.supplierPrice || 0);
+    return calcTotalBuy() * (formData.supplierPrice || 0);
   };
 
   const handleFileChange = (e) => {
@@ -396,7 +433,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
 
     const newFiles = [...files, ...validFiles];
-    if (newFiles.length + imageUrls.length > 10) {
+    if (newFiles.length + imageUrls.length - imagesToDelete.length > 10) {
       setSnackbarMessage('You can only upload a maximum of 10 images.');
       setSnackbarOpen(true);
       return;
@@ -420,7 +457,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const newImageUrls = [...imageUrls];
       const removedUrl = newImageUrls.splice(index, 1)[0];
       setImageUrls(newImageUrls);
-      setImagesToDelete([...imagesToDelete, removedUrl]);
+      setImagesToDelete((prev) => [...prev, removedUrl]); // Đảm bảo không trùng lặp
       console.log('Updated imageUrls:', newImageUrls);
       console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
     } else {
@@ -443,16 +480,44 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    const deptQtyMap = {};
+    if (!formData.itemDescriptionVN) {
+      setSnackbarMessage('Product Description (VN) is required.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
+      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Kiểm tra trùng lặp phòng ban
+    const departmentIds = deptRows
+      .filter((row) => row.department)
+      .map((row) => row.department);
+    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
+    if (hasDuplicates) {
+      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const deptQtyMap = { quantities: {} };
     deptRows.forEach((row) => {
-      if (row.department && row.qty) {
-        deptQtyMap[row.department] = parseFloat(row.qty) || 0;
+      if (row.department && row.qty && row.buy) {
+        deptQtyMap.quantities[row.department] = {
+          qty: parseFloat(row.qty) || 0,
+          buy: parseFloat(row.buy) || 0,
+        };
       }
     });
 
     const formDataToSend = new FormData();
-    files.forEach(file => formDataToSend.append('imageUrls', file));
-    imagesToDelete.forEach(url => formDataToSend.append('imagesToDelete', url));
+    files.forEach(file => formDataToSend.append('files', file));
+    // Đảm bảo imagesToDelete không chứa giá trị rỗng
+    const cleanImagesToDelete = imagesToDelete.filter(url => url && url.trim() !== '');
+    formDataToSend.append('imagesToDelete', JSON.stringify(cleanImagesToDelete.length > 0 ? cleanImagesToDelete : []));
     Object.entries({
       englishName: formData.itemDescriptionEN || '',
       vietnameseName: formData.itemDescriptionVN || '',
@@ -464,12 +529,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
       reason: formData.reason || '',
       remark: formData.remark || '',
+      remarkComparison: formData.remarkComparison || '',
       supplierId: formData.supplierId || '',
       groupId: formData.groupId || '',
       productType1Id: formData.productType1Id || undefined,
       productType2Id: formData.productType2Id || undefined,
-      totalRequestQty: calcTotalRequestQty(),
-      totalPrice: calcTotalPrice(),
     }).forEach(([key, value]) => {
       if (value !== undefined) {
         formDataToSend.append(key, value);
@@ -665,7 +729,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 key={index}
                 sx={{ mb: 1 }}
               >
-                <FormControl fullWidth size="small" disabled={loadingDepartments}>
+                <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
                   <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                   <Select
                     labelId={`department-label-${index}`}
@@ -686,6 +750,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                       <MenuItem disabled>No departments available</MenuItem>
                     )}
                   </Select>
+                  {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
                   {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                 </FormControl>
                 <TextField
@@ -693,6 +758,14 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   type="number"
                   value={row.qty}
                   onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
+                  size="small"
+                  fullWidth
+                />
+                <TextField
+                  label="Buy"
+                  type="number"
+                  value={row.buy}
+                  onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
                   size="small"
                   fullWidth
                 />
@@ -731,6 +804,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             >
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Total Requested Quantity: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
@@ -783,6 +859,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             multiline
             rows={2}
           />
+          <TextField
+            label="Remark Comparison"
+            value={formData.remarkComparison}
+            onChange={handleChange('remarkComparison')}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+          />
 
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
@@ -797,9 +882,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   onChange={handleFileChange}
                 />
               </Button>
-              {(files.length + imageUrls.length) > 0 && (
+              {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  Selected {files.length + imageUrls.length} images
+                  Selected {files.length + imageUrls.length - imagesToDelete.length} images
                 </Typography>
               )}
             </Stack>
@@ -841,7 +926,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 ))}
               </Box>
             )}
-            {files.length === 0 && imageUrls.length === 0 && (
+            {files.length === 0 && imageUrls.length === imagesToDelete.length && (
               <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
                 No images selected
               </Typography>
@@ -853,7 +938,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || deptErrors.some((error) => error)}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>
@@ -863,7 +948,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') ? 'error' : 'success'} sx={{ width: '100%' }}>
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

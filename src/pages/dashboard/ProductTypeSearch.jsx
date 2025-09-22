@@ -51,22 +51,23 @@ export default function ProductTypeSearch({
     <Paper
       elevation={3}
       sx={{
-        p: 1.5,
-        mb: 4,
+        p: 1,
+        mb: 1.5,
         background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 3,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
         border: `1px solid ${theme.palette.divider}`,
-        maxWidth: 800,
+        maxWidth: 600,
         overflowX: 'auto',
       }}
     >
       <Grid
         container
-        spacing={1.5}
+        spacing={1}
         alignItems="center"
         justifyContent="flex-start"
         wrap="nowrap"
+        sx={{ minHeight: '60px' }} // Giữ minHeight để tăng không gian hiển thị
       >
         <Grid item>
           <TextField
@@ -75,7 +76,7 @@ export default function ProductTypeSearch({
             size="small"
             value={type1NameSearch}
             onChange={handleType1NameChange}
-            sx={{ width: 200 }}
+            sx={{ width: 150, '& .MuiInputBase-root': { fontSize: '0.55rem' }, '& .MuiInputLabel-root': { fontSize: '0.55rem' } }}
             placeholder="Search Parent Type"
           />
         </Grid>
@@ -86,7 +87,7 @@ export default function ProductTypeSearch({
             size="small"
             value={type2NameSearch}
             onChange={handleType2NameChange}
-            sx={{ width: 200 }}
+            sx={{ width: 150, '& .MuiInputBase-root': { fontSize: '0.55rem' }, '& .MuiInputLabel-root': { fontSize: '0.55rem' } }}
             placeholder="Search Sub-Type"
           />
         </Grid>
@@ -99,9 +100,10 @@ export default function ProductTypeSearch({
               fontWeight: 500,
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.55rem',
               whiteSpace: 'nowrap',
             }}
           >
@@ -115,9 +117,10 @@ export default function ProductTypeSearch({
             sx={{
               textTransform: 'none',
               fontWeight: 500,
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.55rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
               whiteSpace: 'nowrap',

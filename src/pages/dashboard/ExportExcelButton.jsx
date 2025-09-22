@@ -1,10 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
 import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
+import { API_BASE_URL } from '../../config';
 
-export default function ExportExcelButton({ data }) {
+export default function ExportExcelButton({ data, groupId }) {
+  const [stockDate, setStockDate] = useState('01/08/2025');
+
+  useEffect(() => {
+    if (!groupId) {
+      console.warn('No groupId provided for fetching stock date');
+      return;
+    }
+    fetch(`${API_BASE_URL}/group-summary-requisitions/${groupId}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch stock date');
+        }
+        return response.json();
+      })
+      .then((result) => {
+        const dateArray = result.stockDate;
+        if (dateArray && dateArray.length >= 3) {
+          const [year, month, day] = dateArray;
+          const formattedDate = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+          setStockDate(formattedDate);
+        }
+      })
+      .catch((error) => {
+        console.error('Error fetching stock date:', error);
+      });
+  }, [groupId]);
+
   const exportToExcel = () => {
     if (!data || data.length === 0) {
       alert('No data to export');
@@ -34,9 +62,9 @@ export default function ExportExcelButton({ data }) {
       'Old SAP Code',
       'SAP Code in New SAP',
       'Unit',
-      ...Array(allDeptKeys.length).fill("Department Request Q'ty"),
-      'Total Request Qty',
-      'Stock (01/08/2025)',
+      ...Array(allDeptKeys.length).fill("Department Buy Q'ty"),
+      'Total Buy Qty',
+      `Stock (${stockDate})`,
       'Purchasing Suggest',
       'Reason',
       'Remark',
@@ -59,12 +87,11 @@ export default function ExportExcelButton({ data }) {
 
     // Data rows
     data.forEach((item, index) => {
-      const { requisition, supplierProduct, departmentRequests } = item;
-      const deptQty = {};
+      const { requisition, supplierProduct, departmentRequests, sumBuy } = item;
+      const deptBuy = {};
       (departmentRequests || []).forEach((dept) => {
-        deptQty[dept.departmentName] = dept.quantity;
+        deptBuy[dept.departmentName] = dept.buy;
       });
-      const totalQty = (departmentRequests || []).reduce((sum, dept) => sum + (dept.quantity || 0), 0);
 
       const row = [
         index + 1,
@@ -73,8 +100,8 @@ export default function ExportExcelButton({ data }) {
         requisition.oldSapCode || '',
         requisition.newSapCode || '',
         supplierProduct?.unit || '',
-        ...allDeptKeys.map((key) => deptQty[key] || ''),
-        totalQty,
+        ...allDeptKeys.map((key) => deptBuy[key] || ''),
+        sumBuy || 0,
         requisition.stock || 0,
         requisition.purchasingSuggest || '',
         requisition.reason || '',
@@ -85,9 +112,9 @@ export default function ExportExcelButton({ data }) {
     });
 
     const totalCols = 6 + allDeptKeys.length + 5;
-    const dataEndRow = 3 + data.length - 1; // 0-based index of last data row
+    const dataEndRow = 3 + data.length - 1;
 
-    // Signature rows (below the table, distributed within table width)
+    // Signature rows
     const signatureTitles = new Array(totalCols).fill('');
     const signatureNames = new Array(totalCols).fill('');
     const blankLine = new Array(totalCols).fill('');
@@ -95,7 +122,6 @@ export default function ExportExcelButton({ data }) {
     const signBlank2 = [...blankLine];
     const signBlank3 = [...blankLine];
 
-    // Define signatures
     const signaturePositions = [
       { title: 'Request by', name: 'DANG THI NHU NGOC' },
       { title: 'Purchasing Teamleader', name: 'Ms. SELENA TAM' },
@@ -103,23 +129,19 @@ export default function ExportExcelButton({ data }) {
       { title: 'Approval by', name: 'Mr. YONGUK LEE' },
     ];
 
-    // Calculate dynamic signature positions
-    const sigWidth = 3; // Number of columns to merge for each signature
+    const sigWidth = 3;
     const totalSigWidth = signaturePositions.length * sigWidth;
     const availableCols = totalCols;
-    const colStep = Math.floor((availableCols - totalSigWidth) / (signaturePositions.length + 1)); // Space between signatures
+    const colStep = Math.floor((availableCols - totalSigWidth) / (signaturePositions.length + 1));
     const startPositions = [];
-
-    // Calculate start positions for each signature
-    let currentCol = colStep; // Start after some padding
+    let currentCol = colStep;
     signaturePositions.forEach((_, index) => {
       if (currentCol + sigWidth - 1 < totalCols) {
         startPositions.push(currentCol);
-        currentCol += sigWidth + colStep; // Move to next position
+        currentCol += sigWidth + colStep;
       }
     });
 
-    // Assign signatures to calculated positions
     signaturePositions.forEach((sig, index) => {
       if (index < startPositions.length) {
         const startCol = startPositions[index];
@@ -190,9 +212,9 @@ export default function ExportExcelButton({ data }) {
 
     // Merges
     const merges = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // Title from No to Remark
-      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } }, // Description
+      { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
+      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } },
       { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
       { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
       { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
@@ -204,7 +226,6 @@ export default function ExportExcelButton({ data }) {
       { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } },
     ];
 
-    // Add signature merges dynamically
     startPositions.forEach((startCol, index) => {
       const endCol = Math.min(startCol + sigWidth - 1, totalCols - 1);
       if (startCol < totalCols) {
@@ -222,7 +243,7 @@ export default function ExportExcelButton({ data }) {
     });
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    console.log('wbout size:', wbout.length); // Debug output
+    console.log('wbout size:', wbout.length);
     saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'summary_requisition.xlsx');
   };
 

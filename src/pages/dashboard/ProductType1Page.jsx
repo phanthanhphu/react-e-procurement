@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, message, Card, Typography, Modal } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -150,9 +150,9 @@ const ProductType1Page = () => {
     backgroundColor: '#4cb8ff',
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: '0.75rem',
-    padding: 8,
-    borderRadius: 4,
+    fontSize: '0.55rem',
+    padding: '4px 8px',
+    borderRadius: 2,
   };
 
   const type1Columns = [
@@ -166,28 +166,28 @@ const ProductType1Page = () => {
       title: <div style={headerStyle}>Name</div>,
       dataIndex: 'name',
       key: 'name',
-      render: text => <Typography.Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>{text}</Typography.Text>,
+      render: text => <Typography.Text style={{ fontSize: '0.55rem', fontWeight: 500 }}>{text}</Typography.Text>,
     },
     {
       title: <div style={headerStyle}>Created Date</div>,
       dataIndex: 'createdDate',
       key: 'createdDate',
-      render: date => formatDate(date),
-      width: 180,
+      render: date => <Typography.Text style={{ fontSize: '0.55rem' }}>{formatDate(date)}</Typography.Text>,
+      width: 120,
       align: 'center',
     },
     {
       title: <div style={headerStyle}>Actions</div>,
       key: 'actions',
       align: 'center',
-      width: 150,
+      width: 120,
       render: (_, rec) => (
-        <Space size="middle">
+        <Space size={4}>
           <Button
             type="text"
-            icon={expandedType1Id === rec.id ? <UpOutlined /> : <DownOutlined />}
+            icon={expandedType1Id === rec.id ? <UpOutlined style={{ fontSize: '12px' }} /> : <DownOutlined style={{ fontSize: '12px' }} />}
             onClick={() => handleExpand(rec.id)}
-            style={{ fontWeight: 'bold' }}
+            style={{ fontWeight: 'bold', fontSize: '0.65rem' }}
           >
             {expandedType1Id === rec.id ? 'Collapse' : 'Expand'}
           </Button>
@@ -197,9 +197,16 @@ const ProductType1Page = () => {
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
               border: 'none',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              fontSize: '0.65rem',
+              width: 24,
+              height: 24,
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            icon={<EditOutlined />}
+            icon={<EditOutlined style={{ fontSize: '10px' }} />}
             onClick={() => { setType1Record(rec); setShowEditType1(true); }}
           />
           <Button
@@ -208,9 +215,16 @@ const ProductType1Page = () => {
               background: '#f26f6f',
               color: '#fff',
               border: 'none',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              fontSize: '0.65rem',
+              width: 24,
+              height: 24,
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            icon={<DeleteOutlined />}
+            icon={<DeleteOutlined style={{ fontSize: '10px' }} />}
             onClick={() => { setDeleteTarget({ kind: 'type1', record: rec }); setDeleteConfirmVisible(true); }}
           />
         </Space>
@@ -229,32 +243,39 @@ const ProductType1Page = () => {
       title: <div style={headerStyle}>Name</div>,
       dataIndex: 'name',
       key: 'name',
-      render: text => <Typography.Text style={{ fontSize: '0.875rem' }}>{text}</Typography.Text>,
+      render: text => <Typography.Text style={{ fontSize: '0.55rem' }}>{text}</Typography.Text>,
     },
     {
       title: <div style={headerStyle}>Created Date</div>,
       dataIndex: 'createdDate',
       key: 'createdDate',
-      render: date => formatDate(date),
-      width: 160,
+      render: date => <Typography.Text style={{ fontSize: '0.55rem' }}>{formatDate(date)}</Typography.Text>,
+      width: 100,
       align: 'center',
     },
     {
       title: <div style={headerStyle}>Actions</div>,
       key: 'actions',
       align: 'center',
-      width: 120,
+      width: 100,
       render: (_, rec) => (
-        <Space>
+        <Space size={2}>
           <Button
             shape="circle"
             style={{
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
               border: 'none',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              fontSize: '0.65rem',
+              width: 24,
+              height: 24,
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            icon={<EditOutlined />}
+            icon={<EditOutlined style={{ fontSize: '10px' }} />}
             onClick={() => { setType2Record({ ...rec, parentId: expandedType1Id }); setShowEditType2(true); }}
           />
           <Button
@@ -263,9 +284,16 @@ const ProductType1Page = () => {
               background: '#f26f6f',
               color: '#fff',
               border: 'none',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              fontSize: '0.65rem',
+              width: 24,
+              height: 24,
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            icon={<DeleteOutlined />}
+            icon={<DeleteOutlined style={{ fontSize: '10px' }} />}
             onClick={() => { setDeleteTarget({ kind: 'type2', record: rec }); setDeleteConfirmVisible(true); }}
           />
         </Space>
@@ -274,9 +302,9 @@ const ProductType1Page = () => {
   ];
 
   return (
-    <div style={{ padding: 32, backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
-      <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, maxWidth: 800 }}>
+    <div style={{ padding: '16px', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+      <Space style={{ marginBottom: 8, width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, maxWidth: 600 }}>
           <ProductTypeSearch
             type1NameValue={type1NameSearch}
             type2NameValue={type2NameSearch}
@@ -288,17 +316,18 @@ const ProductType1Page = () => {
         </div>
         <Button
           type="primary"
-          icon={<PlusOutlined />}
+          icon={<PlusOutlined style={{ fontSize: '12px' }} />}
           onClick={() => setShowAddType1(true)}
           style={{
-            borderRadius: 20,
+            borderRadius: 8,
             fontWeight: 500,
-            padding: '0 16px',
+            padding: '0 12px',
             background: 'linear-gradient(to right, #4cb8ff, #027aff)',
             color: '#fff',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-            height: 40,
-            lineHeight: '40px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+            height: 28,
+            lineHeight: '28px',
+            fontSize: '0.65rem',
           }}
         >
           Add New Parent Type
@@ -306,15 +335,16 @@ const ProductType1Page = () => {
       </Space>
       <Card
         title={(
-          <Typography.Title level={3} style={{ margin: 0, color: '#001529' }}>
+          <Typography.Title level={4} style={{ margin: 0, color: '#001529', fontSize: '0.8rem' }}>
             Parent Type
           </Typography.Title>
         )}
         bordered={false}
         style={{
-          boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
-          borderRadius: 8,
-          backgroundColor: '#fff'
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          borderRadius: 4,
+          backgroundColor: '#fff',
+          padding: '8px',
         }}
       >
         <Table
@@ -328,19 +358,25 @@ const ProductType1Page = () => {
             total: type1Total,
             onChange: page => loadData(page - 1, type1NameSearch, type2NameSearch),
             showSizeChanger: false,
+            size: 'small',
           }}
           expandable={{
             expandedRowRender: rec => (
-              <Card size="small" style={{ margin: 0, backgroundColor: '#fafafa' }}>
-                <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
-                  <Typography.Title level={5} style={{ margin: 0 }}>
+              <Card size="small" style={{ margin: 0, backgroundColor: '#fafafa', padding: '8px' }}>
+                <Space style={{ marginBottom: 8, justifyContent: 'space-between', width: '100%' }}>
+                  <Typography.Title level={5} style={{ margin: 0, fontSize: '0.7rem' }}>
                     Sub-Type
                   </Typography.Title>
                   <Button
                     type="dashed"
-                    icon={<PlusOutlined />}
+                    icon={<PlusOutlined style={{ fontSize: '12px' }} />}
                     onClick={() => { setType2Record({ parentId: rec.id }); setShowAddType2(true); }}
-                    style={{ borderRadius: 6 }}
+                    style={{ 
+                      borderRadius: 4, 
+                      fontSize: '0.65rem', 
+                      padding: '2px 8px',
+                      height: 24,
+                    }}
                   >
                     Add Sub-Type
                   </Button>
@@ -376,6 +412,7 @@ const ProductType1Page = () => {
             expandedRowKeys: expandedType1Id ? [expandedType1Id] : [],
             onExpand: (exp, rec) => exp ? handleExpand(rec.id) : (setExpandedType1Id(null), setType2Data([]), setType2Page(0), setType2Total(0)),
           }}
+          size="small"
         />
       </Card>
 
@@ -404,7 +441,7 @@ const ProductType1Page = () => {
         onSuccess={() => { setShowEditType2(false); loadData(type1Page, type1NameSearch, type2NameSearch); }}
       />
       <Modal
-        title="Confirm Delete"
+        title={<Typography.Text style={{ fontSize: '0.7rem' }}>Confirm Delete</Typography.Text>}
         visible={deleteConfirmVisible}
         onOk={handleDelete}
         onCancel={() => setDeleteConfirmVisible(false)}
@@ -412,8 +449,9 @@ const ProductType1Page = () => {
         okButtonProps={{ danger: true }}
         cancelText="Cancel"
         destroyOnClose
+        width={300}
       >
-        <Typography.Text>
+        <Typography.Text style={{ fontSize: '0.65rem' }}>
           Are you sure you want to delete &quot;{deleteTarget.record?.name}&quot;?
         </Typography.Text>
       </Modal>

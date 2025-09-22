@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Modal, Form, Input, Select, message } from 'antd';
+import { Modal, Form, Input, Select, DatePicker, message } from 'antd';
+import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config';
 
 // API URL
@@ -11,14 +12,35 @@ const EditGroupModal = ({ visible, onCancel, onOk, currentItem }) => {
   // Set form values when the modal opens
   useEffect(() => {
     if (currentItem) {
-      form.setFieldsValue(currentItem);
+      form.setFieldsValue({
+        name: currentItem.name,
+        type: currentItem.type,
+        status: currentItem.status,
+        createdBy: currentItem.createdBy,
+        stockDate: currentItem.stockDate ? dayjs(formatDate(currentItem.stockDate)) : null,
+        // Do not set createdDate in the form, preserve it from currentItem
+      });
     }
   }, [currentItem, form]);
+
+  // Convert date array to ISO string for dayjs
+  const formatDate = (dateArray) => {
+    if (!Array.isArray(dateArray) || dateArray.length < 3) return null;
+    const [year, month, day] = dateArray;
+    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+  };
 
   // Handle update group
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+
+      // Include createdDate from currentItem and stockDate as ISO string
+      const formattedValues = {
+        ...values,
+        createdDate: currentItem?.createdDate || null, // Preserve existing createdDate
+        stockDate: values.stockDate ? values.stockDate.toISOString() : null, // Convert stockDate to ISO string
+      };
 
       // Update existing group via API
       const response = await fetch(`${apiUrl}/${currentItem.id}`, {
@@ -27,17 +49,18 @@ const EditGroupModal = ({ visible, onCancel, onOk, currentItem }) => {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify(formattedValues),
       });
 
       if (response.ok) {
         onOk();
         message.success('Group updated successfully');
       } else {
-        throw new Error('Failed to update group');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update group');
       }
     } catch (error) {
-      message.error('Please fill in all the fields');
+      message.error(error.message || 'Please fill in all the fields correctly');
     }
   };
 
@@ -91,6 +114,18 @@ const EditGroupModal = ({ visible, onCancel, onOk, currentItem }) => {
           rules={[{ required: true, message: 'Please input your name!' }]}
         >
           <Input />
+        </Form.Item>
+
+        <Form.Item 
+          label="Stock Date"
+          name="stockDate" 
+          rules={[{ required: true, message: 'Please select the stock date!' }]}
+        >
+          <DatePicker 
+            format="YYYY-MM-DD" 
+            style={{ width: '100%' }}
+            placeholder="Select stock date"
+          />
         </Form.Item>
       </Form>
     </Modal>

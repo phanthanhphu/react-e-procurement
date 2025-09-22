@@ -37,30 +37,30 @@ const headers = [
   { label: 'Order Unit', key: 'unit' }, 
   { label: 'Dept qty', key: 'departmentRequestQty' },
   { label: 'Total qty', key: 'totalRequestQty' },
-  { label: 'Total not isued qty ', key: 'supplierName' },
-  { label: 'Inhand', key: 'supplierPrice' },
-  { label: 'Actual inhand', key: 'totalPrice' },
+  { label: 'Total not issued qty', key: 'totalNotIssuedQty' },
+  { label: 'Inhand', key: 'inHand' },
+  { label: 'Actual inhand', key: 'actualInHand' },
   { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
-  { label: 'Price', key: 'reason' },
-  { label: 'Amount', key: 'remark' },
-  { label: 'Suppliers', key: 'remark' },
+  { label: 'Price', key: 'price' },
+  { label: 'Amount', key: 'amount' },
+  { label: 'Suppliers', key: 'suppliers' },
   { label: 'Actions', key: 'actions' },
 ];
 
 function DeptRequestTable({ deptRequestQty }) {
   if (!deptRequestQty || Object.keys(deptRequestQty).length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#666' }}>No Data</Typography>;
+    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Data</Typography>;
   }
 
   return (
     <Table
       size="small"
       sx={{
-        minWidth: 180,
+        minWidth: 120,
         border: '1px solid #ddd',
         borderRadius: 1,
         overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
       }}
     >
       <TableHead>
@@ -68,9 +68,9 @@ function DeptRequestTable({ deptRequestQty }) {
           <TableCell
             sx={{
               fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
+              fontSize: '0.55rem',
+              py: 0.4,
+              px: 0.8,
               color: '#1976d2',
             }}
           >
@@ -80,9 +80,9 @@ function DeptRequestTable({ deptRequestQty }) {
             align="center"
             sx={{
               fontWeight: 700,
-              fontSize: '0.75rem',
-              py: 0.6,
-              px: 1,
+              fontSize: '0.55rem',
+              py: 0.4,
+              px: 0.8,
               color: '#1976d2',
             }}
           >
@@ -97,11 +97,11 @@ function DeptRequestTable({ deptRequestQty }) {
             sx={{
               '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
               '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
-              fontSize: '0.75rem',
+              fontSize: '0.55rem',
             }}
           >
-            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, px: 1, color: '#0d47a1' }}>{dept}</TableCell>
-            <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.5, px: 1, fontWeight: 600 }}>
+            <TableCell sx={{ fontSize: '0.55rem', py: 0.3, px: 0.8, color: '#0d47a1' }}>{dept}</TableCell>
+            <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.3, px: 0.8, fontWeight: 600 }}>
               {qty}
             </TableCell>
           </TableRow>
@@ -196,8 +196,8 @@ export default function RequisitionMonthlyPage() {
   return (
     <Box
       sx={{
-        p: 3,
-        fontSize: '0.85rem',
+        p: 1.5,
+        fontSize: '0.65rem',
         fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
         backgroundColor: '#f5f8fa',
         minHeight: '100vh',
@@ -207,7 +207,7 @@ export default function RequisitionMonthlyPage() {
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        mb={3}
+        mb={1.5}
         sx={{ userSelect: 'none' }}
       >
         <Typography
@@ -216,12 +216,13 @@ export default function RequisitionMonthlyPage() {
             fontWeight: 700,
             color: theme.palette.primary.dark,
             letterSpacing: '0.05em',
+            fontSize: '0.9rem',
           }}
         >
-          Requisiton Monthly
+          Requisition Monthly
         </Typography>
 
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={1}>
           <ExportRequisitionMonthlyExcelButton data={data} />
 
           <Button
@@ -229,17 +230,17 @@ export default function RequisitionMonthlyPage() {
             onClick={handleGoToComparison}
             sx={{
               textTransform: 'none',
-              borderRadius: 2,
-              px: 3,
-              py: 0.75,
+              borderRadius: 1,
+              px: 1.5,
+              py: 0.4,
               fontWeight: 700,
-              fontSize: '0.85rem',
+              fontSize: '0.65rem',
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+              boxShadow: '0 2px 6px rgba(76, 184, 255, 0.3)',
               '&:hover': {
                 background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+                boxShadow: '0 3px 8px rgba(76, 184, 255, 0.4)',
               },
             }}
           >
@@ -252,17 +253,17 @@ export default function RequisitionMonthlyPage() {
             onClick={handleOpenAddDialog}
             sx={{
               textTransform: 'none',
-              borderRadius: 2,
-              px: 3,
-              py: 0.75,
+              borderRadius: 1,
+              px: 1.5,
+              py: 0.4,
               fontWeight: 700,
-              fontSize: '0.85rem',
+              fontSize: '0.65rem',
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+              boxShadow: '0 2px 6px rgba(76, 184, 255, 0.3)',
               '&:hover': {
                 background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+                boxShadow: '0 3px 8px rgba(76, 184, 255, 0.4)',
               },
             }}
           >
@@ -272,14 +273,14 @@ export default function RequisitionMonthlyPage() {
       </Stack>
 
       {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 4 }}>
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.65rem', mt: 2 }}>
           Loading data...
         </Typography>
       )}
       {error && (
         <Typography
           align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.9rem', mt: 4 }}
+          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.65rem', mt: 2 }}
         >
           {error}
         </Typography>
@@ -291,38 +292,35 @@ export default function RequisitionMonthlyPage() {
             component={Paper}
             elevation={4}
             sx={{
-              borderRadius: 2,
               overflowX: 'auto',
-              maxHeight: 640,
-              boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+              maxHeight: 480,
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
             }}
           >
-            <Table stickyHeader size="medium" sx={{ minWidth: 1400 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1000 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Price', 'Unit', 'Action'].includes(label)
-                          ? 'center'
-                          : label === 'Action'
+                        ['No', 'Price', 'Unit', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
                       sx={{
                         fontWeight: 'bold',
-                        fontSize: '0.75rem',
+                        fontSize: '0.55rem',
                         color: '#ffffff',
-                        py: 1,
-                        px: 1,
+                        py: 0.5,
+                        px: 0.8,
                         whiteSpace: 'nowrap',
                         borderRight: '1px solid rgba(255,255,255,0.15)',
                         '&:last-child': { borderRight: 'none' },
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 20,
-                        backgroundColor: '#027aff', // Fallback color
+                        position: label === 'No' ? 'sticky' : 'static',
+                        left: label === 'No' ? 0 : undefined,
+                        zIndex: label === 'No' ? 2 : 1,
+                        backgroundColor: '#027aff',
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -332,56 +330,80 @@ export default function RequisitionMonthlyPage() {
                   ))}
                 </TableRow>
               </TableHead>
-
               <TableBody>
                 {displayData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 5, fontStyle: 'italic', color: '#999' }}>
-                      No data available.
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 3, fontStyle: 'italic', color: '#999', fontSize: '0.65rem' }}>
+                      <Stack direction="column" alignItems="center" spacing={0.5}>
+                        <InboxIcon fontSize="small" />
+                        <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ) : (
                   displayData.map((row, index) => {
                     const globalIndex = page * rowsPerPage + index + 1;
+                    const rowBackgroundColor = '#fff'; // Màu nền mặc định cho hàng
 
                     return (
                       <TableRow
                         key={row.id}
                         sx={{
-                          '&:hover': { backgroundColor: '#e3f2fd' },
+                          backgroundColor: rowBackgroundColor,
+                          '&:hover': {
+                            backgroundColor: '#e3f2fd',
+                            transition: 'background-color 0.3s ease',
+                            '& .sticky-no-column': {
+                              backgroundColor: '#e3f2fd',
+                            },
+                          },
                           borderBottom: '1px solid #e0e0e0',
                         }}
                       >
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                        <TableCell
+                          align="center"
+                          className="sticky-no-column"
+                          sx={{
+                            fontWeight: 700,
+                            fontSize: '0.55rem',
+                            py: 0.5,
+                            px: 0.8,
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            borderRight: '1px solid rgba(224, 224, 224, 1)',
+                          }}
+                        >
                           {globalIndex}
                         </TableCell>
-                        <TableCell sx={{ minWidth: 140 }}>{row.groupItem1}</TableCell>
-                        <TableCell sx={{ minWidth: 140 }}>{row.groupItem2}</TableCell>
-                        <TableCell sx={{ minWidth: 250 }}>{row.englishName}</TableCell>
-                        <TableCell sx={{ minWidth: 250 }}>{row.vietnameseName}</TableCell>
-                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.oldSapCode}</TableCell>
-                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.newSapCode}</TableCell>
-                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.unit}</TableCell>
-                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>
+                        <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.groupItem1}</TableCell>
+                        <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.groupItem2}</TableCell>
+                        <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.englishName}</TableCell>
+                        <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.vietnameseName}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.oldSapCode}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.newSapCode}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.unit}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', py: 0.5, px: 0.8 }}>
                           <DeptRequestTable deptRequestQty={row.deptRequestQty} />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.totalRequestQty}</TableCell>
-                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.totalNotIssuedQty}</TableCell>
-                        <TableCell sx={{ minWidth: 100, textAlign: 'center' }}>{row.inHand}</TableCell>
-                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.actualInHand}</TableCell>
-                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.purchasingSuggest}</TableCell>
-                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.price}</TableCell>
-                        <TableCell sx={{ minWidth: 120, textAlign: 'center' }}>{row.amount}</TableCell>
-                        <TableCell sx={{ minWidth: 140, textAlign: 'center' }}>{row.suppliers}</TableCell>
-                        <TableCell align="center" sx={{ minWidth: 120 }}>
-                          <Stack direction="row" spacing={1} justifyContent="center">
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.totalRequestQty}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.totalNotIssuedQty}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.inHand}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.actualInHand}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.purchasingSuggest}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.price}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.amount}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.suppliers}</TableCell>
+                        <TableCell align="center" sx={{ minWidth: 80, py: 0.5, px: 0.8 }}>
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
                             <IconButton
                               color="primary"
                               size="small"
                               onClick={() => handleOpenEditDialog(row)}
                               aria-label="Edit"
                             >
-                              <EditIcon fontSize="small" />
+                              <EditIcon sx={{ fontSize: '10px' }} />
                             </IconButton>
                             <IconButton
                               color="error"
@@ -389,7 +411,7 @@ export default function RequisitionMonthlyPage() {
                               onClick={() => handleDelete(row.id)}
                               aria-label="Delete"
                             >
-                              <DeleteIcon fontSize="small" />
+                              <DeleteIcon sx={{ fontSize: '10px' }} />
                             </IconButton>
                           </Stack>
                         </TableCell>
@@ -411,12 +433,16 @@ export default function RequisitionMonthlyPage() {
             rowsPerPageOptions={[10, 25, 50]}
             labelRowsPerPage="Rows per page"
             sx={{
-              mt: 2,
+              mt: 1,
               '& .MuiTablePagination-toolbar': {
-                paddingLeft: 2,
-                paddingRight: 2,
+                paddingLeft: 1,
+                paddingRight: 1,
                 backgroundColor: '#f0f4f8',
-                borderRadius: 2,
+                borderRadius: 1,
+                fontSize: '0.55rem',
+              },
+              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                fontSize: '0.55rem',
               },
             }}
           />

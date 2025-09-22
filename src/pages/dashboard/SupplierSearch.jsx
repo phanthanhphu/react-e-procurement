@@ -148,18 +148,18 @@ export default function SupplierSearch({
     <Paper
       elevation={3}
       sx={{
-        p: 3,
-        mb: 3,
+        p: 1.5,
+        mb: 1.5,
         background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 3,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
         border: `1px solid ${theme.palette.divider}`,
         overflowX: 'auto',
         maxWidth: '100%',
       }}
     >
       <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
-        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%' }}>
+        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%', fontSize: '0.65rem' }}>
           {error}
         </Alert>
       </Snackbar>
@@ -169,12 +169,12 @@ export default function SupplierSearch({
         sx={{
           display: 'flex',
           flexWrap: 'nowrap',
-          gap: 2,
-          mb: 2,
+          gap: 1,
+          mb: 1,
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Supplier Code"
             variant="outlined"
@@ -184,10 +184,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchSupplierCode(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Supplier Name"
             variant="outlined"
@@ -197,10 +201,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchSupplierName(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="SAP Code"
             variant="outlined"
@@ -210,10 +218,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchSapCode(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Item No"
             variant="outlined"
@@ -223,10 +235,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchItemNo(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Button
             variant="contained"
             onClick={handleSearch}
@@ -235,10 +251,11 @@ export default function SupplierSearch({
               fontWeight: 500,
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
               color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              height: 40,
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
+              height: 30,
               width: '100%',
               whiteSpace: 'nowrap',
             }}
@@ -253,11 +270,11 @@ export default function SupplierSearch({
         sx={{
           display: 'flex',
           flexWrap: 'nowrap',
-          gap: 2,
+          gap: 1,
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Short Item Description"
             variant="outlined"
@@ -267,10 +284,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchItemDescription(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
             label="Full Description"
             variant="outlined"
@@ -280,10 +301,14 @@ export default function SupplierSearch({
               setPage(0);
               setSearchFullDescription(e.target.value);
             }}
-            sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+            sx={{
+              width: '100%',
+              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+            }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Autocomplete
             freeSolo
             options={filteredProductType1Options}
@@ -297,12 +322,16 @@ export default function SupplierSearch({
                 label="Group Item 1"
                 variant="outlined"
                 size="small"
-                sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+                sx={{
+                  width: '100%',
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                }}
               />
             )}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Autocomplete
             freeSolo
             options={filteredProductType2Options}
@@ -316,24 +345,29 @@ export default function SupplierSearch({
                 label="Group Item 2"
                 variant="outlined"
                 size="small"
-                sx={{ width: '100%', '& .MuiInputBase-root': { height: '40px', borderRadius: '8px' } }}
+                sx={{
+                  width: '100%',
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                }}
               />
             )}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 200 }}>
+        <Box sx={{ width: '20%', minWidth: 150 }}>
           <Button
             variant="outlined"
             onClick={handleReset}
             sx={{
               textTransform: 'none',
               fontWeight: 500,
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.65rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
-              height: 40,
+              height: 30,
               width: '100%',
               whiteSpace: 'nowrap',
             }}
