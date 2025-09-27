@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import {
   Dialog,
   DialogTitle,
@@ -20,6 +21,19 @@ import {
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../../config';
+import Notification from './Notification';
+
+// New: Helper functions for VND formatting
+const formatVND = (number) => {
+  if (!number && number !== 0) return '';
+  return Number(number).toLocaleString('vi-VN', { minimumFractionDigits: 0 });
+};
+
+const parseVND = (value) => {
+  if (!value) return '';
+  const cleanValue = value.replace(/[^0-9]/g, '');
+  return cleanValue ? parseInt(cleanValue, 10).toString() : '';
+};
 
 export default function EditProductDialog({ open, onClose, product, onRefresh }) {
   const [formData, setFormData] = useState({
@@ -38,6 +52,9 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     currency: '',
   });
 
+  // New: State for formatted price display
+  const [formattedPrice, setFormattedPrice] = useState('');
+
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [keptImageUrls, setKeptImageUrls] = useState([]);
@@ -47,15 +64,28 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   const [productType2List, setProductType2List] = useState([]);
   const [loadingType1, setLoadingType1] = useState(false);
   const [loadingType2, setLoadingType2] = useState(false);
+  const [isUsedInRequests, setIsUsedInRequests] = useState(false);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
 
-  // Load danh sách product type 1 khi dialog mở
+  const handleCloseNotification = () => {
+    setNotification((prev) => ({ ...prev, open: false }));
+  };
+
+  // Load product type 1 list and check usage when dialog opens
   useEffect(() => {
     if (open) {
       fetchProductType1List();
+      if (product?.id) {
+        checkSupplierUsage(product.id);
+      }
     }
-  }, [open]);
+  }, [open, product]);
 
-  // Cập nhật formData và hình ảnh khi product thay đổi
+  // Initialize form data and images when product changes
   useEffect(() => {
     if (product) {
       setFormData({
@@ -70,13 +100,16 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         size: product.size || '',
         materialGroupFullDescription: product.productFullName || '',
         unit: product.unit || '',
-        price: product.price || '',
+        price: product.price ? product.price.toString() : '', // Ensure price is a string
         currency: product.currency || '',
       });
+      // New: Set formatted price for display
+      setFormattedPrice(formatVND(product.price));
 
-      // Load danh sách hình ảnh hiện tại
       const initialImageUrls = (product.imageUrls || []).map((imgUrl) =>
-        imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`
+        imgUrl.startsWith('http')
+          ? `${imgUrl}?t=${new Date().getTime()}`
+          : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}?t=${new Date().getTime()}`
       );
       setKeptImageUrls(initialImageUrls);
       setPreviews(initialImageUrls);
@@ -85,7 +118,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     }
   }, [product]);
 
-  // Load product type 2 khi productType1Id thay đổi
+  // Load product type 2 list when productType1Id changes
   useEffect(() => {
     if (formData.productType1Id) {
       fetchProductType2List(formData.productType1Id);
@@ -95,7 +128,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     }
   }, [formData.productType1Id]);
 
-  // Thu hồi các URL preview khi dialog đóng
+  // Clean up preview URLs when dialog closes or previews change
   useEffect(() => {
     return () => {
       previews
@@ -104,15 +137,64 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     };
   }, [previews, keptImageUrls.length]);
 
+  // Reset states when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setFiles([]);
+      setPreviews([]);
+      setKeptImageUrls([]);
+      setRemovedImageUrls([]);
+      setIsUsedInRequests(false);
+      setNotification({ open: false, message: '', severity: 'info' });
+      // New: Reset formatted price
+      setFormattedPrice('');
+    }
+  }, [open]);
+
+  // Check if supplier product is used in requests
+  const checkSupplierUsage = async (id) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/supplier-products/check-usage/${id}`, {
+        method: 'GET',
+        headers: { accept: '*/*' },
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to check supplier usage: status ${response.status}`);
+      }
+      const result = await response.json();
+      setIsUsedInRequests(result.data);
+      if (result.data) {
+        setNotification({
+          open: true,
+          message: 'This product is used in requests, so Supplier Code, SAP Code, Unit, and Price cannot be edited.',
+          severity: 'warning',
+        });
+      }
+    } catch (error) {
+      console.error('Check supplier usage error:', error);
+      setIsUsedInRequests(false);
+      setNotification({
+        open: true,
+        message: `Failed to check supplier usage: ${error.message}`,
+        severity: 'error',
+      });
+    }
+  };
+
   const fetchProductType1List = async () => {
     setLoadingType1(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
-      if (!res.ok) throw new Error('Failed to load product type 1 list');
+      if (!res.ok) throw new Error(`Failed to load product type 1 list: status ${res.status}`);
       const data = await res.json();
       setProductType1List(data.content || data);
     } catch (error) {
       console.error(error);
+      setNotification({
+        open: true,
+        message: `Failed to load product type 1 list: ${error.message}`,
+        severity: 'error',
+      });
       setProductType1List([]);
     } finally {
       setLoadingType1(false);
@@ -125,11 +207,16 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       const res = await fetch(
         `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
       );
-      if (!res.ok) throw new Error('Failed to load product type 2 list');
+      if (!res.ok) throw new Error(`Failed to load product type 2 list: status ${res.status}`);
       const data = await res.json();
       setProductType2List(data.content || data);
     } catch (error) {
       console.error(error);
+      setNotification({
+        open: true,
+        message: `Failed to load product type 2 list: ${error.message}`,
+        severity: 'error',
+      });
       setProductType2List([]);
     } finally {
       setLoadingType2(false);
@@ -137,20 +224,42 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   };
 
   const handleChange = (field) => (e) => {
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    if (field === 'price') {
+      // New: Handle price input with VND formatting
+      const rawValue = parseVND(e.target.value);
+      setFormData((prev) => ({ ...prev, price: rawValue }));
+      setFormattedPrice(formatVND(rawValue));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    }
   };
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
     if (selectedFiles.length === 0) return;
 
-    const newFiles = [...files, ...selectedFiles];
-    if (newFiles.length + keptImageUrls.length > 10) {
-      alert('You can upload a maximum of 10 images.');
+    // Validate image format
+    const validFiles = selectedFiles.filter((file) => file.type.startsWith('image/'));
+    if (validFiles.length !== selectedFiles.length) {
+      setNotification({
+        open: true,
+        message: 'Please select only image files (e.g., .jpg, .png)',
+        severity: 'error',
+      });
       return;
     }
 
-    // Thu hồi các URL preview cũ của files
+    const newFiles = [...files, ...validFiles];
+    if (newFiles.length + keptImageUrls.length > 10) {
+      setNotification({
+        open: true,
+        message: 'You can upload a maximum of 10 images',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    // Revoke old preview URLs
     previews
       .slice(keptImageUrls.length)
       .forEach((preview) => URL.revokeObjectURL(preview));
@@ -163,20 +272,22 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   };
 
   const handleRemoveFile = (index) => {
-    // Thu hồi tất cả các URL preview của files
+    // Revoke all file preview URLs
     previews
       .slice(keptImageUrls.length)
       .forEach((preview) => URL.revokeObjectURL(preview));
 
     if (index < keptImageUrls.length) {
-      // Xóa hình ảnh hiện tại và thêm vào removedImageUrls
+      // Remove existing image and add to removedImageUrls
       const newKeptImageUrls = [...keptImageUrls];
       const removedUrl = newKeptImageUrls.splice(index, 1)[0];
+      // Remove query parameter ?t=... from the URL
+      const cleanUrl = removedUrl.split('?')[0].replace(`${API_BASE_URL}/`, '/').replace(API_BASE_URL, '');
       setKeptImageUrls(newKeptImageUrls);
-      setRemovedImageUrls((prev) => [...prev, removedUrl.replace(`${API_BASE_URL}/`, '/').replace(API_BASE_URL, '')]);
+      setRemovedImageUrls((prev) => [...prev, cleanUrl]);
       setPreviews([...newKeptImageUrls, ...files.map((file) => URL.createObjectURL(file))]);
     } else {
-      // Xóa file mới
+      // Remove new file
       const fileIndex = index - keptImageUrls.length;
       const newFiles = files.filter((_, i) => i !== fileIndex);
       setFiles(newFiles);
@@ -185,8 +296,20 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   };
 
   const validateForm = () => {
-    if (keptImageUrls.length === 0 && files.length === 0) {
-      alert('Please select at least one image.');
+    if (!formData.supplierCode || !formData.supplierName || !formData.sapCode) {
+      setNotification({
+        open: true,
+        message: 'Supplier Code, Supplier Name, and SAP Code are required',
+        severity: 'error',
+      });
+      return false;
+    }
+    if (formData.price && isNaN(formData.price)) {
+      setNotification({
+        open: true,
+        message: 'Price must be a valid number',
+        severity: 'error',
+      });
       return false;
     }
     return true;
@@ -207,24 +330,25 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     multipartForm.append('size', formData.size);
     multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription);
     multipartForm.append('unit', formData.unit);
-    multipartForm.append('price', formData.price);
+    multipartForm.append('price', formData.price); // Clean number is sent to backend
     multipartForm.append('currency', formData.currency);
 
-    // Gửi files (hình ảnh mới)
+    // Append new images
     if (files.length > 0) {
       files.forEach((file) => {
-        multipartForm.append('files', file); // Sử dụng key 'files' để khớp với UpdateProductRequest
+        multipartForm.append('files', file);
       });
     }
 
-    // Gửi imagesToDelete (URL hình ảnh cần xóa)
+    // Append images to delete
     if (removedImageUrls.length > 0) {
+      console.log('Images to delete:', removedImageUrls); // Thêm log để debug
       removedImageUrls.forEach((url) => {
-        multipartForm.append('imagesToDelete', url); // Sử dụng key 'imagesToDelete'
+        multipartForm.append('imagesToDelete', url);
       });
     }
 
-    // Debug: Log dữ liệu FormData trước khi gửi
+    // Debug: Log FormData entries
     console.log('FormData entries:');
     for (let pair of multipartForm.entries()) {
       console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
@@ -237,25 +361,61 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         body: multipartForm,
       });
 
-      if (!res.ok) throw new Error(`Edit failed status ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        let message = `Edit failed with status ${res.status}`;
+        if (res.status === 400) {
+          message = errorText.includes('Invalid price format')
+            ? 'Invalid price format'
+            : errorText.includes('Duplicate entry')
+            ? 'Duplicate data detected'
+            : errorText || message;
+        } else if (res.status === 409) {
+          message = errorText || 'Duplicate data detected';
+        }
+        throw new Error(message);
+      }
 
       const updatedProduct = await res.json();
-      console.log('Backend response:', updatedProduct);
+      console.log('Backend response:', updatedProduct); // Thêm log để debug
+
       if (updatedProduct && updatedProduct.imageUrls) {
         const newImageUrls = updatedProduct.imageUrls.map((imgUrl) =>
-          imgUrl.startsWith('http') ? imgUrl : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`
+          imgUrl.startsWith('http')
+            ? `${imgUrl}?t=${new Date().getTime()}`
+            : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}?t=${new Date().getTime()}`
         );
         setKeptImageUrls(newImageUrls);
         setPreviews(newImageUrls);
-        setFiles([]);
-        setRemovedImageUrls([]);
+      } else {
+        console.warn('No imageUrls in response, keeping existing images');
+        setKeptImageUrls([]);
+        setPreviews([]);
       }
 
-      await onRefresh();
+      setFiles([]);
+      setRemovedImageUrls([]);
+
+      setNotification({
+        open: true,
+        message: 'Product updated successfully',
+        severity: 'success',
+      });
+
+      if (typeof onRefresh === 'function') {
+        await onRefresh();
+      } else {
+        console.warn('onRefresh is not a function');
+      }
+
       onClose();
     } catch (err) {
       console.error('Edit error:', err);
-      alert('Edit failed. Please try again!');
+      setNotification({
+        open: true,
+        message: `Failed to update product: ${err.message}`,
+        severity: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -274,6 +434,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('supplierCode')}
             size="small"
             fullWidth
+            required
+            disabled={saving || isUsedInRequests}
           />
           <TextField
             label="Supplier Name"
@@ -281,6 +443,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('supplierName')}
             size="small"
             fullWidth
+            required
+            disabled={saving}
           />
           <TextField
             label="SAP Code"
@@ -288,6 +452,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('sapCode')}
             size="small"
             fullWidth
+            required
+            disabled={saving || isUsedInRequests}
           />
           <TextField
             label="Item No"
@@ -295,6 +461,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('itemNo')}
             size="small"
             fullWidth
+            disabled={saving}
           />
           <TextField
             label="Item Description"
@@ -302,6 +469,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('itemDescription')}
             size="small"
             fullWidth
+            disabled={saving}
           />
           <TextField
             label="Full Description"
@@ -311,6 +479,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             fullWidth
             multiline
             rows={4}
+            disabled={saving}
           />
           <Stack direction="row" spacing={2}>
             <TextField
@@ -319,6 +488,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
               onChange={handleChange('size')}
               size="small"
               fullWidth
+              disabled={saving}
             />
             <TextField
               label="Material Group Full Description"
@@ -326,6 +496,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
               onChange={handleChange('materialGroupFullDescription')}
               size="small"
               fullWidth
+              disabled={saving}
             />
           </Stack>
           <Stack direction="row" spacing={2}>
@@ -335,14 +506,18 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
               onChange={handleChange('unit')}
               size="small"
               fullWidth
+              disabled={saving || isUsedInRequests}
             />
+            {/* Modified: Price TextField with VND formatting */}
             <TextField
               label="Price"
-              value={formData.price}
+              value={formattedPrice}
               onChange={handleChange('price')}
               size="small"
               fullWidth
-              type="number"
+              type="text" // Changed from type="number" to allow formatted input
+              disabled={saving || isUsedInRequests}
+              inputProps={{ inputMode: 'numeric', pattern: '[0-9.]*' }} // Restrict to numeric-like input
             />
           </Stack>
           <TextField
@@ -351,6 +526,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             onChange={handleChange('currency')}
             size="small"
             fullWidth
+            disabled={saving}
           />
           <FormControl fullWidth size="small">
             <InputLabel id="product-type-1-label">Group Item 1</InputLabel>
@@ -359,7 +535,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
               value={formData.productType1Id}
               label="Group Item 1"
               onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
+              disabled={loadingType1 || saving}
             >
               <MenuItem value="">
                 <em>None</em>
@@ -375,7 +551,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
           <FormControl
             fullWidth
             size="small"
-            disabled={!formData.productType1Id || loadingType2}
+            disabled={!formData.productType1Id || loadingType2 || saving}
           >
             <InputLabel id="product-type-2-label">Group Item 2</InputLabel>
             <Select
@@ -400,7 +576,12 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
               Product Images (Max 10, leave empty to keep current)
             </InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<PhotoCamera />}
+                disabled={saving}
+              >
                 Choose Image
                 <input
                   hidden
@@ -423,16 +604,28 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     <img
                       src={preview}
                       alt={`Preview ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
+                      style={{
+                        maxHeight: '150px',
+                        borderRadius: 4,
+                        border: '1px solid #ddd',
+                      }}
+                      onError={(e) => {
+                        console.error(`Failed to load preview image: ${preview}`);
+                        e.target.src = '/images/fallback.jpg';
+                        e.target.alt = 'Failed to load';
+                      }}
                     />
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
                       onClick={() => handleRemoveFile(index)}
+                      disabled={saving}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
                     <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
-                      {index < keptImageUrls.length ? 'Current Image' : files[index - keptImageUrls.length]?.name || 'New Image'}
+                      {index < keptImageUrls.length
+                        ? 'Current Image'
+                        : files[index - keptImageUrls.length]?.name || 'New Image'}
                     </Typography>
                   </Box>
                 ))}
@@ -449,6 +642,19 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleCloseNotification}
+      />
     </Dialog>
   );
 }
+
+EditProductDialog.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  product: PropTypes.object,
+  onRefresh: PropTypes.func,
+};

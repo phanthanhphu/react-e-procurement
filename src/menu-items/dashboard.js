@@ -39,7 +39,7 @@ const dashboard = {
     },
     {
       id: 'grouprequest', // New id for Group Request
-      title: 'Group Request Management', // Changed to "Group Request Management"
+      title: 'Group Requests', // Changed to "Group Request Management"
       type: 'item',
       url: '/dashboard/group-requests', // New URL for Group Request
       icon: icons.groupRequest, // Icon for Group Request
@@ -47,7 +47,7 @@ const dashboard = {
     },
     {
       id: 'supplierproducts', // Changed id from 'locations' to 'supplierproducts'
-      title: 'Supplier Management', // Changed to "Supplier Products Management"
+      title: 'Products', // Changed to "Supplier Products Management"
       type: 'item',
       url: '/dashboard/supplier-products', // Changed url from '/locations' to '/supplier-products'
       icon: icons.supplierproducts,
@@ -55,7 +55,7 @@ const dashboard = {
     },
     {
       id: 'department-management',
-      title: 'Department Management', // Changed from "Department Management" to "Department Management"
+      title: 'Departments', // Changed from "Department Management" to "Department Management"
       type: 'item',
       url: '/dashboard/department-management',
       icon: icons.summary,
@@ -63,7 +63,7 @@ const dashboard = {
     },
       {
         id: 'product-type-management',
-        title: 'Product Type Management',
+        title: 'Product Types',
         type: 'item',
         url: '/dashboard/product-type-management',
         icon: icons.summary, // hoặc chọn icon khác tùy thích
@@ -71,7 +71,7 @@ const dashboard = {
       },
       {
         id: 'user-management',
-        title: 'User Management',
+        title: 'Users',
         type: 'item',
         url: '/dashboard/user-management',
         icon: icons.summary, // hoặc chọn icon khác tùy thích

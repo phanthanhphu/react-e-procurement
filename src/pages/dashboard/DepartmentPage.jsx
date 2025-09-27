@@ -20,6 +20,7 @@ import { API_BASE_URL } from '../../config';
 import AddDepartmentDialog from './AddDepartmentDialog';
 import EditDepartmentDialog from './EditDepartmentDialog';
 import DepartmentSearch from './DepartmentSearch';
+import Notification from './Notification';
 
 const API_URL = `${API_BASE_URL}/api/departments`;
 
@@ -37,6 +38,11 @@ export default function DepartmentManagement() {
   const [loading, setLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [divisionFilter, setDivisionFilter] = useState('');
@@ -47,8 +53,13 @@ export default function DepartmentManagement() {
 
   const theme = useTheme();
 
+  const handleCloseNotification = () => {
+    setNotification((prev) => ({ ...prev, open: false }));
+  };
+
   const fetchDepartments = async (pageNumber = 0, divisionFilter = '', departmentNameFilter = '') => {
     setLoading(true);
+    setNotification({ open: false, message: '', severity: 'info' });
     try {
       let url = `${API_URL}/filter?page=${pageNumber}&size=${size}`;
       if (divisionFilter.trim()) {
@@ -61,7 +72,16 @@ export default function DepartmentManagement() {
       const res = await fetch(url, {
         headers: { accept: '*/*' },
       });
-      if (!res.ok) throw new Error('Failed to fetch departments');
+      if (!res.ok) {
+        let errorMessage = 'Failed to fetch departments';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
       const data = await res.json();
       const { content, totalPages: tp } = data;
 
@@ -74,8 +94,14 @@ export default function DepartmentManagement() {
       }));
       setDepartments(mapped);
       setTotalPages(tp);
+      // No success notification for load data
     } catch (error) {
-      console.error(error);
+      console.error('Fetch departments error:', error);
+      setNotification({
+        open: true,
+        message: `Failed to load departments: ${error.message}`,
+        severity: 'error',
+      });
       setDepartments([]);
     } finally {
       setLoading(false);
@@ -94,7 +120,6 @@ export default function DepartmentManagement() {
     fetchDepartments(page, divisionFilter, departmentNameFilter);
   }, [page]);
 
-  // Trigger debounced search on divisionFilter or departmentNameFilter change
   useEffect(() => {
     debouncedSearch(divisionFilter, departmentNameFilter);
   }, [divisionFilter, departmentNameFilter, debouncedSearch]);
@@ -109,8 +134,14 @@ export default function DepartmentManagement() {
     console.log('handleAdd called with:', newDepartment);
     if (!newDepartment.departmentName.trim() || !newDepartment.division.trim()) {
       console.log('Validation failed: departmentName or division is empty');
+      setNotification({
+        open: true,
+        message: 'Department name and division cannot be empty',
+        severity: 'error',
+      });
       return;
     }
+    setLoading(true);
     try {
       const currentDate = new Date().toISOString();
       const res = await fetch(API_URL, {
@@ -126,19 +157,55 @@ export default function DepartmentManagement() {
           createdAt: currentDate,
         }),
       });
+      let message;
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Failed to add department: ${res.status} - ${errorText}`);
+        const text = await res.text();
+        console.log('Raw error response:', text);
+        try {
+          const errorData = JSON.parse(text);
+          message = errorData.message || text || `Failed to add department: ${res.status}`;
+        } catch (parseError) {
+          message = text || `Failed to add department: ${res.status}`;
+        }
+        throw new Error(message);
+      }
+      const text = await res.text();
+      console.log('Raw success response:', text);
+      try {
+        const data = JSON.parse(text);
+        message = data.message || text || 'Department added successfully';
+      } catch (parseError) {
+        message = text || 'Department added successfully';
       }
       setAddDialogOpen(false);
-      fetchDepartments(0, divisionFilter, departmentNameFilter);
+      await fetchDepartments(0, divisionFilter, departmentNameFilter);
+      setNotification({
+        open: true,
+        message: message,
+        severity: 'success',
+      });
     } catch (error) {
       console.error('Add department error:', error);
+      setNotification({
+        open: true,
+        message: error.message,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleUpdate = async (updatedDepartment) => {
-    if (!updatedDepartment) return;
+    if (!updatedDepartment) {
+      setNotification({
+        open: true,
+        message: 'No department selected for update',
+        severity: 'error',
+      });
+      return;
+    }
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/${updatedDepartment.id}`, {
         method: 'PUT',
@@ -153,26 +220,79 @@ export default function DepartmentManagement() {
           createdAt: updatedDepartment.createdAt,
         }),
       });
-      if (!res.ok) throw new Error(`Failed to update department: ${res.status}`);
+      if (!res.ok) {
+        let errorMessage = `Failed to update department: ${res.status}`;
+        try {
+          const errorData = await res.json();
+          console.log('Raw error response:', errorData);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      const data = await res.json();
       setEditDialogOpen(false);
-      fetchDepartments(page, divisionFilter, departmentNameFilter);
+      await fetchDepartments(page, divisionFilter, departmentNameFilter);
+      setNotification({
+        open: true,
+        message: 'Department updated successfully',
+        severity: 'success',
+      });
     } catch (error) {
-      console.error(error);
+      console.error('Update department error:', error);
+      setNotification({
+        open: true,
+        message: error.message,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleConfirmDelete = async () => {
-    if (!selectedDepartment) return;
+    if (!selectedDepartment) {
+      setNotification({
+        open: true,
+        message: 'No department selected for deletion',
+        severity: 'error',
+      });
+      return;
+    }
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/${selectedDepartment.id}`, {
         method: 'DELETE',
         headers: { accept: '*/*' },
       });
-      if (!res.ok) throw new Error(`Failed to delete department: ${res.status}`);
-      setDeleteDialogOpen(false);
-      fetchDepartments(page, divisionFilter, departmentNameFilter);
+      if (!res.ok) {
+        let errorMessage = 'Could not delete department';
+        try {
+          const errorData = await res.json();
+          console.log('Raw error response:', errorData);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      await fetchDepartments(page, divisionFilter, departmentNameFilter);
+      setNotification({
+        open: true,
+        message: 'Department deleted successfully',
+        severity: 'success',
+      });
     } catch (error) {
-      console.error(error);
+      console.error('Delete department error:', error);
+      setNotification({
+        open: true,
+        message: error.message,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -209,7 +329,7 @@ export default function DepartmentManagement() {
           fontFamily: 'Inter, sans-serif',
         }}
       >
-        Department Management
+        Department
       </Typography>
 
       {/* Search + Add Button Row */}
@@ -240,11 +360,20 @@ export default function DepartmentManagement() {
               fontSize: '0.65rem',
               height: '30px',
             }}
+            disabled={loading}
           >
             Add Department
           </Button>
         </Grid>
       </Grid>
+
+      {/* Notification */}
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleCloseNotification}
+      />
 
       {/* Department List */}
       <Grid container spacing={1.5} justifyContent="flex-start">
@@ -313,6 +442,7 @@ export default function DepartmentManagement() {
                         borderRadius: '50%',
                         p: 0.5,
                       }}
+                      disabled={loading}
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -324,6 +454,7 @@ export default function DepartmentManagement() {
                         borderRadius: '50%',
                         p: 0.5,
                       }}
+                      disabled={loading}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -339,7 +470,7 @@ export default function DepartmentManagement() {
       <Stack direction="row" spacing={0.5} justifyContent="center" sx={{ mt: 1.5 }}>
         <Button
           onClick={() => handlePageChange(page - 1)}
-          disabled={page === 0}
+          disabled={page === 0 || loading}
           sx={{
             bgcolor: '#f0f0f0',
             color: '#9e9e9e',
@@ -365,7 +496,7 @@ export default function DepartmentManagement() {
         </Typography>
         <Button
           onClick={() => handlePageChange(page + 1)}
-          disabled={page + 1 >= totalPages}
+          disabled={page + 1 >= totalPages || loading}
           sx={{
             bgcolor: '#f0f0f0',
             color: '#9e9e9e',
@@ -393,14 +524,20 @@ export default function DepartmentManagement() {
         <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Department</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
-            Are you sure you want to delete this department?
+            Are you sure you want to delete &quot;{selectedDepartment?.departmentName || 'Unknown'}&quot;?
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
             Cancel
           </Button>
-          <Button onClick={handleConfirmDelete} variant="contained" color="error" sx={{ fontSize: '0.65rem' }}>
+          <Button
+            onClick={handleConfirmDelete}
+            variant="contained"
+            color="error"
+            sx={{ fontSize: '0.65rem' }}
+            disabled={loading}
+          >
             Delete
           </Button>
         </DialogActions>
@@ -411,12 +548,14 @@ export default function DepartmentManagement() {
         onClose={handleCancelEdit}
         onUpdate={handleUpdate}
         department={selectedDepartment}
+        disabled={loading}
       />
 
       <AddDepartmentDialog
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
         onAdd={handleAdd}
+        disabled={loading}
       />
     </div>
   );

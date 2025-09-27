@@ -28,15 +28,15 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
-export default function EditDialog({ open, item, onClose, onRefresh }) {
+export default function EditRequisitionMonthly({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
     fullItemDescriptionVN: '',
-    oldSapCode: '',
-    newSapCode: '',
-    stock: '',
-    purchasingSuggest: '',
+    oldSAPCode: '',
+    sapCodeNewSAP: '',
+    totalNotIssuedQty: '',
+    inHand: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -47,7 +47,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     unit: '',
     supplierPrice: 0,
   });
-  const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
+  const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [productType1List, setProductType1List] = useState([]);
@@ -69,8 +69,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [initialVNDescription, setInitialVNDescription] = useState('');
 
   useEffect(() => {
-    console.log('EditDialog opened with item:', item);
-    if (open && item && item.requisition && item.requisition.id) {
+    console.log('EditRequisitionMonthly opened with item:', item);
+    if (open && item && item.id) {
       fetchData();
     } else {
       resetForm();
@@ -84,61 +84,71 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`);
+      const res = await fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`, {
+        headers: { accept: '*/*' },
+      });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       const data = await res.json();
       console.log('API response:', data);
-      const requisition = data.requisition || data;
-      const supplierProduct = data.supplierProduct || {};
-      const vietnameseName = requisition.vietnameseName || '';
 
       setFormData({
-        itemDescriptionEN: requisition.englishName || '',
-        itemDescriptionVN: vietnameseName,
-        fullItemDescriptionVN: requisition.fullDescription || '',
-        oldSapCode: requisition.oldSapCode || '',
-        newSapCode: requisition.newSapCode || '',
-        stock: requisition.stock || '',
-        purchasingSuggest: requisition.purchasingSuggest || '',
-        reason: requisition.reason || '',
-        remark: requisition.remark || '',
-        remarkComparison: requisition.remarkComparison || '',
-        supplierId: supplierProduct.id || '',
-        groupId: requisition.groupId || '',
-        productType1Id: requisition.productType1Id || '',
-        productType2Id: requisition.productType2Id || '',
-        unit: supplierProduct.unit || '',
-        supplierPrice: supplierProduct.price || 0,
+        itemDescriptionEN: data.itemDescriptionEN || '',
+        itemDescriptionVN: data.itemDescriptionVN || '',
+        fullItemDescriptionVN: data.fullDescription || '',
+        oldSAPCode: data.oldSAPCode || '',
+        sapCodeNewSAP: data.sapCodeNewSAP || '',
+        totalNotIssuedQty: data.totalNotIssuedQty?.toString() || '',
+        inHand: data.inHand?.toString() || '',
+        reason: data.reason || '',
+        remark: data.remark || '',
+        remarkComparison: data.remarkComparison || '',
+        supplierId: data.supplierId || '',
+        groupId: data.groupId || '',
+        productType1Id: data.productType1Id || '',
+        productType2Id: data.productType2Id || '',
+        unit: data.unit || '',
+        supplierPrice: parseFloat(data.price) || 0,
       });
 
       setDeptRows(
-        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
-          ? data.departmentRequestQuantities.map((dept) => ({
-              department: dept.departmentId,
+        data.departmentRequisitions && Array.isArray(data.departmentRequisitions)
+          ? data.departmentRequisitions.map((dept) => ({
+              id: dept.id || '',
+              name: dept.name || '',
               qty: dept.qty?.toString() || '',
               buy: dept.buy?.toString() || '',
             }))
-          : [{ department: '', qty: '', buy: '' }]
+          : [{ id: '', name: '', qty: '', buy: '' }]
       );
       setDeptErrors(
-        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
-          ? data.departmentRequestQuantities.map(() => '') // Khởi tạo lỗi rỗng
+        data.departmentRequisitions && Array.isArray(data.departmentRequisitions)
+          ? data.departmentRequisitions.map(() => '')
           : ['']
       );
 
-      setImageUrls(requisition.imageUrls || []);
+      setImageUrls(data.imageUrls || []);
       setImagesToDelete([]);
       setFiles([]);
       setPreviews([]);
-      setSelectedSupplier(supplierProduct.id ? { id: supplierProduct.id, ...supplierProduct } : null);
-      if (supplierProduct.id) {
-        setShowSupplierSelector(false);
-      }
+      setSelectedSupplier(
+        data.supplierId
+          ? {
+              id: data.supplierId,
+              supplierName: data.supplierName || '',
+              unit: data.unit || '',
+              price: parseFloat(data.price) || 0,
+              oldSAPCode: data.oldSAPCode || '',
+              itemDescriptionVN: data.itemDescriptionVN || '',
+              fullItemDescriptionVN: data.fullDescription || '',
+            }
+          : null
+      );
+      setShowSupplierSelector(!data.supplierId);
       setIsEnManuallyEdited(false);
-      setInitialVNDescription(vietnameseName);
+      setInitialVNDescription(data.itemDescriptionVN || '');
     } catch (err) {
       console.error('Fetch error:', err);
-      setSnackbarMessage(`Failed to load data: ${err.message}`);
+      setSnackbarMessage(`Failed: ${err.message}`);
       setSnackbarOpen(true);
     }
   };
@@ -148,10 +158,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       itemDescriptionEN: '',
       itemDescriptionVN: '',
       fullItemDescriptionVN: '',
-      oldSapCode: '',
-      newSapCode: '',
-      stock: '',
-      purchasingSuggest: '',
+      oldSAPCode: '',
+      sapCodeNewSAP: '',
+      totalNotIssuedQty: '',
+      inHand: '',
       reason: '',
       remark: '',
       remarkComparison: '',
@@ -162,8 +172,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       unit: '',
       supplierPrice: 0,
     });
-    setDeptRows([{ department: '', qty: '', buy: '' }]);
-    setDeptErrors(['']); // Reset lỗi
+    setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
+    setDeptErrors(['']);
     setImageUrls([]);
     setImagesToDelete([]);
     setFiles([]);
@@ -305,7 +315,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setFormData((prev) => ({
         ...prev,
         fullItemDescriptionVN: supplierData.fullItemDescriptionVN,
-        oldSapCode: supplierData.oldSapCode,
+        oldSAPCode: supplierData.oldSapCode,
         supplierId: supplierData.supplierId,
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
@@ -332,7 +342,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setFormData((prev) => ({
         ...prev,
         fullItemDescriptionVN: '',
-        oldSapCode: '',
+        oldSAPCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
@@ -343,7 +353,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['stock', 'purchasingSuggest'].includes(field)
+    const value = ['totalNotIssuedQty', 'inHand'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -351,11 +361,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setIsEnManuallyEdited(true);
     } else if (field === 'itemDescriptionVN') {
       setIsEnManuallyEdited(false);
-    } else if (field === 'oldSapCode') {
+    } else if (field === 'oldSAPCode') {
       if (!value) {
         setSelectedSupplier(null);
         setShowSupplierSelector(true);
-      } else if (value !== formData.oldSapCode) {
+      } else if (value !== formData.oldSAPCode) {
         setShowSupplierSelector(true);
       }
     }
@@ -363,15 +373,23 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const handleDeptChange = (index, field, value) => {
     const updatedRows = [...deptRows];
-    updatedRows[index][field] = value;
+    if (field === 'id') {
+      const selectedDept = departmentList.find((dept) => dept.id === value);
+      updatedRows[index] = {
+        ...updatedRows[index],
+        id: value,
+        name: selectedDept ? selectedDept.departmentName : '',
+      };
+    } else {
+      updatedRows[index][field] = parseFloat(value) || '';
+    }
     setDeptRows(updatedRows);
 
-    // Kiểm tra trùng lặp phòng ban
     const updatedErrors = deptRows.map((row, i) => {
-      if (i === index && field === 'department' && value) {
+      if (i === index && field === 'id' && value) {
         const isDuplicate = deptRows.some(
           (otherRow, otherIndex) =>
-            otherIndex !== i && otherRow.department === value && value !== ''
+            otherIndex !== i && otherRow.id === value && value !== ''
         );
         return isDuplicate ? 'This department is already selected' : '';
       }
@@ -381,14 +399,14 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
+    setDeptRows([...deptRows, { id: '', name: '', qty: '', buy: '' }]);
     setDeptErrors([...deptErrors, '']);
   };
 
   const handleDeleteDeptRow = (index) => {
     const updatedRows = deptRows.filter((_, i) => i !== index);
     const updatedErrors = deptErrors.filter((_, i) => i !== index);
-    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
+    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ id: '', name: '', qty: '', buy: '' }]);
     setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
   };
 
@@ -457,7 +475,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const newImageUrls = [...imageUrls];
       const removedUrl = newImageUrls.splice(index, 1)[0];
       setImageUrls(newImageUrls);
-      setImagesToDelete((prev) => [...prev, removedUrl]); // Đảm bảo không trùng lặp
+      setImagesToDelete((prev) => [...prev, removedUrl]);
       console.log('Updated imageUrls:', newImageUrls);
       console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
     } else {
@@ -474,8 +492,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleSave = async () => {
-    if (!item || !item.requisition || !item.requisition.id) {
-      setSnackbarMessage('Cannot save: Missing item or requisition ID.');
+    if (!item || !item.id) {
+      setSnackbarMessage('Cannot save: Missing requisition ID.');
       setSnackbarOpen(true);
       return;
     }
@@ -486,15 +504,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
+    if (deptRows.every((row) => !row.id || !row.qty || !row.buy)) {
       setSnackbarMessage('At least one department, quantity, and buy must be provided.');
       setSnackbarOpen(true);
       return;
     }
 
     const departmentIds = deptRows
-      .filter((row) => row.department)
-      .map((row) => row.department);
+      .filter((row) => row.id)
+      .map((row) => row.id);
     const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
     if (hasDuplicates) {
       setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
@@ -502,29 +520,28 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    const deptQtyMap = { quantities: {} };
-    deptRows.forEach((row) => {
-      if (row.department && row.qty && row.buy) {
-        deptQtyMap.quantities[row.department] = {
-          qty: parseFloat(row.qty) || 0,
-          buy: parseFloat(row.buy) || 0,
-        };
-      }
-    });
+    const departmentRequisitions = deptRows
+      .filter((row) => row.id && row.qty && row.buy)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        qty: parseFloat(row.qty) || 0,
+        buy: parseFloat(row.buy) || 0,
+      }));
 
     const formDataToSend = new FormData();
     files.forEach(file => formDataToSend.append('files', file));
     const cleanImagesToDelete = imagesToDelete.filter(url => url && url.trim() !== '');
     formDataToSend.append('imagesToDelete', JSON.stringify(cleanImagesToDelete.length > 0 ? cleanImagesToDelete : []));
+    formDataToSend.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
     Object.entries({
-      englishName: formData.itemDescriptionEN || '',
-      vietnameseName: formData.itemDescriptionVN || '',
+      itemDescriptionEN: formData.itemDescriptionEN || '',
+      itemDescriptionVN: formData.itemDescriptionVN || '',
       fullDescription: formData.fullItemDescriptionVN || '',
-      oldSapCode: formData.oldSapCode || '',
-      newSapCode: formData.newSapCode || '',
-      departmentRequestQty: JSON.stringify(deptQtyMap),
-      stock: parseFloat(formData.stock) || 0,
-      purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
+      oldSAPCode: formData.oldSAPCode || '',
+      sapCodeNewSAP: formData.sapCodeNewSAP || '',
+      totalNotIssuedQty: parseFloat(formData.totalNotIssuedQty) || 0,
+      inHand: parseFloat(formData.inHand) || 0,
       reason: formData.reason || '',
       remark: formData.remark || '',
       remarkComparison: formData.remarkComparison || '',
@@ -544,41 +561,33 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
+      const res = await fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`, {
         method: 'PUT',
         body: formDataToSend,
       });
 
       if (!res.ok) {
         const errorText = await res.text();
-        let errorData = {};
-        try {
-          errorData = JSON.parse(errorText); // Thử parse thành JSON
-        } catch (e) {
-          console.warn('Error response is not JSON:', errorText);
-        }
-        const apiMessage = errorData.message || errorText || `Update failed with status ${res.status}`;
-        throw new Error(apiMessage);
+        throw new Error(`Update failed: ${res.status} - ${errorText}`);
       }
 
       const data = await res.json();
       console.log('Save successful, response:', data);
-      const successMessage = data.message || 'Request updated successfully!';
-      setSnackbarMessage(successMessage);
+      setSnackbarMessage('Request updated successfully!');
       setSnackbarOpen(true);
-      if (data.requisition && data.requisition.imageUrls) {
-        setImageUrls(data.requisition.imageUrls);
-        console.log('Updated imageUrls from response:', data.requisition.imageUrls);
+      if (data.imageUrls) {
+        setImageUrls(data.imageUrls);
+        console.log('Updated imageUrls from response:', data.imageUrls);
       }
       previews.forEach(preview => preview && URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
       setImagesToDelete([]);
       await onRefresh();
-      onClose(successMessage); // Truyền thông báo thành công khi đóng dialog
+      onClose();
     } catch (err) {
       console.error('Update error:', err);
-      setSnackbarMessage(err.message); // Sử dụng thông báo từ API hoặc lỗi chung
+      setSnackbarMessage(`Unable to update item: ${err.message}`);
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
@@ -597,7 +606,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           letterSpacing: 1,
         }}
       >
-        Edit Request
+        Edit Monthly Requisition
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -649,16 +658,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
-              value={formData.oldSapCode}
-              onChange={handleChange('oldSapCode')}
+              value={formData.oldSAPCode}
+              onChange={handleChange('oldSAPCode')}
               size="small"
               fullWidth
               sx={{ flex: 1 }}
             />
             <TextField
               label="New SAP Code"
-              value={formData.newSapCode}
-              onChange={handleChange('newSapCode')}
+              value={formData.sapCodeNewSAP}
+              onChange={handleChange('sapCodeNewSAP')}
               size="small"
               fullWidth
               sx={{ flex: 1 }}
@@ -706,7 +715,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
           {showSupplierSelector ? (
             <SupplierSelector
-              oldSapCode={formData.oldSapCode}
+              oldSapCode={formData.oldSAPCode}
               onSelectSupplier={handleSelectSupplier}
               selectedSupplier={selectedSupplier}
             />
@@ -739,9 +748,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                   <Select
                     labelId={`department-label-${index}`}
-                    value={row.department}
+                    value={row.id}
                     label="Department"
-                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                    onChange={(e) => handleDeptChange(index, 'id', e.target.value)}
                   >
                     <MenuItem value="">
                       <em>None</em>
@@ -828,18 +837,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
-              label="Stock"
-              value={formData.stock}
-              onChange={handleChange('stock')}
+              label="Total Not Issued Quantity"
+              value={formData.totalNotIssuedQty}
+              onChange={handleChange('totalNotIssuedQty')}
               size="small"
               fullWidth
               type="number"
               sx={{ flex: 1 }}
             />
             <TextField
-              label="Purchase Suggestion"
-              value={formData.purchasingSuggest}
-              onChange={handleChange('purchasingSuggest')}
+              label="In Hand"
+              value={formData.inHand}
+              onChange={handleChange('inHand')}
               size="small"
               fullWidth
               type="number"

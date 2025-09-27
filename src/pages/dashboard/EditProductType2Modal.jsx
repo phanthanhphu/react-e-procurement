@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Input, message } from 'antd';
-
 import { API_BASE_URL } from '../../config';
 
-const EditProductType2Modal = ({ visible, record, onClose, onSuccess }) => {
+const EditProductType2Modal = ({ open, record, onClose, onSuccess }) => {
   const [inputName, setInputName] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { if (record) setInputName(record.name || ''); }, [record]);
+  useEffect(() => {
+    if (record) setInputName(record.name || '');
+  }, [record]);
 
   const handleSubmit = async () => {
     const name = inputName.trim();
@@ -19,7 +20,7 @@ const EditProductType2Modal = ({ visible, record, onClose, onSuccess }) => {
     try {
       const url = `${API_BASE_URL}/api/product-type-2/${record.id}?name=${encodeURIComponent(name)}`;
       const res = await fetch(url, { method: 'PUT', headers: { accept: '*/*' } });
-      if (!res.ok) throw new Error('Failed to update product type 2');
+      if (!res.ok) throw new Error('Failed to update Product Type 2');
       message.success('Sub-type updated successfully');
       onSuccess();
     } catch (error) {
@@ -31,11 +32,11 @@ const EditProductType2Modal = ({ visible, record, onClose, onSuccess }) => {
   return (
     <Modal
       title="Edit Sub-Type (Product Type 2)"
-      visible={visible}
+      open={open} // Fixed: Replaced visible with open
       onOk={handleSubmit}
       onCancel={onClose}
       okText="Save"
-      destroyOnClose
+      destroyOnHidden // Fixed: Replaced destroyOnClose with destroyOnHidden
       confirmLoading={loading}
     >
       <Input

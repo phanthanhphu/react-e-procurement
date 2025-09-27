@@ -1,16 +1,15 @@
-// AddProductType1Modal.jsx
 import React, { useState } from 'react';
 import { Modal, Input, message } from 'antd';
 import { API_BASE_URL } from '../../config';
 
-const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
+const AddProductType1Modal = ({ open, onClose, onSuccess }) => {
   const [inputName, setInputName] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     const nameTrimmed = inputName.trim();
     if (!nameTrimmed) {
-      message.warning('Please enter a name');
+      message.warning('Vui lòng nhập tên');
       return;
     }
     setLoading(true);
@@ -20,9 +19,9 @@ const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
         headers: { accept: '*/*' },
         body: '',
       });
-      if (!res.ok) throw new Error('Failed to add product type 1');
-      message.success('Added successfully');
-      setInputName(''); // Reset input after successful submission
+      if (!res.ok) throw new Error('Không thể thêm Product Type 1');
+      message.success('Thêm thành công');
+      setInputName('');
       onSuccess();
     } catch (error) {
       message.error(error.message);
@@ -31,22 +30,22 @@ const AddProductType1Modal = ({ visible, onClose, onSuccess }) => {
   };
 
   const handleClose = () => {
-    setInputName(''); // Reset input when modal is closed
+    setInputName('');
     onClose();
   };
 
   return (
     <Modal
-      title="Add New Product Type 1"
-      visible={visible}
+      title="Thêm Product Type 1"
+      open={open}
       onOk={handleSubmit}
       onCancel={handleClose}
-      okText="Add"
-      destroyOnClose
+      okText="Thêm"
+      destroyOnHidden
       confirmLoading={loading}
     >
       <Input
-        placeholder="Enter name"
+        placeholder="Nhập tên"
         value={inputName}
         onChange={(e) => setInputName(e.target.value)}
         maxLength={100}

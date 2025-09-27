@@ -17,11 +17,24 @@ import {
   FormHelperText,
   IconButton,
 } from '@mui/material';
-import { API_BASE_URL } from '../../config';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
+import { API_BASE_URL } from '../../config';
+import Notification from './Notification';
 
-export default function AddProductDialog({ open, onClose, onRefresh }) {
+// New: Helper functions for VND formatting
+const formatVND = (number) => {
+  if (!number && number !== 0) return '';
+  return Number(number).toLocaleString('vi-VN', { minimumFractionDigits: 0 });
+};
+
+const parseVND = (value) => {
+  if (!value) return '';
+  const cleanValue = value.replace(/[^0-9]/g, '');
+  return cleanValue ? parseInt(cleanValue, 10).toString() : '';
+};
+
+export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, disabled }) {
   const [formData, setFormData] = useState({
     productType1Id: '',
     productType2Id: '',
@@ -38,15 +51,25 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
     currency: '',
   });
 
+  // New: State for formatted price display
+  const [formattedPrice, setFormattedPrice] = useState('');
+
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [saving, setSaving] = useState(false);
-
   const [productType1List, setProductType1List] = useState([]);
   const [productType2List, setProductType2List] = useState([]);
-
   const [loadingType1, setLoadingType1] = useState(false);
   const [loadingType2, setLoadingType2] = useState(false);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
+
+  const handleCloseNotification = () => {
+    setNotification((prev) => ({ ...prev, open: false }));
+  };
 
   useEffect(() => {
     if (open) {
@@ -59,11 +82,16 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
     setLoadingType1(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
-      if (!res.ok) throw new Error('Failed to load product type 1 list');
+      if (!res.ok) throw new Error(`Failed to load product type 1 list: status ${res.status}`);
       const data = await res.json();
       setProductType1List(data.content || data);
     } catch (error) {
       console.error(error);
+      setNotification({
+        open: true,
+        message: `Failed to load product type 1 list: ${error.message}`,
+        severity: 'error',
+      });
       setProductType1List([]);
     } finally {
       setLoadingType1(false);
@@ -85,11 +113,16 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
       const res = await fetch(
         `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
       );
-      if (!res.ok) throw new Error('Failed to load product type 2 list');
+      if (!res.ok) throw new Error(`Failed to load product type 2 list: status ${res.status}`);
       const data = await res.json();
       setProductType2List(data.content || data);
     } catch (error) {
       console.error(error);
+      setNotification({
+        open: true,
+        message: `Failed to load product type 2 list: ${error.message}`,
+        severity: 'error',
+      });
       setProductType2List([]);
     } finally {
       setLoadingType2(false);
@@ -97,22 +130,45 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
   };
 
   const handleChange = (field) => (e) => {
-    const value = e.target.value;
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'price') {
+      // New: Handle price input with VND formatting
+      const rawValue = parseVND(e.target.value);
+      setFormData((prev) => ({ ...prev, price: rawValue }));
+      setFormattedPrice(formatVND(rawValue));
+    } else {
+      const value = e.target.value;
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    }
   };
 
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
     if (selectedFiles.length === 0) return;
 
-    const newFiles = [...files, ...selectedFiles];
+    // Validate image format
+    const validFiles = selectedFiles.filter((file) => file.type.startsWith('image/'));
+    if (validFiles.length !== selectedFiles.length) {
+      setNotification({
+        open: true,
+        message: 'Please select only image files (e.g., .jpg, .png)',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return;
+    }
+
+    const newFiles = [...files, ...validFiles];
     if (newFiles.length > 10) {
-      alert('You can upload a maximum of 10 images.');
+      setNotification({
+        open: true,
+        message: 'You can upload a maximum of 10 images',
+        severity: 'warning',
+        autoHideDuration: 6000,
+      });
       return;
     }
 
     previews.forEach((preview) => URL.revokeObjectURL(preview));
-
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
@@ -131,39 +187,55 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
   };
 
   const validateForm = () => {
-    return true; // Không yêu cầu bất kỳ trường nào, chỉ kiểm tra files nếu cần
+    if (!formData.supplierCode?.trim() || !formData.supplierName?.trim() || !formData.sapCode?.trim() || !formData.itemNo?.trim()) {
+      setNotification({
+        open: true,
+        message: 'Supplier Code, Supplier Name, SAP Code, and Item No are required',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
+    if (formData.price && isNaN(formData.price)) {
+      setNotification({
+        open: true,
+        message: 'Price must be a valid number',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
+    return true;
   };
 
   const handleSave = async () => {
-    if (!validateForm()) {
-      alert('Please select at least one image if you want to upload images.');
-      return;
-    }
+    if (!validateForm()) return;
 
     const multipartForm = new FormData();
 
-    if (formData.productType1Id) {
-      multipartForm.append('productType1Id', formData.productType1Id);
-    }
-    if (formData.productType2Id) {
-      multipartForm.append('productType2Id', formData.productType2Id);
-    }
-
+    if (formData.productType1Id) multipartForm.append('productType1Id', formData.productType1Id);
+    if (formData.productType2Id) multipartForm.append('productType2Id', formData.productType2Id);
     multipartForm.append('supplierCode', formData.supplierCode);
     multipartForm.append('supplierName', formData.supplierName);
     multipartForm.append('sapCode', formData.sapCode);
     multipartForm.append('itemNo', formData.itemNo);
-    multipartForm.append('itemDescription', formData.itemDescription);
-    multipartForm.append('fullDescription', formData.fullDescription);
-    multipartForm.append('size', formData.size);
-    multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription);
-    multipartForm.append('unit', formData.unit);
-    multipartForm.append('price', formData.price);
-    multipartForm.append('currency', formData.currency);
+    multipartForm.append('itemDescription', formData.itemDescription || '');
+    multipartForm.append('fullDescription', formData.fullDescription || '');
+    multipartForm.append('size', formData.size || '');
+    multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription || '');
+    multipartForm.append('unit', formData.unit || '');
+    multipartForm.append('price', formData.price || '0'); // Clean number is sent to backend
+    multipartForm.append('currency', formData.currency || '');
 
     files.forEach((file) => {
       multipartForm.append('files', file);
     });
+
+    // Debug: Log FormData entries
+    console.log('FormData entries:');
+    for (let pair of multipartForm.entries()) {
+      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
+    }
 
     setSaving(true);
     try {
@@ -172,14 +244,54 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
         body: multipartForm,
       });
 
-      if (!res.ok) throw new Error(`Add failed with status ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        let message = `Failed to add product: status ${res.status}`;
+        if (res.status === 400 || res.status === 409) {
+          try {
+            const errorData = JSON.parse(errorText);
+            message = errorData.message || errorText || message;
+          } catch (parseError) {
+            message = errorText || message;
+          }
+        }
+        throw new Error(message);
+      }
 
-      await onRefresh();
+      const text = await res.text();
+      let message = 'Product added successfully';
+      try {
+        const data = JSON.parse(text);
+        message = data.message || message;
+      } catch (parseError) {
+        console.warn('Response is not JSON:', text);
+        message = text || message;
+      }
+
+      // Truyền thông báo thành công về parent component
+      if (typeof onSuccess === 'function') {
+        onSuccess(message);
+      } else {
+        console.warn('onSuccess is not a function');
+      }
+
+      // Làm mới dữ liệu
+      if (typeof onRefresh === 'function') {
+        await onRefresh();
+      } else {
+        console.warn('onRefresh is not a function');
+      }
+
       onClose();
       resetForm();
     } catch (err) {
       console.error('Add error:', err);
-      alert('Failed to add product. Please try again!');
+      setNotification({
+        open: true,
+        message: err.message,
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
     } finally {
       setSaving(false);
     }
@@ -204,6 +316,9 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
     previews.forEach((preview) => URL.revokeObjectURL(preview));
     setFiles([]);
     setPreviews([]);
+    setNotification({ open: false, message: '', severity: 'info' });
+    // New: Reset formatted price
+    setFormattedPrice('');
   };
 
   return (
@@ -219,6 +334,8 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('supplierCode')}
             size="small"
             fullWidth
+            required
+            disabled={saving || disabled}
           />
           <TextField
             label="Supplier Name"
@@ -226,6 +343,8 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('supplierName')}
             size="small"
             fullWidth
+            required
+            disabled={saving || disabled}
           />
           <TextField
             label="SAP Code"
@@ -233,6 +352,8 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('sapCode')}
             size="small"
             fullWidth
+            required
+            disabled={saving || disabled}
           />
           <TextField
             label="Item No"
@@ -240,6 +361,8 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('itemNo')}
             size="small"
             fullWidth
+            required
+            disabled={saving || disabled}
           />
           <TextField
             label="Item Description"
@@ -247,6 +370,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('itemDescription')}
             size="small"
             fullWidth
+            disabled={saving || disabled}
           />
           <TextField
             label="Full Description"
@@ -256,6 +380,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             fullWidth
             multiline
             rows={4}
+            disabled={saving || disabled}
           />
           <Stack direction="row" spacing={2}>
             <TextField
@@ -264,6 +389,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
               onChange={handleChange('size')}
               size="small"
               fullWidth
+              disabled={saving || disabled}
             />
             <TextField
               label="Material Group Full Description"
@@ -271,6 +397,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
               onChange={handleChange('materialGroupFullDescription')}
               size="small"
               fullWidth
+              disabled={saving || disabled}
             />
           </Stack>
           <Stack direction="row" spacing={2}>
@@ -280,14 +407,18 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
               onChange={handleChange('unit')}
               size="small"
               fullWidth
+              disabled={saving || disabled}
             />
+            {/* Modified: Price TextField with VND formatting */}
             <TextField
               label="Price"
-              value={formData.price}
+              value={formattedPrice}
               onChange={handleChange('price')}
               size="small"
               fullWidth
-              type="number"
+              type="text" // Changed from type="number" to allow formatted input
+              disabled={saving || disabled}
+              inputProps={{ inputMode: 'numeric', pattern: '[0-9.]*' }} // Restrict to numeric-like input
             />
           </Stack>
           <TextField
@@ -296,15 +427,15 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
             onChange={handleChange('currency')}
             size="small"
             fullWidth
+            disabled={saving || disabled}
           />
-          <FormControl fullWidth size="small">
+          <FormControl fullWidth size="small" disabled={loadingType1 || saving || disabled}>
             <InputLabel id="product-type-1-label">Group Item 1</InputLabel>
             <Select
               labelId="product-type-1-label"
               value={formData.productType1Id}
               label="Group Item 1"
               onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
             >
               <MenuItem value="">
                 <em>None</em>
@@ -320,7 +451,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
           <FormControl
             fullWidth
             size="small"
-            disabled={!formData.productType1Id || loadingType2}
+            disabled={!formData.productType1Id || loadingType2 || saving || disabled}
           >
             <InputLabel id="product-type-2-label">Group Item 2</InputLabel>
             <Select
@@ -343,12 +474,18 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<PhotoCamera />}
+                disabled={saving || disabled}
+              >
                 Choose Image
                 <input
                   hidden
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleFileChange}
                 />
               </Button>
@@ -370,6 +507,7 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
                     <IconButton
                       sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
                       onClick={() => handleRemoveFile(index)}
+                      disabled={saving || disabled}
                     >
                       <CloseIcon color="error" />
                     </IconButton>
@@ -384,13 +522,20 @@ export default function AddProductDialog({ open, onClose, onRefresh }) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={saving}>
+        <Button onClick={onClose} disabled={saving || disabled}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || disabled}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleCloseNotification}
+        autoHideDuration={6000}
+      />
     </Dialog>
   );
 }

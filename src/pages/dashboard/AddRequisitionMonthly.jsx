@@ -17,7 +17,6 @@ import {
   IconButton,
   FormHelperText,
   Box,
-  Dialog as ErrorDialog,
   Snackbar,
   Alert,
 } from '@mui/material';
@@ -25,20 +24,19 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'; // Icon cho lỗi
 import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
-export default function AddDialog({ open, onClose, onRefresh, groupId }) {
+export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupId }) {
   const defaultFormData = {
     itemDescriptionEN: '',
     itemDescriptionVN: '',
     fullItemDescriptionVN: '',
     oldSapCode: '',
     newSapCode: '',
-    stock: '',
-    purchasingSuggest: '',
+    totalNotIssuedQty: '',
+    inHand: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -51,7 +49,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const [formData, setFormData] = useState(defaultFormData);
-  const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
+  const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
   const [saving, setSaving] = useState(false);
   const [productType1List, setProductType1List] = useState([]);
@@ -63,8 +61,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [translating, setTranslating] = useState(false);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [errorOpen, setErrorOpen] = useState(false); // State cho dialog lỗi
-  const [errorMessage, setErrorMessage] = useState(''); // Nội dung thông báo lỗi
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -79,10 +77,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         setFiles([]);
         setPreviews([]);
       }
-      setDeptRows([{ department: '', qty: '', buy: '' }]);
+      setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
-      setErrorOpen(false); // Đóng dialog lỗi khi mở lại
-      setErrorMessage(''); // Reset lỗi khi mở lại
     }
   }, [open, groupId]);
 
@@ -112,6 +108,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     } catch (error) {
       console.error('Translation error:', error);
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
+      setSnackbarMessage('Failed to translate text. Please try again.');
+      setSnackbarOpen(true);
     } finally {
       setTranslating(false);
     }
@@ -142,15 +140,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     }
   };
 
-  useEffect(() => {
-    if (formData.productType1Id) {
-      fetchProductType2List(formData.productType1Id);
-    } else {
-      setProductType2List([]);
-      setFormData((prev) => ({ ...prev, productType2Id: '' }));
-    }
-  }, [formData.productType1Id]);
-
   const fetchProductType2List = async (type1Id) => {
     setLoadingType2(true);
     try {
@@ -167,6 +156,15 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setLoadingType2(false);
     }
   };
+
+  useEffect(() => {
+    if (formData.productType1Id) {
+      fetchProductType2List(formData.productType1Id);
+    } else {
+      setProductType2List([]);
+      setFormData((prev) => ({ ...prev, productType2Id: '' }));
+    }
+  }, [formData.productType1Id]);
 
   const fetchDepartmentList = async () => {
     setLoadingDepartments(true);
@@ -208,46 +206,49 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['stock', 'purchasingSuggest'].includes(field)
+    const value = ['totalNotIssuedQty', 'inHand'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
-    setErrorOpen(false); // Đóng dialog lỗi khi thay đổi input
-    setErrorMessage(''); // Reset lỗi khi thay đổi
   };
 
   const handleDeptChange = (index, field, value) => {
     const updatedRows = [...deptRows];
-    updatedRows[index][field] = field === 'department' ? value : parseFloat(value) || '';
+    if (field === 'id') {
+      const selectedDept = departmentList.find((dept) => dept.id === value);
+      updatedRows[index] = {
+        ...updatedRows[index],
+        id: value,
+        name: selectedDept ? selectedDept.departmentName : '',
+      };
+    } else {
+      updatedRows[index][field] = parseFloat(value) || '';
+    }
     setDeptRows(updatedRows);
 
     const updatedErrors = deptRows.map((row, i) => {
-      if (i === index && field === 'department' && value) {
+      if (i === index && field === 'id' && value) {
         const isDuplicate = deptRows.some(
           (otherRow, otherIndex) =>
-            otherIndex !== i && otherRow.department === value && value !== ''
+            otherIndex !== i && otherRow.id === value && value !== ''
         );
         return isDuplicate ? 'This department is already selected' : '';
       }
       return deptErrors[i] || '';
     });
     setDeptErrors(updatedErrors);
-    setErrorOpen(false); // Đóng dialog lỗi khi thay đổi department
-    setErrorMessage(''); // Reset lỗi khi thay đổi
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
+    setDeptRows([...deptRows, { id: '', name: '', qty: '', buy: '' }]);
     setDeptErrors([...deptErrors, '']);
   };
 
   const handleDeleteDeptRow = (index) => {
     const updatedRows = deptRows.filter((_, i) => i !== index);
     const updatedErrors = deptErrors.filter((_, i) => i !== index);
-    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
+    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ id: '', name: '', qty: '', buy: '' }]);
     setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
-    setErrorOpen(false); // Đóng dialog lỗi khi xóa department
-    setErrorMessage(''); // Reset lỗi khi xóa
   };
 
   const calcTotalBuy = () => {
@@ -268,19 +269,19 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return;
     }
 
-    const validFiles = selectedFiles.filter(file =>
+    const validFiles = selectedFiles.filter((file) =>
       file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
     );
     if (validFiles.length !== selectedFiles.length) {
-      setErrorMessage('Only images under 5MB are allowed.');
-      setErrorOpen(true);
+      setSnackbarMessage('Only image files under 5MB are allowed.');
+      setSnackbarOpen(true);
       return;
     }
 
     const newFiles = [...files, ...validFiles];
     if (newFiles.length > 10) {
-      setErrorMessage('Maximum 10 images allowed.');
-      setErrorOpen(true);
+      setSnackbarMessage('You can upload a maximum of 10 images.');
+      setSnackbarOpen(true);
       return;
     }
 
@@ -288,14 +289,12 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map(file => ({
+    console.log('Updated files state:', newFiles.map((file) => ({
       name: file.name,
       size: file.size,
       type: file.type,
     })));
     e.target.value = null;
-    setErrorOpen(false); // Đóng dialog lỗi khi chọn file hợp lệ
-    setErrorMessage(''); // Reset lỗi
   };
 
   const handleRemoveFile = (index) => {
@@ -305,95 +304,89 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     const newPreviews = previews.filter((_, i) => i !== index);
     setFiles(newFiles);
     setPreviews(newPreviews);
-    console.log('Updated files:', newFiles.map(file => file.name));
-    setErrorOpen(false); // Đóng dialog lỗi khi xóa file
-    setErrorMessage(''); // Reset lỗi
+    console.log('Updated files:', newFiles.map((file) => file.name));
   };
 
   const handleAdd = async () => {
     if (!groupId) {
-      setErrorMessage('Group ID is missing.');
-      setErrorOpen(true);
+      setSnackbarMessage('Group ID is missing.');
+      setSnackbarOpen(true);
       return;
     }
     if (!formData.itemDescriptionVN) {
-      setErrorMessage('Item Description (VN) is required.');
-      setErrorOpen(true);
+      setSnackbarMessage('Item Description (VN) is required.');
+      setSnackbarOpen(true);
       return;
     }
-    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
-      setErrorMessage('At least one department, quantity, and buy must be provided.');
-      setErrorOpen(true);
+    if (deptRows.every((row) => !row.id || !row.qty || !row.buy)) {
+      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
+      setSnackbarOpen(true);
       return;
     }
 
     const departmentIds = deptRows
-      .filter((row) => row.department)
-      .map((row) => row.department);
+      .filter((row) => row.id)
+      .map((row) => row.id);
     const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
     if (hasDuplicates) {
-      setErrorMessage('Duplicate departments detected. Please select unique departments.');
-      setErrorOpen(true);
+      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
+      setSnackbarOpen(true);
       return;
     }
 
-    const deptQtyMap = { quantities: {} };
-    deptRows.forEach((row) => {
-      if (row.department && row.qty && row.buy) {
-        deptQtyMap.quantities[row.department] = {
-          qty: parseFloat(row.qty) || 0,
-          buy: parseFloat(row.buy) || 0,
-        };
-      }
-    });
+    const departmentRequisitions = deptRows
+      .filter((row) => row.id && row.qty && row.buy)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        qty: parseFloat(row.qty) || 0,
+        buy: parseFloat(row.buy) || 0,
+      }));
 
     const formDataToSend = new FormData();
-    formDataToSend.append('englishName', formData.itemDescriptionEN || '');
-    formDataToSend.append('vietnameseName', formData.itemDescriptionVN || '');
+    formDataToSend.append('itemDescriptionEN', formData.itemDescriptionEN || '');
+    formDataToSend.append('itemDescriptionVN', formData.itemDescriptionVN || '');
     formDataToSend.append('fullDescription', formData.fullItemDescriptionVN || '');
-    formDataToSend.append('oldSapCode', formData.oldSapCode || '');
-    formDataToSend.append('newSapCode', formData.newSapCode || '');
-    formDataToSend.append('departmentRequestQty', JSON.stringify(deptQtyMap));
-    formDataToSend.append('stock', parseFloat(formData.stock) || 0);
-    formDataToSend.append('purchasingSuggest', parseFloat(formData.purchasingSuggest) || 0);
+    formDataToSend.append('oldSAPCode', formData.oldSapCode || '');
+    formDataToSend.append('sapCodeNewSAP', formData.newSapCode || '');
+    formDataToSend.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
+    formDataToSend.append('totalNotIssuedQty', parseFloat(formData.totalNotIssuedQty) || 0);
+    formDataToSend.append('inHand', parseFloat(formData.inHand) || 0);
     formDataToSend.append('reason', formData.reason || '');
     formDataToSend.append('remark', formData.remark || '');
     formDataToSend.append('remarkComparison', formData.remarkComparison || '');
     formDataToSend.append('supplierId', formData.supplierId || '');
-    formDataToSend.append('groupId', formData.groupId || '');
     formDataToSend.append('productType1Id', formData.productType1Id || '');
     formDataToSend.append('productType2Id', formData.productType2Id || '');
-
+    formDataToSend.append('groupId', formData.groupId || '');
     files.forEach((file) => {
       formDataToSend.append('files', file);
     });
 
     setSaving(true);
-    setErrorOpen(false); // Đóng dialog lỗi trước khi gửi
-    setErrorMessage(''); // Reset lỗi trước khi gửi
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/create`, {
+      const res = await fetch(`${API_BASE_URL}/requisition-monthly`, {
         method: 'POST',
         headers: {
           'accept': '*/*',
         },
         body: formDataToSend,
       });
-      const responseData = await res.json();
       if (!res.ok) {
-        throw new Error(responseData.message || `Add failed with status ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.message || `Add failed with status ${res.status}`);
       }
 
-      if (typeof onClose === 'function') {
-        onClose(responseData.message || 'Request added successfully!');
-      }
+      setSnackbarMessage('Request added successfully!');
+      setSnackbarOpen(true);
 
       if (typeof onRefresh === 'function') {
         await onRefresh();
       }
+      onClose();
 
       setFormData(defaultFormData);
-      setDeptRows([{ department: '', qty: '', buy: '' }]);
+      setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
       setProductType1List([]);
       setProductType2List([]);
@@ -402,17 +395,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setPreviews([]);
     } catch (err) {
       console.error('Add error:', err);
-      setErrorMessage(`Add failed: ${err.message}`);
-      setErrorOpen(true);
+      setSnackbarMessage(`Add failed: ${err.message}`);
+      setSnackbarOpen(true);
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCloseErrorDialog = (event, reason) => {
-    if (reason === 'clickaway') return;
-    setErrorOpen(false);
-    setErrorMessage('');
   };
 
   return (
@@ -427,7 +414,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           letterSpacing: 1,
         }}
       >
-        Add request
+        Add Monthly Requisition
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -544,7 +531,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Department Request Qty:
+              Department Requisitions:
             </Typography>
             {deptRows.map((row, index) => (
               <Stack
@@ -558,9 +545,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                   <Select
                     labelId={`department-label-${index}`}
-                    value={row.department}
+                    value={row.id}
                     label="Department"
-                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                    onChange={(e) => handleDeptChange(index, 'id', e.target.value)}
                   >
                     <MenuItem value="">
                       <em>None</em>
@@ -644,18 +631,18 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
-              label="Stock"
-              value={formData.stock}
-              onChange={handleChange('stock')}
+              label="Total Not Issued Quantity"
+              value={formData.totalNotIssuedQty}
+              onChange={handleChange('totalNotIssuedQty')}
               size="small"
               fullWidth
               type="number"
               sx={{ flex: 1 }}
             />
             <TextField
-              label="Purchasing Suggest"
-              value={formData.purchasingSuggest}
-              onChange={handleChange('purchasingSuggest')}
+              label="In Hand"
+              value={formData.inHand}
+              onChange={handleChange('inHand')}
               size="small"
               fullWidth
               type="number"
@@ -729,7 +716,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 ))}
               </Box>
             )}
-            {files.length === 0 && (
+            {files.length == 0 && (
               <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
                 No images selected
               </Typography>
@@ -745,21 +732,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
         </Button>
       </DialogActions>
-
-      {/* Dialog lỗi với giao diện giống Notification */}
       <Snackbar
-        open={errorOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseErrorDialog}
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert
-          onClose={handleCloseErrorDialog}
-          severity="error"
-          icon={<ErrorOutlineIcon />}
-          sx={{ width: '100%', bgcolor: '#fff3f3', color: '#d32f2f' }}
-        >
-          {errorMessage}
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'} sx={{ width: '100%' }}>
+          {snackbarMessage}
         </Alert>
       </Snackbar>
     </Dialog>

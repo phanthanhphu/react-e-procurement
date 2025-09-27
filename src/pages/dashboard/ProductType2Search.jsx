@@ -1,31 +1,30 @@
 import React, { useState } from 'react';
 import { Paper, Grid, TextField, Button, useTheme } from '@mui/material';
 
-export default function ProductTypeSearch({
-  type1NameValue,
-  onType1NameChange,
+export default function ProductType2Search({
+  type2NameValue,
+  onType2NameChange,
   onSearch,
   onReset,
 }) {
   const theme = useTheme();
-  const [type1NameSearch, setType1NameSearch] = useState(type1NameValue || '');
+  const [type2NameSearch, setType2NameSearch] = useState(type2NameValue || '');
 
-  const handleType1NameChange = (e) => {
+  const handleType2NameChange = (e) => {
     const value = e.target.value;
-    setType1NameSearch(value);
-    onType1NameChange(value);
-    // Trigger search immediately when input changes; if empty, reload all data
+    setType2NameSearch(value);
+    onType2NameChange(value);
     onSearch({ name: value });
   };
 
   const handleSearch = () => {
-    onSearch({ name: type1NameSearch }); // Trigger search with name parameter
+    onSearch({ name: type2NameSearch });
   };
 
   const handleReset = () => {
-    setType1NameSearch('');
-    onType1NameChange('');
-    onReset(); // Reset input and trigger parent reset
+    setType2NameSearch('');
+    onType2NameChange('');
+    onReset();
   };
 
   return (
@@ -41,7 +40,7 @@ export default function ProductTypeSearch({
         maxWidth: 600,
         width: '100%',
         overflowX: 'auto',
-        display: 'flex', // Use flex to center content
+        display: 'flex', // Ensure Paper uses flex to center content
         justifyContent: 'center', // Center content horizontally
         alignItems: 'center', // Center content vertically
       }}
@@ -61,17 +60,17 @@ export default function ProductTypeSearch({
       >
         <Grid item xs={12} sm={6} sx={{ minWidth: { xs: '100%', sm: 300 } }}>
           <TextField
-            label="Parent Type Name"
+            label="Product Type 2 Name"
             variant="outlined"
             size="small"
-            value={type1NameSearch}
-            onChange={handleType1NameChange}
+            value={type2NameSearch}
+            onChange={handleType2NameChange}
             sx={{
               width: '100%',
               '& .MuiInputBase-input': { fontSize: '0.9rem' },
               '& .MuiInputLabel-root': { fontSize: '0.9rem' },
             }}
-            placeholder="Search Parent Type"
+            placeholder="Search Product Type 2"
           />
         </Grid>
         <Grid item xs={6} sm={3} sx={{ minWidth: 100 }}>

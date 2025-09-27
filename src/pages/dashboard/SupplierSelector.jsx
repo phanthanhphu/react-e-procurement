@@ -22,7 +22,7 @@ export default function SupplierSelector({
   const [searchLoading, setSearchLoading] = useState(false);
   const [filterValue, setFilterValue] = useState('');
 
-  // Hàm tìm kiếm nhà cung cấp
+  // Function to search for suppliers
   const searchSupplier = async (sapCode, filter = '') => {
     setSearchLoading(true);
     try {
@@ -37,23 +37,23 @@ export default function SupplierSelector({
       const res = await fetch(endpoint, {
         headers: { accept: '*/*' },
       });
-      if (!res.ok) throw new Error('Không thể tải danh sách nhà cung cấp');
+      if (!res.ok) throw new Error('Failed to load supplier list');
       const data = await res.json();
-      setSupplierOptions(data.content || []);
+      setSupplierOptions(data.data.content || []);
     } catch (error) {
-      console.error('Lỗi khi tải nhà cung cấp:', error);
+      console.error('Error loading suppliers:', error);
       setSupplierOptions([]);
     } finally {
       setSearchLoading(false);
     }
   };
 
-  // Gọi tìm kiếm khi oldSapCode hoặc filter thay đổi
+  // Trigger search when oldSapCode or filter changes
   useEffect(() => {
     searchSupplier(oldSapCode, filterValue);
   }, [oldSapCode, filterValue]);
 
-  // Xử lý khi chọn nhà cung cấp từ bảng
+  // Handle supplier selection from the table
   const handleSelectSupplier = (opt) => {
     setSelectedSupplierId(opt.id);
     onSelectSupplier({
@@ -80,8 +80,8 @@ export default function SupplierSelector({
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>SAP Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Item No</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Item Description</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Item Number</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Description</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier Code</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Price</TableCell>
@@ -105,7 +105,7 @@ export default function SupplierSelector({
                   <TableCell>{opt.itemDescription || '-'}</TableCell>
                   <TableCell>{opt.supplierCode || '-'}</TableCell>
                   <TableCell>{opt.supplierName || '-'}</TableCell>
-                  <TableCell>{opt.price ? opt.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}</TableCell>
+                  <TableCell>{opt.price ? opt.price.toLocaleString('en-US', { style: 'currency', currency: 'VND' }) : '0'}</TableCell>
                   <TableCell>{opt.unit || '-'}</TableCell>
                   <TableCell>
                     <Button
@@ -124,7 +124,7 @@ export default function SupplierSelector({
         </TableContainer>
       ) : (
         <Typography variant="body2" color="text.secondary" align="center" sx={{ p: 2 }}>
-          Không tìm thấy nhà cung cấp
+          No products found
         </Typography>
       )}
     </Paper>

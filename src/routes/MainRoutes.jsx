@@ -1,8 +1,9 @@
 import { lazy } from 'react';
-import { useNavigate, Outlet } from 'react-router-dom'; // Import Outlet and useNavigate from react-router-dom
-import { useEffect } from 'react'; // Import useEffect from react
+import { useNavigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
+import { Typography, Box, Button } from '@mui/material';
 
 // Lazy-loaded components
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
@@ -11,14 +12,35 @@ const SupplierProductsTable = Loadable(lazy(() => import('pages/dashboard/Suppli
 const GroupRequestPage = Loadable(lazy(() => import('pages/dashboard/GroupRequestPage')));
 const DepartmentPage = Loadable(lazy(() => import('pages/dashboard/DepartmentPage')));
 const ProductType1Page = Loadable(lazy(() => import('pages/dashboard/ProductType1Page')));
+const ProductType2Page = Loadable(lazy(() => import('pages/dashboard/ProductType2Page')));
 const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManagementPage')));
 const RequisitionMonthlyPage = Loadable(lazy(() => import('pages/dashboard/RequisitionMonthlyPage')));
 const ComparisonPage = Loadable(lazy(() => import('pages/dashboard/ComparisonPage')));
-
-
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
-const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
+const TypographyPage = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
+
+// Not Found component for 404 errors
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <Box sx={{ p: 3, textAlign: 'center' }}>
+      <Typography variant="h4" color="error" gutterBottom>
+        404 Not Found
+      </Typography>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        The page you're looking for doesn't exist.
+      </Typography>
+      <Button
+        variant="contained"
+        onClick={() => navigate('/dashboard/product-type-management')}
+        sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)', color: '#fff' }}
+      >
+        Go to Product Type 1
+      </Button>
+    </Box>
+  );
+}
 
 // ProtectedRoute component to handle authentication
 function ProtectedRoute() {
@@ -37,14 +59,18 @@ function ProtectedRoute() {
 // Route configuration
 const MainRoutes = {
   path: '/',
-  element: <DashboardLayout />, // Wrap routes with DashboardLayout
+  element: <DashboardLayout />,
   children: [
     {
-      element: <ProtectedRoute />, // Wrap protected routes with ProtectedRoute
+      element: <ProtectedRoute />,
       children: [
         {
           path: '/',
           element: <DashboardDefault />
+        },
+        {
+          path: 'product-type-2/:productType1Id',
+          element: <ProductType2Page />
         },
         {
           path: 'dashboard',
@@ -74,6 +100,10 @@ const MainRoutes = {
               element: <ProductType1Page />
             },
             {
+              path: 'product-type-2/:productType1Id',
+              element: <ProductType2Page />
+            },
+            {
               path: 'user-management',
               element: <UserManagementPage />
             },
@@ -89,7 +119,7 @@ const MainRoutes = {
         },
         {
           path: 'typography',
-          element: <Typography />
+          element: <TypographyPage />
         },
         {
           path: 'color',
@@ -98,6 +128,10 @@ const MainRoutes = {
         {
           path: 'shadows',
           element: <Shadow />
+        },
+        {
+          path: '*',
+          element: <NotFound />
         }
       ]
     }

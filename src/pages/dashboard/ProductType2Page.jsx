@@ -22,9 +22,9 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material';
-import { Add, Edit, Delete, Visibility, ArrowUpward, ArrowDownward } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import ProductTypeSearch from './ProductTypeSearch';
+import { Add, Edit, Delete, ArrowUpward, ArrowDownward, ArrowBack } from '@mui/icons-material';
+import { useParams, useNavigate } from 'react-router-dom';
+import ProductType2Search from './ProductType2Search';
 import { API_BASE_URL } from '../../config';
 
 const headers = [
@@ -34,9 +34,69 @@ const headers = [
   { label: 'Action', key: 'action', sortable: false },
 ];
 
-function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView, page, rowsPerPage, sortConfig, handleSort }) {
+function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort }) {
   if (!productTypes || productTypes.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.9rem', color: '#666' }}>No Data</Typography>;
+    return (
+      <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
+        <Table size="small" sx={{ minWidth: 600 }}>
+          <TableHead>
+            <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
+              {headers.map(({ label, key, sortable }) => (
+                <TableCell
+                  key={key}
+                  align={label === 'Action' ? 'center' : 'left'}
+                  sx={{
+                    fontWeight: 'bold',
+                    fontSize: '0.75rem',
+                    color: '#ffffff',
+                    py: 0.3,
+                    px: 0.5,
+                    whiteSpace: 'nowrap',
+                    borderRight: '1px solid rgba(255,255,255,0.15)',
+                    '&:last-child': { borderRight: 'none' },
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 1,
+                    backgroundColor: '#027aff',
+                    ...(key === 'no' && { left: 0, zIndex: 2 }),
+                    cursor: sortable ? 'pointer' : 'default',
+                    '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
+                  }}
+                  onClick={() => sortable && handleSort(key)}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' ? 'center' : 'flex-start' }}>
+                    <span>{label}</span>
+                    {sortable && (
+                      <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
+                        {sortConfig.key === key && sortConfig.direction === 'asc' ? (
+                          <ArrowUpward sx={{ fontSize: '1rem', color: '#fff' }} />
+                        ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
+                          <ArrowDownward sx={{ fontSize: '1rem', color: '#fff' }} />
+                        ) : (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <ArrowUpward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
+                            <ArrowDownward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell colSpan={headers.length} align="center" sx={{ py: 4 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#666' }}>
+                  <Typography sx={{ fontStyle: 'italic', fontSize: '1rem', mt: 1 }}>No Data Available</Typography>
+                </Box>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
   }
 
   return (
@@ -108,20 +168,6 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
               <TableCell align="center" sx={{ py: 0.3, px: 0.5 }}>
                 <Stack direction="row" spacing={0.2} justifyContent="center">
                   <IconButton
-                    aria-label="view"
-                    color="primary"
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                      '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                      borderRadius: 1,
-                      p: 0.2,
-                    }}
-                    onClick={() => handleView(productType)}
-                  >
-                    <Visibility fontSize="small" />
-                  </IconButton>
-                  <IconButton
                     aria-label="edit"
                     color="success"
                     size="small"
@@ -159,8 +205,9 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
   );
 }
 
-export default function ProductType1Page() {
+export default function ProductType2Page() {
   const theme = useTheme();
+  const { productType1Id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -180,20 +227,18 @@ export default function ProductType1Page() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [newProductTypeName, setNewProductTypeName] = useState('');
   const [editProductTypeName, setEditProductTypeName] = useState('');
-  const [type1Name, setType1Name] = useState('');
+  const [type2NameValue, setType2NameValue] = useState('');
 
   const handleCloseNotification = () => {
     setNotification((prev) => ({ ...prev, open: false }));
   };
 
-  const fetchData = useCallback(async ({ name = '' } = {}) => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setNotification({ open: false, message: '', severity: 'info' });
     try {
-      const url = new URL(`${API_BASE_URL}/api/product-type-1/search`);
-      const params = { page, size: rowsPerPage };
-      if (name) params.name = name;
-      url.search = new URLSearchParams(params).toString();
+      const url = new URL(`${API_BASE_URL}/api/product-type-2`);
+      url.search = new URLSearchParams({ productType1Id, page, size: rowsPerPage }).toString();
       const response = await fetch(url, {
         method: 'GET',
         headers: { accept: '*/*' },
@@ -216,11 +261,11 @@ export default function ProductType1Page() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage]);
+  }, [productType1Id, page, rowsPerPage]);
 
   useEffect(() => {
-    fetchData({ name: type1Name });
-  }, [fetchData, type1Name]);
+    fetchData();
+  }, [fetchData]);
 
   const handleAdd = async () => {
     if (!newProductTypeName.trim()) {
@@ -233,8 +278,8 @@ export default function ProductType1Page() {
     }
     try {
       setLoading(true);
-      const url = new URL(`${API_BASE_URL}/api/product-type-1`);
-      url.search = new URLSearchParams({ name: newProductTypeName }).toString();
+      const url = new URL(`${API_BASE_URL}/api/product-type-2`);
+      url.search = new URLSearchParams({ productType1Id, name: newProductTypeName }).toString();
       const response = await fetch(url, {
         method: 'POST',
         headers: { accept: '*/*' },
@@ -245,7 +290,7 @@ export default function ProductType1Page() {
       }
       const result = await response.json();
       setPage(0);
-      await fetchData({ name: type1Name });
+      await fetchData();
       setNotification({
         open: true,
         message: `Name '${result.name}' has been added`,
@@ -282,7 +327,7 @@ export default function ProductType1Page() {
     }
     try {
       setLoading(true);
-      const url = new URL(`${API_BASE_URL}/api/product-type-1/${productTypeToEdit.id}`);
+      const url = new URL(`${API_BASE_URL}/api/product-type-2/${productTypeToEdit.id}`);
       url.search = new URLSearchParams({ name: editProductTypeName }).toString();
       const response = await fetch(url, {
         method: 'PUT',
@@ -293,7 +338,7 @@ export default function ProductType1Page() {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       setPage(0);
-      await fetchData({ name: type1Name });
+      await fetchData();
       setNotification({
         open: true,
         message: `Name '${editProductTypeName}' has been updated`,
@@ -330,7 +375,7 @@ export default function ProductType1Page() {
     }
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/product-type-1/${productTypeToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/product-type-2/${productTypeToDelete.id}`, {
         method: 'DELETE',
         headers: { accept: '*/*' },
       });
@@ -339,7 +384,7 @@ export default function ProductType1Page() {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       setPage(0);
-      await fetchData({ name: type1Name });
+      await fetchData();
       setNotification({
         open: true,
         message: `Name '${productTypeToDelete.name}' has been deleted`,
@@ -364,10 +409,6 @@ export default function ProductType1Page() {
     setProductTypeToDelete(null);
   };
 
-  const handleView = (productType) => {
-    navigate(`/product-type-2/${productType.id}`);
-  };
-
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
@@ -388,7 +429,7 @@ export default function ProductType1Page() {
     setPage(0);
 
     if (!direction) {
-      fetchData({ name: type1Name });
+      fetchData();
       return;
     }
 
@@ -413,34 +454,83 @@ export default function ProductType1Page() {
     setData(sortedData);
   };
 
-  const handleType1NameChange = (value) => {
-    setType1Name(value);
-    setPage(0);
+  const handleType2NameChange = (value) => {
+    setType2NameValue(value);
   };
 
-  const handleSearch = ({ name }) => {
-    setType1Name(name);
+  const handleSearch = (params) => {
     setPage(0);
-    fetchData({ name });
+    setLoading(true);
+    const url = new URL(`${API_BASE_URL}/api/product-type-2/search`);
+    url.search = new URLSearchParams({
+      productType1Id,
+      page: 0,
+      size: rowsPerPage,
+      name: params.name || '',
+    }).toString();
+    fetch(url, {
+      method: 'GET',
+      headers: { accept: '*/*' },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
+      })
+      .then((result) => {
+        setData(result.content || []);
+        setTotalElements(result.totalElements || 0);
+      })
+      .catch((err) => {
+        setNotification({
+          open: true,
+          message: `Failed to load data: ${err.message}`,
+          severity: 'error',
+        });
+        setData([]);
+        setTotalElements(0);
+      })
+      .finally(() => setLoading(false));
   };
 
   const handleReset = () => {
-    setType1Name('');
+    setType2NameValue('');
     setPage(0);
-    fetchData({ name: '' });
+    fetchData();
   };
 
   return (
     <Box sx={{ p: 1, fontSize: '0.85rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
+      <IconButton
+        onClick={() => navigate('/dashboard/product-type-management')}
+        sx={{
+          mb: 1.5,
+          background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+          color: '#fff',
+          '&:hover': {
+            background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          },
+          p: 0.5,
+          borderRadius: '50%',
+          width: 40,
+          height: 40,
+          transition: 'all 0.3s ease',
+        }}
+        disabled={loading}
+        aria-label="Back to Product Type 1"
+        title="Back to Product Type 1"
+      >
+        <ArrowBack />
+      </IconButton>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1.25rem' }}>
       </Typography>
-      <ProductTypeSearch
-        type1NameValue={type1Name}
-        onType1NameChange={handleType1NameChange}
-        onSearch={handleSearch}
-        onReset={handleReset}
-      />
-      <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end" alignItems="center">
+      <Stack direction="row" spacing={1} mb={1} justifyContent="space-between" alignItems="center">
+        <ProductType2Search
+          type2NameValue={type2NameValue}
+          onType2NameChange={handleType2NameChange}
+          onSearch={handleSearch}
+          onReset={handleReset}
+        />
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -457,7 +547,7 @@ export default function ProductType1Page() {
           }}
           disabled={loading}
         >
-          Add Product Type
+          Add Sub-Type
         </Button>
       </Stack>
       {loading && (
@@ -488,11 +578,10 @@ export default function ProductType1Page() {
           {notification.message}
         </Alert>
       </Snackbar>
-      <ProductType1Table
+      <ProductType2Table
         productTypes={data}
         handleDelete={handleDelete}
         handleEdit={handleEdit}
-        handleView={handleView}
         page={page}
         rowsPerPage={rowsPerPage}
         sortConfig={sortConfig}
@@ -519,7 +608,7 @@ export default function ProductType1Page() {
         }}
       />
       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Add Product Type</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Add Sub Type</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus

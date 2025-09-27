@@ -1,19 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Space, message, Card, Row, Col } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Typography,
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Stack,
+  IconButton,
+  Button,
+  TablePagination,
+  useTheme,
+  Tooltip,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
+import { Add, Edit, Delete, Visibility, ArrowUpward, ArrowDownward } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-
 import AddGroupModal from './AddGroupModal';
 import EditGroupModal from './EditGroupModal';
 import GroupSearchBar from './GroupSearchBar';
 import { API_BASE_URL } from '../../config';
 
+// Check React version
+const reactVersion = React.version.split('.')[0];
+if (reactVersion >= 19) {
+  console.warn('React 19 detected. Ant Design v5.x may have compatibility issues. See https://u.ant.design/v5-for-19 for details.');
+}
+
 const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
+
+const headers = [
+  { label: 'No', key: 'no', sortable: false },
+  { label: 'Name', key: 'name', sortable: true },
+  { label: 'Type', key: 'type', sortable: true },
+  { label: 'Status', key: 'status', sortable: true },
+  { label: 'Created By', key: 'createdBy', sortable: true },
+  { label: 'Created Date', key: 'createdDate', sortable: true },
+  { label: 'Stock Date', key: 'stockDate', sortable: true },
+  { label: 'Actions', key: 'actions', sortable: false },
+];
 
 const fetchGroups = async (
   page = 0,
-  limit = 10,
+  limit = 12,
   name = '',
   status = '',
   createdBy = '',
@@ -39,17 +77,17 @@ const fetchGroups = async (
 
     const response = await fetch(`${apiUrl}/filter?${params.toString()}`, {
       method: 'GET',
-      headers: { Accept: '*/*' },
+      headers: { Accept: '*/*', 'Content-Type': 'application/json' },
     });
-    if (!response.ok) throw new Error('Failed to fetch groups');
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
+    console.log('Fetched groups:', data.content);
     return {
       content: data.content || [],
       totalPages: data.totalPages || 1,
     };
   } catch (error) {
     console.error('Error fetching groups:', error);
-    message.error('Failed to load groups');
     return { content: [], totalPages: 1 };
   }
 };
@@ -58,65 +96,84 @@ const deleteGroup = async (id) => {
   try {
     const response = await fetch(`${apiUrl}/${id}`, {
       method: 'DELETE',
-      headers: { Accept: '*/*' },
+      headers: { Accept: '*/*', 'Content-Type': 'application/json' },
     });
-    if (response.ok) {
-      return true;
-    } else {
+    let responseBody;
+    try {
+      responseBody = await response.json();
+    } catch (jsonError) {
+      console.error('Failed to parse JSON:', jsonError);
       throw new Error('Failed to delete group');
     }
+    if (!response.ok) throw new Error(responseBody.message || `Delete failed with status ${response.status}`);
+    return { success: true, message: responseBody.message || 'Group deleted successfully' };
   } catch (error) {
     console.error('Error deleting group:', error);
-    message.error('Failed to delete group');
-    return false;
+    return { success: false, message: error.message || 'Failed to delete group' };
   }
 };
 
-const GroupRequestPage = () => {
+const formatDate = (dateArray) => {
+  if (!Array.isArray(dateArray) || dateArray.length < 3) return null;
+  const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
+  return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+};
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'Completed':
+      return '#4caf50'; // Green
+    case 'Not Started':
+      return '#f44336'; // Red
+    case 'In Progress':
+      return '#2196f3'; // Blue
+    default:
+      return '#9e9e9e'; // Gray
+  }
+};
+
+const getTypeColor = (type) => {
+  switch (type) {
+    case 'Requisition_urgent':
+      return '#e57373'; // Red
+    case 'Requisition_monthly':
+      return '#64b5f6'; // Blue
+    default:
+      return '#9e9e9e'; // Gray
+  }
+};
+
+export default function GroupRequestPage() {
+  const theme = useTheme();
+  const navigate = useNavigate();
   const [data, setData] = useState([]);
+  const [originalData, setOriginalData] = useState([]); // Store original data for sorting
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
   const [stockDateRange, setStockDateRange] = useState([]);
-  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [page, setPage] = useState(0);
-  const [limit, setLimit] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
   const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const loadData = async () => {
-      const [startDate, endDate] = dateRange || [];
-      const [stockStartDate, stockEndDate] = stockDateRange || [];
-      const { content, totalPages } = await fetchGroups(
-        page,
-        limit,
-        nameFilter,
-        statusFilter,
-        createdByFilter,
-        typeFilter,
-        startDate,
-        endDate,
-        stockStartDate,
-        stockEndDate
-      );
-      setData(content);
-      setTotalPages(totalPages);
-    };
-    loadData();
-  }, [page, limit, nameFilter, statusFilter, createdByFilter, typeFilter, dateRange, stockDateRange]);
-
-  const reloadTableData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setNotification({ open: false, message: '', severity: 'info' });
     const [startDate, endDate] = dateRange || [];
     const [stockStartDate, stockEndDate] = stockDateRange || [];
     const { content, totalPages } = await fetchGroups(
       page,
-      limit,
+      rowsPerPage,
       nameFilter,
       statusFilter,
       createdByFilter,
@@ -126,85 +183,200 @@ const GroupRequestPage = () => {
       stockStartDate,
       stockEndDate
     );
-    setData(content);
-    setTotalPages(totalPages);
-  };
+    console.log('Fetched groups:', content);
+    setData(content || []);
+    setOriginalData(content || []); // Store original data
+    setTotalPages(totalPages || 1);
+    setLoading(false);
+  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, dateRange, stockDateRange]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleAddOk = () => {
-    setIsAddModalVisible(false);
-    reloadTableData();
+    console.log('handleAddOk called');
+    setIsAddModalOpen(false);
+    fetchData();
   };
 
   const handleEditOk = () => {
-    setIsEditModalVisible(false);
-    reloadTableData();
+    console.log('handleEditOk called with currentItem:', currentItem);
+    setIsEditModalOpen(false);
+    setCurrentItem(null);
+    fetchData();
   };
 
-  const handleDelete = async (id) => {
-    const success = await deleteGroup(id);
-    if (success) {
-      setData(data.filter((item) => item.id !== id));
-      message.success('Group deleted successfully');
+  const handleDelete = (group) => {
+    setSelectedGroup(group);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedGroup) {
+      setNotification({
+        open: true,
+        message: 'No group selected for deletion',
+        severity: 'error',
+      });
+      setDeleteDialogOpen(false);
+      return;
     }
+    setLoading(true);
+    try {
+      const { success, message } = await deleteGroup(selectedGroup.id);
+      if (success) {
+        await fetchData();
+        const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
+        if (page > maxPage) setPage(maxPage);
+      }
+      setNotification({
+        open: true,
+        message: message,
+        severity: success ? 'success' : 'error',
+      });
+    } catch (error) {
+      console.error('Delete group error:', error);
+      setNotification({
+        open: true,
+        message: error.message || 'Failed to delete group',
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
+      setSelectedGroup(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setSelectedGroup(null);
   };
 
   const handleSearch = () => {
     setPage(0);
-    reloadTableData();
+    setSortConfig({ key: null, direction: null });
+    fetchData();
   };
 
   const handleReset = () => {
-    setPage(0);
     setNameFilter('');
     setStatusFilter('');
     setCreatedByFilter('');
     setTypeFilter('');
     setDateRange([]);
     setStockDateRange([]);
-    reloadTableData();
+    setPage(0);
+    setSortConfig({ key: null, direction: null });
+    fetchData();
   };
 
-  // Hàm chuyển đổi mảng ngày thành chuỗi ISO
-  const formatDate = (dateArray) => {
-    if (!Array.isArray(dateArray) || dateArray.length < 3) return null;
-    const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
-    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null; // Reset to unsorted state
+    }
+    setSortConfig({ key: direction ? key : null, direction });
+    setPage(0); // Reset to first page on sort
+
+    if (!direction) {
+      setData([...originalData]); // Restore original data
+      return;
+    }
+
+    // Sort data locally
+    const sortedData = [...data].sort((a, b) => {
+      let aValue = a[key];
+      let bValue = b[key];
+
+      if (key === 'createdDate' || key === 'stockDate') {
+        aValue = formatDate(a[key]) || '';
+        bValue = formatDate(b[key]) || '';
+      }
+
+      if (aValue === null || aValue === undefined) return direction === 'asc' ? -1 : 1;
+      if (bValue === null || bValue === undefined) return direction === 'asc' ? 1 : -1;
+
+      if (typeof aValue === 'string') {
+        return direction === 'asc'
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      }
+
+      return direction === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+
+    setData(sortedData);
   };
+
+  const handleChangePage = (event, newPage) => setPage(newPage);
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handleCloseNotification = () => {
+    setNotification({ open: false, message: '', severity: 'info' });
+  };
+
+  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
-    <div style={{ padding: '15px 25px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      <h2
-        style={{
-          textAlign: 'left',
-          fontSize: '1rem',
-          fontWeight: 600,
-          marginBottom: '8px',
-          color: '#1976d2',
-          lineHeight: 1.5,
-          fontFamily: 'Inter, sans-serif',
-        }}
+    <Box
+      sx={{
+        p: 1,
+        fontSize: '0.65rem',
+        fontFamily: 'Inter, sans-serif',
+        backgroundColor: '#f5f8fa',
+        minHeight: '100vh',
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        mb={1}
+        sx={{ userSelect: 'none' }}
       >
-        Group Management
-      </h2>
-      <div style={{ marginBottom: '10px', textAlign: 'right' }}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 600,
+            color: theme.palette.primary.dark,
+            fontSize: '1rem',
+          }}
+        >
+          Group
+        </Typography>
         <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsAddModalVisible(true)}
-          style={{
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            borderColor: '#0288d1',
-            color: '#fff',
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => {
+            console.log('Opening AddGroupModal');
+            setIsAddModalOpen(true);
+          }}
+          sx={{
+            textTransform: 'none',
+            borderRadius: 2,
+            px: 1,
+            py: 0.2,
             fontWeight: 600,
             fontSize: '0.65rem',
-            borderRadius: '8px',
-            padding: '4px 10px',
+            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+            color: '#fff',
             boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+            '&:hover': {
+              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+            },
           }}
         >
           Add New Request Group
         </Button>
-      </div>
+      </Stack>
 
       <GroupSearchBar
         nameFilter={nameFilter}
@@ -224,190 +396,310 @@ const GroupRequestPage = () => {
         handleReset={handleReset}
       />
 
-      <Row gutter={[8, 8]} wrap>
-        {Array.isArray(data) && data.length > 0 ? (
-          data.map((group) => {
-            const createdDateIso = formatDate(group.createdDate);
-            const stockDateIso = formatDate(group.stockDate);
-            const typeStyle = {
-              padding: '2px 6px',
-              borderRadius: '4px',
-              fontSize: '0.55rem',
-              fontWeight: 600,
-              color: '#fff',
-              display: 'inline-block',
-              marginRight: '4px',
-              marginBottom: '4px',
-            };
-            const bgColor =
-              group.type === 'Requisition_urgent'
-                ? '#e57373'
-                : group.type === 'Requisition_monthly'
-                ? '#64b5f6'
-                : '#9e9e9e';
+      {loading && (
+        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
+          Loading data...
+        </Typography>
+      )}
 
-            return (
-              <Col span={4} key={group.id}>
-                <Card
-                  bordered={false}
-                  size="small"
-                  style={{
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-                    textAlign: 'center',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <span style={{ fontSize: '0.65rem', fontWeight: 600 }}>{group.name}</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <Button
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => {
-                          setCurrentItem(group);
-                          setIsEditModalVisible(true);
-                        }}
-                        style={{
-                          backgroundColor: '#81c784',
-                          borderColor: '#388e3c',
-                          color: '#fff',
-                          fontWeight: 500,
-                          fontSize: '0.55rem',
-                          padding: '2px',
-                        }}
-                      />
-                      <Button
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(group.id)}
-                        style={{
-                          backgroundColor: '#e57373',
-                          borderColor: '#c62828',
-                          color: '#fff',
-                          fontWeight: 500,
-                          fontSize: '0.55rem',
-                          padding: '2px',
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'left', display: 'flex', alignItems: 'center', marginTop: '4px' }}>
-                    <p
-                      style={{
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%', fontSize: '0.7rem' }}>
+          {notification.message}
+        </Alert>
+      </Snackbar>
+
+      {!loading && (
+        <>
+          <TableContainer
+            component={Paper}
+            elevation={4}
+            sx={{
+              overflowX: 'auto',
+              maxHeight: 450,
+              boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+            }}
+          >
+            <Table stickyHeader size="small" sx={{ minWidth: 800 }}>
+              <TableHead>
+                <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
+                  {headers.map(({ label, key, sortable }) => (
+                    <TableCell
+                      key={key}
+                      align={['No', 'Status', 'Actions'].includes(label) ? 'center' : 'left'}
+                      sx={{
+                        fontWeight: 'bold',
                         fontSize: '0.55rem',
-                        margin: 0,
-                        fontWeight: 600,
-                        marginRight: '4px',
+                        color: '#ffffff',
+                        py: 0.2,
+                        px: 0.4,
+                        whiteSpace: 'nowrap',
+                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        '&:last-child': { borderRight: 'none' },
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 20,
+                        backgroundColor: '#027aff',
+                        ...(key === 'no' && { left: 0, zIndex: 21 }),
+                        cursor: sortable ? 'pointer' : 'default',
+                        '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                       }}
+                      onClick={() => sortable && handleSort(key)}
                     >
-                      <strong>Type:</strong>
-                    </p>
-                    <span style={{ ...typeStyle, backgroundColor: bgColor }}>
-                      {group.type === 'Requisition_urgent'
-                        ? 'Requisition Urgent'
-                        : group.type === 'Requisition_monthly'
-                        ? 'Requisition Monthly'
-                        : 'Unknown'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.55rem', textAlign: 'left', marginTop: '4px', flexGrow: 1 }}>
-                    <p style={{ margin: '1px 0' }}>
-                      <strong>Status:</strong> {group.status}
-                    </p>
-                    <p style={{ margin: '1px 0' }}>
-                      <strong>Created By:</strong> {group.createdBy}
-                    </p>
-                    <p style={{ margin: '1px 0' }}>
-                      <strong>Created Date:</strong>{' '}
-                      {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
-                    </p>
-                    <p style={{ margin: '1px 0' }}>
-                      <strong>Stock Date:</strong>{' '}
-                      {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
-                    </p>
-                  </div>
-                  <div style={{ marginTop: '4px' }}>
-                    <Button
-                      size="small"
-                      icon={<EyeOutlined />}
-                      onClick={() => {
-                        if (group.type === 'Requisition_monthly') {
-                          navigate(`/dashboard/requisition-monthly/${group.id}`);
-                        } else if (group.type === 'Requisition_urgent') {
-                          navigate(`/dashboard/summary/${group.id}`);
-                        } else {
-                          navigate(`/dashboard/summary/${group.id}`);
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-                        borderColor: '#0288d1',
-                        color: '#fff',
-                        fontWeight: 600,
-                        fontSize: '0.65rem',
-                        borderRadius: '6px',
-                        padding: '3px 0',
-                        boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-                      }}
-                    >
-                      {group.type === 'Requisition_monthly'
-                        ? 'View Monthly'
-                        : group.type === 'Requisition_urgent'
-                        ? 'View Urgent'
-                        : 'View Summary'}
-                    </Button>
-                  </div>
-                </Card>
-              </Col>
-            );
-          })
-        ) : (
-          <div style={{ fontSize: '0.7rem', textAlign: 'center', color: '#90a4ae' }}>No data available</div>
-        )}
-      </Row>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['No', 'Status', 'Actions'].includes(label) ? 'center' : 'flex-start' }}>
+                        <Tooltip title={label} arrow>
+                          <span>{label}</span>
+                        </Tooltip>
+                        {sortable && (
+                          <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
+                            {sortConfig.key === key && sortConfig.direction === 'asc' ? (
+                              <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                            ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
+                              <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                            ) : (
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                                <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                              </Box>
+                            )}
+                          </Box>
+                        )}
+                      </Box>
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {displayData.length > 0 ? (
+                  displayData.map((group, idx) => {
+                    const createdDateIso = formatDate(group.createdDate);
+                    const stockDateIso = formatDate(group.stockDate);
+                    const isCompleted = group.status === 'Completed';
+                    return (
+                      <TableRow
+                        key={group.id}
+                        sx={{
+                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                          '&:hover': {
+                            backgroundColor: '#e1f0ff',
+                            transition: 'background-color 0.3s ease',
+                          },
+                          fontSize: '0.55rem',
+                          cursor: 'default',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            fontSize: '0.55rem',
+                          }}
+                        >
+                          {page * rowsPerPage + idx + 1}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {group.name || ''}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          <Box
+                            sx={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.55rem',
+                              fontWeight: 600,
+                              color: '#fff',
+                              backgroundColor: getTypeColor(group.type),
+                              display: 'inline-block',
+                            }}
+                          >
+                            {group.type === 'Requisition_urgent'
+                              ? 'Requisition Urgent'
+                              : group.type === 'Requisition_monthly'
+                              ? 'Requisition Monthly'
+                              : 'Unknown'}
+                          </Box>
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                backgroundColor: getStatusColor(group.status),
+                              }}
+                            />
+                            {group.status || ''}
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {group.createdBy || ''}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
+                          <Stack direction="row" spacing={0.2} justifyContent="center">
+                            <IconButton
+                              aria-label="view"
+                              color="primary"
+                              size="small"
+                              sx={{
+                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
+                                borderRadius: 1,
+                                p: 0.2,
+                              }}
+                              onClick={() => {
+                                console.log('Navigating to group:', group.id, 'type:', group.type);
+                                if (group.type === 'Requisition_monthly') {
+                                  navigate(`/dashboard/requisition-monthly/${group.id}`);
+                                } else if (group.type === 'Requisition_urgent') {
+                                  navigate(`/dashboard/summary/${group.id}`);
+                                } else {
+                                  navigate(`/dashboard/summary/${group.id}`);
+                                }
+                              }}
+                            >
+                              <Visibility fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              aria-label="edit"
+                              color="success"
+                              size="small"
+                              sx={{
+                                backgroundColor: 'rgba(56, 142, 60, 0.1)',
+                                '&:hover': { backgroundColor: 'rgba(56, 142, 60, 0.25)' },
+                                borderRadius: 1,
+                                p: 0.2,
+                              }}
+                              onClick={() => {
+                                console.log('Opening EditGroupModal with group:', group);
+                                setCurrentItem(group);
+                                setIsEditModalOpen(true);
+                              }}
+                              disabled={isCompleted}
+                            >
+                              <Edit fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              aria-label="delete"
+                              color="error"
+                              size="small"
+                              sx={{
+                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
+                                borderRadius: 1,
+                                p: 0.2,
+                              }}
+                              onClick={() => handleDelete(group)}
+                              disabled={loading || isCompleted}
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={headers.length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
+                      <Stack direction="column" alignItems="center" spacing={0.5}>
+                        <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <TablePagination
+            rowsPerPageOptions={[10, 12, 25, 50]}
+            component="div"
+            count={data.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            labelRowsPerPage="Rows per page:"
+            sx={{
+              mt: 1,
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                fontSize: '0.65rem',
+                color: theme.palette.text.secondary,
+              },
+              '.MuiTablePagination-select': { fontSize: '0.65rem' },
+              '.MuiTablePagination-actions > button': {
+                color: theme.palette.primary.main,
+              },
+            }}
+          />
+        </>
+      )}
 
       <AddGroupModal
-        visible={isAddModalVisible}
-        onCancel={() => setIsAddModalVisible(false)}
+        open={isAddModalOpen}
+        onCancel={() => {
+          console.log('Closing AddGroupModal');
+          setIsAddModalOpen(false);
+        }}
         onOk={handleAddOk}
       />
       <EditGroupModal
-        visible={isEditModalVisible}
+        open={isEditModalOpen}
         currentItem={currentItem}
-        onCancel={() => setIsEditModalVisible(false)}
+        onCancel={() => {
+          console.log('Closing EditGroupModal');
+          setIsEditModalOpen(false);
+          setCurrentItem(null);
+        }}
         onOk={handleEditOk}
       />
 
-      <div style={{ marginTop: '10px', textAlign: 'center' }}>
-        <Space>
-          <Button 
-            onClick={() => setPage(page > 0 ? page - 1 : 0)} 
-            disabled={page === 0}
-            style={{ fontSize: '0.65rem', padding: '4px 10px' }}
-          >
-            Previous
+      <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
+        <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Group</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
+            Are you sure you want to delete &quot;{selectedGroup?.name || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
+            Cancel
           </Button>
-          <Button 
-            onClick={() => setPage(page < totalPages - 1 ? page + 1 : page)} 
-            disabled={page >= totalPages - 1}
-            style={{ fontSize: '0.65rem', padding: '4px 10px' }}
+          <Button
+            onClick={handleConfirmDelete}
+            variant="contained"
+            color="error"
+            sx={{ fontSize: '0.65rem' }}
+            disabled={loading}
           >
-            Next
+            Delete
           </Button>
-          <span style={{ fontSize: '0.65rem' }}>
-            Page {page + 1} of {totalPages}
-          </span>
-        </Space>
-      </div>
-    </div>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
-};
-
-export default GroupRequestPage;
+}

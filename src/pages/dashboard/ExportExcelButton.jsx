@@ -4,19 +4,22 @@ import { saveAs } from 'file-saver';
 import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
+import dayjs from 'dayjs';
 
 export default function ExportExcelButton({ data, groupId }) {
   const [stockDate, setStockDate] = useState('01/08/2025');
+  const [groupName, setGroupName] = useState('');
+  const [stockDateArray, setStockDateArray] = useState(null);
 
   useEffect(() => {
     if (!groupId) {
-      console.warn('No groupId provided for fetching stock date');
+      console.warn('No groupId provided for fetching group data');
       return;
     }
     fetch(`${API_BASE_URL}/group-summary-requisitions/${groupId}`)
       .then((response) => {
         if (!response.ok) {
-          throw new Error('Failed to fetch stock date');
+          throw new Error('Failed to fetch group data');
         }
         return response.json();
       })
@@ -26,22 +29,44 @@ export default function ExportExcelButton({ data, groupId }) {
           const [year, month, day] = dateArray;
           const formattedDate = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
           setStockDate(formattedDate);
+          setStockDateArray(dateArray);
         }
+        setGroupName(result.name || '');
       })
       .catch((error) => {
-        console.error('Error fetching stock date:', error);
+        console.error('Error fetching group data:', error);
       });
   }, [groupId]);
 
-  const exportToExcel = () => {
-    if (!data || data.length === 0) {
+  const fetchAllGroupData = async () => {
+    if (!groupId) {
+      console.warn('No groupId provided for fetching group data');
+      return [];
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result = await response.json();
+      return result || [];
+    } catch (error) {
+      console.error('Error fetching group data for export:', error);
+      return [];
+    }
+  };
+
+  const exportToExcel = async () => {
+    const exportData = await fetchAllGroupData();
+    
+    if (!exportData || exportData.length === 0) {
       alert('No data to export');
       return;
     }
 
     // Generate department keys from departmentRequests array
     const allDeptKeysSet = new Set();
-    data.forEach((item) => {
+    exportData.forEach((item) => {
       const deptRequests = item.departmentRequests || [];
       deptRequests.forEach((dept) => allDeptKeysSet.add(dept.departmentName));
     });
@@ -86,7 +111,7 @@ export default function ExportExcelButton({ data, groupId }) {
     ]);
 
     // Data rows
-    data.forEach((item, index) => {
+    exportData.forEach((item, index) => {
       const { requisition, supplierProduct, departmentRequests, sumBuy } = item;
       const deptBuy = {};
       (departmentRequests || []).forEach((dept) => {
@@ -112,7 +137,7 @@ export default function ExportExcelButton({ data, groupId }) {
     });
 
     const totalCols = 6 + allDeptKeys.length + 5;
-    const dataEndRow = 3 + data.length - 1;
+    const dataEndRow = 3 + exportData.length - 1;
 
     // Signature rows
     const signatureTitles = new Array(totalCols).fill('');
@@ -242,9 +267,14 @@ export default function ExportExcelButton({ data, groupId }) {
       ws['!cols'][6 + idx] = { wch: 12 };
     });
 
+    // Generate file name
+    const sanitizedGroupName = groupName.replace(/\s+/g, '-');
+    const currentDateTime = dayjs().format('DDMMYYYYHHmm');
+    const fileName = `urgent_request_${currentDateTime}.xlsx`;
+
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     console.log('wbout size:', wbout.length);
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), 'summary_requisition.xlsx');
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), fileName);
   };
 
   return (

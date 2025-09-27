@@ -6,7 +6,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
-export default function ImportExcelButton({ onImport, groupId }) {
+export default function ImportExcelButton({ onImport, groupId, disabled }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,11 @@ export default function ImportExcelButton({ onImport, groupId }) {
     }
   }, [open]);
 
-  const handleOpen = () => setOpen(true);
+  const handleOpen = () => {
+    if (!disabled) {
+      setOpen(true);
+    }
+  };
 
   const handleClose = () => {
     setOpen(false);
@@ -28,6 +32,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
   };
 
   const handleFileChange = (e) => {
+    if (disabled) return; // Prevent file selection if disabled
     const selectedFile = e.target.files[0];
     setFile(selectedFile);
 
@@ -51,6 +56,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
   };
 
   const handleSubmit = async () => {
+    if (disabled) return; // Prevent submission if disabled
     if (!file) {
       setError('Please select an Excel file');
       return;
@@ -93,6 +99,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
       <Button
         variant="contained"
         onClick={handleOpen}
+        disabled={disabled} // Disable the button
         startIcon={<img src={ExcelIcon} alt="Excel Icon" style={{ width: 20, height: 20 }} />}
         sx={{
           textTransform: 'none',
@@ -101,19 +108,23 @@ export default function ImportExcelButton({ onImport, groupId }) {
           py: 0.6,
           fontWeight: 600,
           fontSize: '0.75rem',
-          backgroundColor: '#36c080',
-          backgroundImage: 'linear-gradient(90deg, #36c080 0%, #25a363 100%)',
-          color: '#fff',
+          backgroundColor: disabled ? 'grey.300' : '#36c080',
+          backgroundImage: disabled
+            ? 'none'
+            : 'linear-gradient(90deg, #36c080 0%, #25a363 100%)',
+          color: disabled ? 'grey.700' : '#fff',
           '&:hover': {
-            backgroundColor: '#2fa16a',
-            backgroundImage: 'linear-gradient(90deg, #2fa16a 0%, #1f7f4f 100%)',
+            backgroundColor: disabled ? 'grey.300' : '#2fa16a',
+            backgroundImage: disabled
+              ? 'none'
+              : 'linear-gradient(90deg, #2fa16a 0%, #1f7f4f 100%)',
           },
         }}
       >
         Import Excel
       </Button>
 
-      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
+      <Dialog open={open && !disabled} onClose={handleClose} fullWidth maxWidth="sm">
         <DialogTitle
           sx={{
             backgroundColor: 'rgba(70, 128, 255, 0.9)',
@@ -139,6 +150,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
               component="label"
               startIcon={<CloudUploadIcon />}
               sx={{ mr: 2 }}
+              disabled={loading || disabled}
             >
               Upload File
               <input
@@ -146,7 +158,7 @@ export default function ImportExcelButton({ onImport, groupId }) {
                 accept=".xlsx, .xls"
                 onChange={handleFileChange}
                 hidden
-                disabled={loading}
+                disabled={loading || disabled}
               />
             </Button>
             {file && (
@@ -157,18 +169,18 @@ export default function ImportExcelButton({ onImport, groupId }) {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={loading}>
+          <Button onClick={handleClose} disabled={loading || disabled}>
             Cancel
           </Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
-            disabled={loading || !file}
+            disabled={loading || !file || disabled}
             sx={{
-              backgroundColor: 'rgba(70, 128, 255, 0.9)',
-              color: '#fff',
+              backgroundColor: disabled ? 'grey.300' : 'rgba(70, 128, 255, 0.9)',
+              color: disabled ? 'grey.700' : '#fff',
               '&:hover': {
-                backgroundColor: 'rgba(70, 128, 255, 1)',
+                backgroundColor: disabled ? 'grey.300' : 'rgba(70, 128, 255, 1)',
               },
             }}
           >

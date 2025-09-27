@@ -17,41 +17,50 @@ import {
   useTheme,
   Tooltip,
   Popover,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import ImageIcon from '@mui/icons-material/Image';
 import InboxIcon from '@mui/icons-material/Inbox';
+import ArrowUpward from '@mui/icons-material/ArrowUpward';
+import ArrowDownward from '@mui/icons-material/ArrowDownward';
 import ExportExcelButton from './ExportExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import RequisitionSearch from './RequisitionSearch';
 import { API_BASE_URL } from '../../config';
 import ImportExcelButton from './ImportExcelButton';
+import Notification from './Notification';
 
+// Headers giữ nguyên
 const headers = [
-  { label: 'No', key: 'no' },
-  { label: 'Group Type 1', key: 'productType1Name' },
-  { label: 'Group Type 2', key: 'productType2Name' },
-  { label: 'Item Description (EN)', key: 'englishName' },
-  { label: 'Item Description (VN)', key: 'vietnameseName' },
-  { label: 'Old SAP Code', key: 'oldSapCode' },
-  { label: 'SAP Code in New SAP', key: 'newSapCode' },
-  { label: 'Order Unit', key: 'unit' },
-  { label: 'Department', key: 'departmentRequests' },
-  { label: 'Buying Qty', key: 'sumBuy' },
-  { label: 'Supplier', key: 'supplierName' },
-  { label: 'Sup. price', key: 'supplierPrice' },
-  { label: 'Total price', key: 'totalPrice' },
-  { label: 'Stock', key: 'stock' },
-  { label: 'Purchasing Suggest', key: 'purchasingSuggest' },
-  { label: 'Reason', key: 'reason' },
-  { label: 'Remark', key: 'remark' },
-  { label: 'Images', key: 'image' },
-  { label: 'Actions', key: 'actions' },
+  { label: 'No', key: 'no', sortable: false },
+  { label: 'Group Type 1', key: 'productType1Name', sortable: true },
+  { label: 'Group Type 2', key: 'productType2Name', sortable: true },
+  { label: 'Item Description (EN)', key: 'englishName', sortable: true },
+  { label: 'Item Description (VN)', key: 'vietnameseName', sortable: true },
+  { label: 'Old SAP Code', key: 'oldSapCode', sortable: true },
+  { label: 'SAP Code in New SAP', key: 'newSapCode', sortable: true },
+  { label: 'Order Unit', key: 'unit', sortable: true },
+  { label: 'Department', key: 'departmentRequests', sortable: false },
+  { label: 'Buying Qty', key: 'sumBuy', sortable: true },
+  { label: 'Supplier', key: 'supplierName', sortable: true },
+  { label: 'Sup. price', key: 'supplierPrice', sortable: true },
+  { label: 'Total price', key: 'totalPrice', sortable: true },
+  { label: 'Stock', key: 'stock', sortable: true },
+  { label: 'Purchasing Suggest', key: 'purchasingSuggest', sortable: true },
+  { label: 'Reason', key: 'reason', sortable: true },
+  { label: 'Remark', key: 'remark', sortable: true },
+  { label: 'Images', key: 'image', sortable: false },
+  { label: 'Actions', key: 'actions', sortable: false },
 ];
 
+// Component DeptRequestTable giữ nguyên
 function DeptRequestTable({ departmentRequests }) {
   if (!departmentRequests || departmentRequests.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Data</Typography>;
@@ -118,13 +127,13 @@ function DeptRequestTable({ departmentRequests }) {
             }}
           >
             <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1' }}>
-              {dept.departmentName}
+              {dept.departmentName || ''}
             </TableCell>
             <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600 }}>
-              {dept.qty}
+              {dept.qty || 0}
             </TableCell>
             <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600 }}>
-              {dept.buy}
+              {dept.buy || 0}
             </TableCell>
           </TableRow>
         ))}
@@ -139,6 +148,8 @@ export default function SummaryPage() {
   const navigate = useNavigate();
 
   const [data, setData] = useState([]);
+  const [originalData, setOriginalData] = useState([]);
+  const [groupStatus, setGroupStatus] = useState(null);
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
     productType2Name: '',
@@ -158,10 +169,46 @@ export default function SummaryPage() {
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedItemForDelete, setSelectedItemForDelete] = useState(null);
+
+  const handleCloseNotification = () => {
+    setNotification((prev) => ({ ...prev, open: false }));
+  };
+
+  const fetchGroupStatus = useCallback(async () => {
+    if (!groupId) {
+      console.warn('No groupId, skipping fetchGroupStatus');
+      setError('Invalid Group ID');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result = await response.json();
+      setGroupStatus(result.status || null);
+      console.log('Group Status:', result.status);
+    } catch (err) {
+      console.error('Fetch group status error:', err);
+      setError('Failed to fetch group status.');
+    }
+  }, [groupId]);
 
   const fetchData = useCallback(async () => {
     if (!groupId) {
       console.warn('No groupId, skipping fetchData');
+      setError('Invalid Group ID');
       return;
     }
     setLoading(true);
@@ -185,6 +232,7 @@ export default function SummaryPage() {
         );
       });
       setData(filteredData);
+      setOriginalData(filteredData);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
@@ -194,24 +242,67 @@ export default function SummaryPage() {
   }, [groupId, searchValues]);
 
   useEffect(() => {
+    fetchGroupStatus();
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, fetchGroupStatus]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+  const handleDelete = async (item, event) => {
+    setSelectedItemForDelete(item);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedItemForDelete) {
+      setNotification({
+        open: true,
+        message: 'No item selected for deletion',
+        severity: 'error',
+      });
+      setDeleteDialogOpen(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${selectedItemForDelete.requisition.id}`, {
         method: 'DELETE',
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
+      if (!response.ok) {
+        let errorMessage = 'Could not delete item';
+        try {
+          const errorData = await response.json();
+          console.log('Raw error response:', errorData);
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
       await fetchData();
       const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
+      setNotification({
+        open: true,
+        message: 'Item deleted successfully',
+        severity: 'success',
+      });
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Delete failed. Please try again.');
+      setNotification({
+        open: true,
+        message: error.message,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
+      setSelectedItemForDelete(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setSelectedItemForDelete(null);
   };
 
   const handleOpenEditDialog = (item) => {
@@ -219,13 +310,29 @@ export default function SummaryPage() {
     setOpenEditDialog(true);
   };
 
-  const handleCloseEditDialog = () => {
+  const handleCloseEditDialog = (successMessage) => {
     setOpenEditDialog(false);
     setSelectedItem(null);
+    if (successMessage) {
+      setNotification({
+        open: true,
+        message: successMessage,
+        severity: successMessage.includes('successfully') ? 'success' : 'error',
+      });
+    }
   };
 
   const handleOpenAddDialog = () => setOpenAddDialog(true);
-  const handleCloseAddDialog = () => setOpenAddDialog(false);
+  const handleCloseAddDialog = (message) => {
+    setOpenAddDialog(false);
+    if (message) {
+      setNotification({
+        open: true,
+        message: message,
+        severity: message.includes('successfully') ? 'success' : 'error',
+      });
+    }
+  };
 
   const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
@@ -253,12 +360,59 @@ export default function SummaryPage() {
       unit: '',
       departmentName: '',
     });
+    setSortConfig({ key: null, direction: null });
     fetchData();
   };
 
   const handleNavigateToComparison = () => {
     console.log('Navigating to:', `/dashboard/comparison/${groupId}`);
     navigate(`/dashboard/comparison/${groupId}`);
+  };
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null;
+    }
+    setSortConfig({ key: direction ? key : null, direction });
+    setPage(0);
+
+    if (!direction) {
+      setData([...originalData]);
+      return;
+    }
+
+    const sortedData = [...data].sort((a, b) => {
+      let aValue, bValue;
+
+      if (['englishName', 'vietnameseName', 'oldSapCode', 'newSapCode', 'reason', 'remark', 'stock', 'purchasingSuggest'].includes(key)) {
+        aValue = a.requisition[key] || '';
+        bValue = b.requisition[key] || '';
+      } else if (['unit', 'supplierName', 'price'].includes(key)) {
+        aValue = a.supplierProduct ? a.supplierProduct[key === 'price' ? 'price' : key] : '';
+        bValue = b.supplierProduct ? b.supplierProduct[key === 'price' ? 'price' : key] : '';
+      } else {
+        aValue = a[key] || '';
+        bValue = b[key] || '';
+      }
+
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+
+      if (['sumBuy', 'supplierPrice', 'totalPrice', 'stock'].includes(key)) {
+        aValue = Number(aValue) || 0;
+        bValue = Number(bValue) || 0;
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      return direction === 'asc'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+
+    setData(sortedData);
   };
 
   const handlePopoverOpen = (event, imageUrls) => {
@@ -281,8 +435,8 @@ export default function SummaryPage() {
   };
 
   const open = Boolean(anchorEl);
-
   const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const isCompleted = groupStatus === 'Completed';
 
   return (
     <Box
@@ -294,6 +448,13 @@ export default function SummaryPage() {
         minHeight: '100vh',
       }}
     >
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleCloseNotification}
+      />
+
       <Stack
         direction="row"
         alignItems="center"
@@ -314,57 +475,117 @@ export default function SummaryPage() {
         </Typography>
 
         <Stack direction="row" spacing={0.5}>
-          <ExportExcelButton data={data} groupId={groupId} />
-          <ImportExcelButton
-            onImport={(importedData) => {
-              console.log('Imported data:', importedData);
-              fetchData();
-            }}
-            groupId={groupId}
-          />
-          <Button
-            variant="contained"
-            onClick={handleNavigateToComparison}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 2,
-              px: 1,
-              py: 0.2,
-              fontWeight: 700,
-              fontSize: '0.65rem',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-              '&:hover': {
-                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-              },
-            }}
-          >
-            Comparison
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon fontSize="small" />}
-            onClick={handleOpenAddDialog}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 2,
-              px: 1,
-              py: 0.2,
-              fontWeight: 700,
-              fontSize: '0.65rem',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-              '&:hover': {
-                background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-              },
-            }}
-          >
-            Add New
-          </Button>
+          <Tooltip title={isCompleted ? 'Export Urgent Excel is disabled for Completed groups' : 'Export data to Excel'}>
+            <span>
+              <ExportExcelButton
+                data={data}
+                groupId={groupId}
+                disabled={isCompleted}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1,
+                  px: 2,
+                  py: 0.6,
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  backgroundColor: isCompleted ? 'grey.300' : 'rgba(25, 118, 210, 0.1)',
+                  color: isCompleted ? 'grey.700' : '#1976d2',
+                  '&:hover': {
+                    backgroundColor: isCompleted ? 'grey.300' : 'rgba(25, 118, 210, 0.25)',
+                  },
+                }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={isCompleted ? 'Import Excel is disabled for Completed groups' : 'Import data from Excel'}>
+            <span>
+              <ImportExcelButton
+                onImport={(importedData) => {
+                  console.log('Imported data:', importedData);
+                  fetchData();
+                }}
+                groupId={groupId}
+                disabled={isCompleted}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1,
+                  px: 2,
+                  py: 0.6,
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  backgroundColor: isCompleted ? 'grey.300' : '#36c080',
+                  backgroundImage: isCompleted
+                    ? 'none'
+                    : 'linear-gradient(90deg, #36c080 0%, #25a363 100%)',
+                  color: isCompleted ? 'grey.700' : '#fff',
+                  '&:hover': {
+                    backgroundColor: isCompleted ? 'grey.300' : '#2fa16a',
+                    backgroundImage: isCompleted
+                      ? 'none'
+                      : 'linear-gradient(90deg, #2fa16a 0%, #1f7f4f 100%)',
+                  },
+                }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={isCompleted ? 'Comparison is the only action available for Completed groups' : ''}>
+            <Button
+              variant="contained"
+              onClick={handleNavigateToComparison}
+              sx={{
+                textTransform: 'none',
+                borderRadius: 1,
+                px: 2,
+                py: 0.6,
+                fontWeight: 600,
+                fontSize: '0.75rem',
+                background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+                color: '#fff',
+                boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                  boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
+                },
+              }}
+            >
+              Comparison
+            </Button>
+          </Tooltip>
+          <Tooltip title={isCompleted ? 'Adding new items is disabled for Completed groups' : ''}>
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon fontSize="small" />}
+                onClick={handleOpenAddDialog}
+                disabled={isCompleted}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1,
+                  px: 2,
+                  py: 0.6,
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  background: isCompleted
+                    ? 'grey.300'
+                    : 'linear-gradient(to right, #4cb8ff, #027aff)',
+                  color: isCompleted ? 'grey.700' : '#fff',
+                  boxShadow: isCompleted
+                    ? 'none'
+                    : '0 4px 12px rgba(76, 184, 255, 0.3)',
+                  '&:hover': {
+                    background: isCompleted
+                      ? 'grey.300'
+                      : 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                    boxShadow: isCompleted
+                      ? 'none'
+                      : '0 6px 16px rgba(76, 184, 255, 0.4)',
+                  },
+                }}
+              >
+                Add New
+              </Button>
+            </span>
+          </Tooltip>
         </Stack>
       </Stack>
 
@@ -403,11 +624,11 @@ export default function SummaryPage() {
             <Table stickyHeader size="small" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {headers.map(({ label, key }) => (
+                  {headers.map(({ label, key, sortable }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Total Buy', 'Stock', 'Images', 'Actions'].includes(label)
+                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Buying Qty', 'Stock', 'Images', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -424,12 +645,31 @@ export default function SummaryPage() {
                         top: 0,
                         zIndex: 20,
                         backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, zIndex: 21 }), // Cố định cột "No" với left: 0 và tăng zIndex
+                        ...(key === 'no' && { left: 0, zIndex: 21 }),
+                        cursor: sortable ? 'pointer' : 'default',
+                        '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                       }}
+                      onClick={() => sortable && handleSort(key)}
                     >
-                      <Tooltip title={label} arrow>
-                        <span>{label}</span>
-                      </Tooltip>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Actions', 'Images'].includes(label) ? 'center' : 'flex-start' }}>
+                        <Tooltip title={label} arrow>
+                          <span>{label}</span>
+                        </Tooltip>
+                        {sortable && (
+                          <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
+                            {sortConfig.key === key && sortConfig.direction === 'asc' ? (
+                              <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                            ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
+                              <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                            ) : (
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                                <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                              </Box>
+                            )}
+                          </Box>
+                        )}
+                      </Box>
                     </TableCell>
                   ))}
                 </TableRow>
@@ -534,34 +774,48 @@ export default function SummaryPage() {
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
                           <Stack direction="row" spacing={0.2} justifyContent="center">
-                            <IconButton
-                              aria-label="edit"
-                              color="primary"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                                borderRadius: 1,
-                                p: 0.2,
-                              }}
-                              onClick={() => handleOpenEditDialog(item)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              aria-label="delete"
-                              color="error"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                                borderRadius: 1,
-                                p: 0.2,
-                              }}
-                              onClick={() => handleDelete(requisition.id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                            <Tooltip title={isCompleted ? 'Editing is disabled for Completed groups' : 'Edit item'}>
+                              <span>
+                                <IconButton
+                                  aria-label="edit"
+                                  color="primary"
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: isCompleted ? 'grey.300' : 'rgba(25, 118, 210, 0.1)',
+                                    '&:hover': {
+                                      backgroundColor: isCompleted ? 'grey.300' : 'rgba(25, 118, 210, 0.25)',
+                                    },
+                                    borderRadius: 1,
+                                    p: 0.2,
+                                  }}
+                                  onClick={() => handleOpenEditDialog(item)}
+                                  disabled={isCompleted}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title={isCompleted ? 'Deleting is disabled for Completed groups' : 'Delete item'}>
+                              <span>
+                                <IconButton
+                                  aria-label="delete"
+                                  color="error"
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: isCompleted ? 'grey.300' : 'rgba(211, 47, 47, 0.1)',
+                                    '&:hover': {
+                                      backgroundColor: isCompleted ? 'grey.300' : 'rgba(211, 47, 47, 0.25)',
+                                    },
+                                    borderRadius: 1,
+                                    p: 0.2,
+                                  }}
+                                  onClick={(e) => handleDelete(item, e)}
+                                  disabled={isCompleted}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -580,6 +834,29 @@ export default function SummaryPage() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
+            <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Item</DialogTitle>
+            <DialogContent>
+              <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
+                Are you sure you want to delete &quot;{selectedItemForDelete?.requisition?.englishName || 'Unknown'}&quot;?
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDelete}
+                variant="contained"
+                color="error"
+                sx={{ fontSize: '0.65rem' }}
+                disabled={loading}
+              >
+                Delete
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           <Popover
             id="mouse-over-popover"
@@ -654,22 +931,22 @@ export default function SummaryPage() {
               },
             }}
           />
+
+          <EditDialog
+            open={openEditDialog}
+            item={selectedItem}
+            onClose={handleCloseEditDialog}
+            onRefresh={fetchData}
+          />
+
+          <AddDialog
+            open={openAddDialog}
+            onClose={handleCloseAddDialog}
+            onRefresh={fetchData}
+            groupId={groupId}
+          />
         </>
       )}
-
-      <EditDialog
-        open={openEditDialog}
-        item={selectedItem}
-        onClose={handleCloseEditDialog}
-        onRefresh={fetchData}
-      />
-
-      <AddDialog
-        open={openAddDialog}
-        onClose={handleCloseAddDialog}
-        onRefresh={fetchData}
-        groupId={groupId}
-      />
     </Box>
   );
 }

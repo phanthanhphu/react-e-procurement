@@ -3,11 +3,11 @@ import {
   Typography,
   Box,
   Table,
-  TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  TableCell,
+  TableBody,
   Paper,
   Stack,
   IconButton,
@@ -16,44 +16,54 @@ import {
   Button,
   Input,
   Popover,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import ImageIcon from '@mui/icons-material/Image';
+import ArrowUpward from '@mui/icons-material/ArrowUpward';
+import ArrowDownward from '@mui/icons-material/ArrowDownward';
 import { API_BASE_URL } from '../../config';
 import AddProductDialog from './AddProductDialog';
 import EditProductDialog from './EditProductDialog';
 import SupplierSearch from './SupplierSearch';
+import Notification from './Notification';
 
 const headers = [
-  { label: 'No', key: 'no' },
-  { label: 'Supplier Code', key: 'supplierCode' },
-  { label: 'Supplier Name', key: 'supplierName' },
-  { label: 'SAP Code', key: 'sapCode' },
-  { label: 'Item No', key: 'itemNo' },
-  { label: 'Item Description', key: 'itemDescription' },
-  { label: 'Full Description', key: 'fullDescription' },
-  { label: 'Size', key: 'size' },
-  { label: 'Material Group Full Description', key: 'materialGroupFullDescription' },
-  { label: 'Unit', key: 'unit' },
-  { label: 'Price', key: 'price' },
-  { label: 'Currency', key: 'currency' },
-  { label: 'Group Item 1', key: 'groupItem1Name' },
-  { label: 'Group Item 2', key: 'groupItem2Name' },
-  { label: 'Images', key: 'image' },
-  { label: 'Action', key: 'action' },
+  { label: 'No', key: 'no', sortable: false },
+  { label: 'Supplier Code', key: 'supplierCode', sortable: true },
+  { label: 'Supplier Name', key: 'supplierName', sortable: true },
+  { label: 'SAP Code', key: 'sapCode', sortable: true },
+  { label: 'Item No', key: 'itemNo', sortable: true },
+  { label: 'Item Description', key: 'itemDescription', sortable: true },
+  { label: 'Full Description', key: 'fullDescription', sortable: true },
+  { label: 'Size', key: 'size', sortable: true },
+  { label: 'Material Group Full Description', key: 'materialGroupFullDescription', sortable: true },
+  { label: 'Unit', key: 'unit', sortable: true },
+  { label: 'Price', key: 'price', sortable: true },
+  { label: 'Currency', key: 'currency', sortable: true },
+  { label: 'Group Item 1', key: 'productType1Name', sortable: true },
+  { label: 'Group Item 2', key: 'productType2Name', sortable: true },
+  { label: 'Images', key: 'image', sortable: false },
+  { label: 'Action', key: 'action', sortable: false },
 ];
 
-function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage }) {
+function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort, onRefresh }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
 
   const handlePopoverOpen = (event, imageUrls) => {
     setAnchorEl(event.currentTarget);
     const fullSrcs = imageUrls.map((imgSrc) =>
-      imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
+      imgSrc.startsWith('http')
+        ? `${imgSrc}?t=${new Date().getTime()}`
+        : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}?t=${new Date().getTime()}`
     );
     console.log('Image URLs:', fullSrcs);
     setPopoverImgSrcs(fullSrcs);
@@ -80,7 +90,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
       <Table size="small" sx={{ minWidth: 1400 }}>
         <TableHead>
           <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-            {headers.map(({ label, key }) => (
+            {headers.map(({ label, key, sortable }) => (
               <TableCell
                 key={key}
                 align={label === 'Action' || label === 'Images' ? 'center' : 'left'}
@@ -97,10 +107,31 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   top: 0,
                   zIndex: 1,
                   backgroundColor: '#027aff',
-                  ...(key === 'no' && { left: 0, zIndex: 2 }), // Cố định cột "No" với left: 0
+                  ...(key === 'no' && { left: 0, zIndex: 2 }),
+                  cursor: sortable ? 'pointer' : 'default',
+                  '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                 }}
+                onClick={() => sortable && handleSort(key)}
               >
-                {label}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' || label === 'Images' ? 'center' : 'flex-start' }}>
+                  <Tooltip title={label} arrow>
+                    <span>{label}</span>
+                  </Tooltip>
+                  {sortable && (
+                    <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
+                      {sortConfig.key === key && sortConfig.direction === 'asc' ? (
+                        <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                      ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
+                        <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
+                      ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                          <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Box>
               </TableCell>
             ))}
           </TableRow>
@@ -118,10 +149,10 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
               <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>
                 {idx + 1 + page * rowsPerPage}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierName}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.sapCode}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.itemNo || 'N/A'}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierCode || ''}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierName || ''}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.sapCode || ''}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.itemNo || ''}</TableCell>
               <TableCell
                 sx={{
                   fontSize: '0.55rem',
@@ -132,7 +163,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   width: '200px',
                 }}
               >
-                {product.itemDescription || 'N/A'}
+                {product.itemDescription || ''}
               </TableCell>
               <TableCell
                 sx={{
@@ -144,9 +175,9 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   width: '200px',
                 }}
               >
-                {product.fullDescription || 'N/A'}
+                {product.fullDescription || ''}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.size}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.size || ''}</TableCell>
               <TableCell
                 sx={{
                   fontSize: '0.55rem',
@@ -157,18 +188,18 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   width: '200px',
                 }}
               >
-                {product.materialGroupFullDescription || 'N/A'}
+                {product.materialGroupFullDescription || ''}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.unit}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.unit || ''}</TableCell>
               <TableCell align="left" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.price ? product.price.toLocaleString() : 'N/A'}
+                {product.price ? product.price.toLocaleString() : ''}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.currency || 'N/A'}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.currency || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.productType1Name || 'N/A'}
+                {product.productType1Name || ''}
               </TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.productType2Name || 'N/A'}
+                {product.productType2Name || ''}
               </TableCell>
               <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
                 {product.imageUrls && product.imageUrls.length > 0 ? (
@@ -189,7 +220,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
                     <EditIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDelete(product.id)}>
+                  <IconButton size="small" color="error" onClick={() => handleDelete(product)}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </Stack>
@@ -256,14 +287,21 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
 export default function SupplierProductsPage() {
   const theme = useTheme();
   const [data, setData] = useState([]);
+  const [originalData, setOriginalData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
   const [file, setFile] = useState(null);
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
   const [productToEdit, setProductToEdit] = useState(null);
   const [searchSupplierCode, setSearchSupplierCode] = useState('');
   const [searchSupplierName, setSearchSupplierName] = useState('');
@@ -274,21 +312,15 @@ export default function SupplierProductsPage() {
   const [searchMaterialGroupFullDescription, setSearchMaterialGroupFullDescription] = useState('');
   const [searchProductType1Id, setSearchProductType1Id] = useState('');
   const [searchProductType2Id, setSearchProductType2Id] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+
+  const handleCloseNotification = () => {
+    setNotification((prev) => ({ ...prev, open: false }));
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    console.log('State values:', {
-      searchSupplierCode,
-      searchSupplierName,
-      searchSapCode,
-      searchItemNo,
-      searchItemDescription,
-      searchFullDescription,
-      searchMaterialGroupFullDescription,
-      searchProductType1Id,
-      searchProductType2Id,
-    });
+    setNotification({ open: false, message: '', severity: 'info' });
     try {
       const params = {};
       if (searchSupplierCode) params.supplierCode = searchSupplierCode;
@@ -304,7 +336,6 @@ export default function SupplierProductsPage() {
       params.size = rowsPerPage;
       params.sortBy = 'createdAt';
       params.sortDirection = 'DESC';
-      console.log('API Call Params:', params);
       const url = new URL(`${API_BASE_URL}/api/supplier-products/filter`);
       url.search = new URLSearchParams(params).toString();
       console.log('Request URL:', url.toString());
@@ -312,14 +343,30 @@ export default function SupplierProductsPage() {
         method: 'GET',
         headers: { accept: '*/*' },
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
       const result = await response.json();
-      setData(result.content);
-      setTotalElements(result.totalElements);
+      console.log('API Response:', result);
+      setData(result.data.content || []);
+      setOriginalData(result.data.content || []);
+      setTotalElements(result.data.totalElements || 0);
     } catch (err) {
-      setError('Failed to fetch data');
+      setNotification({
+        open: true,
+        message: `Failed to load data: ${err.message}`,
+        severity: 'error',
+      });
       console.error(err);
       setData([]);
+      setOriginalData([]);
       setTotalElements(0);
     } finally {
       setLoading(false);
@@ -338,75 +385,232 @@ export default function SupplierProductsPage() {
     searchProductType2Id,
   ]);
 
-  // Fetch all data on component mount
   useEffect(() => {
     fetchData();
-  }, []); // Empty dependency array to run only on mount
+  }, [fetchData]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/supplier-products/${id}`, {
-        method: 'DELETE',
-        headers: { Accept: '*/*' },
+  const handleAddSuccess = async (message) => {
+    setPage(0); // Đặt lại trang về 0 để hiển thị dữ liệu mới
+    setNotification({
+      open: true,
+      message: message,
+      severity: 'success',
+      autoHideDuration: 6000,
+    });
+    await fetchData(); // Gọi lại fetchData để làm mới dữ liệu
+  };
+
+  const handleEdit = (product) => {
+    setProductToEdit(null);
+    setProductToEdit({ ...product });
+    setOpenEditDialog(true);
+  };
+
+  const handleDelete = (product) => {
+    setProductToDelete(product);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!productToDelete) {
+      setNotification({
+        open: true,
+        message: 'No product selected for deletion',
+        severity: 'error',
+        autoHideDuration: 6000,
       });
-      if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
-      await fetchData();
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/supplier-products/${productToDelete.id}`, {
+        method: 'DELETE',
+        headers: { accept: '*/*' },
+      });
+      let message;
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          message = errorData.message || text || `Failed to delete product: ${response.status}`;
+        } catch (parseError) {
+          message = text || `Failed to delete product: ${response.status}`;
+        }
+        throw new Error(message);
+      }
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        message = data.message || text || 'Product deleted successfully';
+      } catch (parseError) {
+        message = text || 'Product deleted successfully';
+      }
+      setPage(0); // Đặt lại trang về 0
+      await fetchData(); // Làm mới dữ liệu
+      setNotification({
+        open: true,
+        message: message,
+        severity: 'success',
+        autoHideDuration: 6000,
+      });
     } catch (error) {
-      console.error('Delete error:', error);
-      alert('Delete failed. Please try again.');
+      console.error('Delete product error:', error);
+      setNotification({
+        open: true,
+        message: error.message,
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+    } finally {
+      setLoading(false);
+      setOpenDeleteDialog(false);
+      setProductToDelete(null);
     }
   };
 
+  const handleCancelDelete = () => {
+    setOpenDeleteDialog(false);
+    setProductToDelete(null);
+  };
+
   const handleFileChange = (event) => {
-    setFile(event.target.files[0]);
+    const selectedFile = event.target.files[0];
+    if (selectedFile && !selectedFile.name.match(/\.(xlsx|xls)$/)) {
+      setNotification({
+        open: true,
+        message: 'Please select an .xlsx or .xls file',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return;
+    }
+    setFile(selectedFile);
   };
 
   const handleUpload = async () => {
     if (!file) {
-      alert('Please select a file to upload.');
+      setNotification({
+        open: true,
+        message: 'Please select a file to upload',
+        severity: 'warning',
+        autoHideDuration: 6000,
+      });
       return;
     }
     const formData = new FormData();
-    formData.append('files', file);
+    formData.append('file', file);
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/supplier-products/import`, {
         method: 'POST',
         body: formData,
       });
-      if (!response.ok) throw new Error(`Upload failed with status: ${response.status}`);
-      alert('File uploaded successfully');
-      fetchData();
+      let message;
+      if (!response.ok) {
+        const text = await response.text();
+        if (response.status === 400) {
+          message = text.includes('Invalid price format')
+            ? 'Invalid price format in the file'
+            : text.includes('Duplicate entry')
+            ? 'Duplicate data in the file'
+            : text || `Upload failed with status: ${response.status}`;
+        } else if (response.status === 409) {
+          message = text || 'Duplicate data in the file';
+        } else {
+          message = text || `Upload failed with status: ${response.status}`;
+        }
+        try {
+          const errorData = JSON.parse(text);
+          message = errorData.message || message;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(message);
+      }
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        message = data.message || text || 'File uploaded successfully';
+      } catch (parseError) {
+        message = text || 'File uploaded successfully';
+      }
+      setPage(0); // Đặt lại trang về 0
+      await fetchData(); // Làm mới dữ liệu
+      setNotification({
+        open: true,
+        message: message,
+        severity: 'success',
+        autoHideDuration: 6000,
+      });
+      setFile(null);
     } catch (err) {
-      setError('Failed to upload file');
-      console.error(err);
-      alert('Error uploading file');
+      console.error('Upload error:', err);
+      setNotification({
+        open: true,
+        message: `Error uploading file: ${err.message}`,
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (file) {
+      handleUpload();
+    }
+  }, [file]);
+
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
-    fetchData();
   };
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-    fetchData();
   };
 
-  const handleEditProduct = (product) => {
-    setProductToEdit(product);
-    setOpenEditDialog(true);
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null;
+    }
+    setSortConfig({ key: direction ? key : null, direction });
+    setPage(0);
+
+    if (!direction) {
+      setData([...originalData]);
+      return;
+    }
+
+    const sortedData = [...data].sort((a, b) => {
+      let aValue = a[key];
+      let bValue = b[key];
+
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+
+      if (key === 'price') {
+        aValue = Number(aValue) || 0;
+        bValue = Number(bValue) || 0;
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      return direction === 'asc'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+
+    setData(sortedData);
   };
 
   return (
     <Box sx={{ p: 1, fontSize: '0.65rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1rem' }}>
-        Supplier Products
+        Products
       </Typography>
       <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end" alignItems="center">
         <Button
@@ -423,6 +627,7 @@ export default function SupplierProductsPage() {
             fontSize: '0.65rem',
             '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
+          disabled={loading}
         >
           Upload Excel
         </Button>
@@ -433,6 +638,11 @@ export default function SupplierProductsPage() {
           onChange={handleFileChange}
           sx={{ display: 'none' }}
         />
+        {file && (
+          <Typography sx={{ fontSize: '0.65rem', color: '#555', mr: 1 }}>
+            Uploading: {file.name}
+          </Typography>
+        )}
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -447,6 +657,7 @@ export default function SupplierProductsPage() {
             fontSize: '0.65rem',
             '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
           }}
+          disabled={loading}
         >
           Add Product
         </Button>
@@ -482,6 +693,7 @@ export default function SupplierProductsPage() {
           setSearchMaterialGroupFullDescription('');
           setSearchProductType1Id('');
           setSearchProductType2Id('');
+          setSortConfig({ key: null, direction: null });
           setPage(0);
           fetchData();
         }}
@@ -491,20 +703,22 @@ export default function SupplierProductsPage() {
           Loading data...
         </Typography>
       )}
-      {error && (
-        <Typography
-          align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}
-        >
-          {error}
-        </Typography>
-      )}
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleCloseNotification}
+        autoHideDuration={6000}
+      />
       <SupplierProductsTable
         supplierProducts={data}
         handleDelete={handleDelete}
-        handleEdit={handleEditProduct}
+        handleEdit={handleEdit}
         page={page}
         rowsPerPage={rowsPerPage}
+        sortConfig={sortConfig}
+        handleSort={handleSort}
+        onRefresh={fetchData}
       />
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
@@ -526,15 +740,47 @@ export default function SupplierProductsPage() {
           },
         }}
       />
-      <AddProductDialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} onRefresh={fetchData} />
+      <AddProductDialog
+        open={openAddDialog}
+        onClose={() => setOpenAddDialog(false)}
+        onRefresh={fetchData}
+        onSuccess={handleAddSuccess}
+        disabled={loading}
+      />
       {productToEdit && (
         <EditProductDialog
           open={openEditDialog}
-          onClose={() => setOpenEditDialog(false)}
+          onClose={() => {
+            setOpenEditDialog(false);
+            setProductToEdit(null);
+          }}
           product={productToEdit}
           onRefresh={fetchData}
+          disabled={loading}
         />
       )}
+      <Dialog open={openDeleteDialog} onClose={handleCancelDelete}>
+        <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Product</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
+            Are you sure you want to delete &quot;{productToDelete?.itemNo || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            variant="contained"
+            color="error"
+            sx={{ fontSize: '0.65rem' }}
+            disabled={loading}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
