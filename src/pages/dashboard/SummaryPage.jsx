@@ -37,30 +37,33 @@ import { API_BASE_URL } from '../../config';
 import ImportExcelButton from './ImportExcelButton';
 import Notification from './Notification';
 
-// Headers giữ nguyên
+// Updated table headers with Currency and Good Type
 const headers = [
   { label: 'No', key: 'no', sortable: false },
-  { label: 'Group Type 1', key: 'productType1Name', sortable: true },
-  { label: 'Group Type 2', key: 'productType2Name', sortable: true },
+  { label: 'Product Type 1', key: 'productType1Name', sortable: true },
+  { label: 'Product Type 2', key: 'productType2Name', sortable: true },
   { label: 'Item Description (EN)', key: 'englishName', sortable: true },
   { label: 'Item Description (VN)', key: 'vietnameseName', sortable: true },
   { label: 'Old SAP Code', key: 'oldSapCode', sortable: true },
-  { label: 'SAP Code in New SAP', key: 'newSapCode', sortable: true },
-  { label: 'Order Unit', key: 'unit', sortable: true },
+  { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true },
   { label: 'Department', key: 'departmentRequests', sortable: false },
-  { label: 'Buying Qty', key: 'sumBuy', sortable: true },
-  { label: 'Supplier', key: 'supplierName', sortable: true },
-  { label: 'Sup. price', key: 'supplierPrice', sortable: true },
-  { label: 'Total price', key: 'totalPrice', sortable: true },
+  { label: 'Request Qty', key: 'requestQty', sortable: true },
+  { label: 'Order Qty', key: 'orderQty', sortable: true },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true },
+  { label: 'Price', key: 'price', sortable: true },
+  { label: 'Currency', key: 'currency', sortable: true },
+  { label: 'Amount', key: 'amount', sortable: true },
   { label: 'Stock', key: 'stock', sortable: true },
-  { label: 'Purchasing Suggest', key: 'purchasingSuggest', sortable: true },
   { label: 'Reason', key: 'reason', sortable: true },
   { label: 'Remark', key: 'remark', sortable: true },
+  { label: 'Good Type', key: 'goodType', sortable: true }, // Added Good Type
+  { label: 'Created Date', key: 'createdDate', sortable: true },
+  { label: 'Updated Date', key: 'updatedDate', sortable: true },
   { label: 'Images', key: 'image', sortable: false },
   { label: 'Actions', key: 'actions', sortable: false },
 ];
 
-// Component DeptRequestTable giữ nguyên
+// DeptRequestTable component remains unchanged
 function DeptRequestTable({ departmentRequests }) {
   if (!departmentRequests || departmentRequests.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Data</Typography>;
@@ -88,7 +91,7 @@ function DeptRequestTable({ departmentRequests }) {
               color: '#1976d2',
             }}
           >
-            Department
+            Name
           </TableCell>
           <TableCell
             align="center"
@@ -142,6 +145,43 @@ function DeptRequestTable({ departmentRequests }) {
   );
 }
 
+// Format currency with dynamic symbols
+const formatCurrency = (value, currency) => {
+  if (!value || isNaN(value)) return '0';
+  switch (currency) {
+    case 'VND':
+      // Use Vietnamese locale with no decimal places for VND
+      return `${new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)} đ`;
+    case 'USD':
+      // Format with 2 decimal places and $ prefix
+      return `$${Number(value).toFixed(2)}`;
+    case 'EUR':
+      // Format with 2 decimal places and € prefix
+      return `€${Number(value).toFixed(2)}`;
+    default:
+      return Number(value).toFixed(2);
+  }
+};
+
+// Format date for display
+const formatDate = (date) => {
+  if (!date) return '';
+  if (Array.isArray(date)) {
+    const [year, month, day, hour, minute, second, nanosecond] = date;
+    const dateObj = new Date(year, month - 1, day, hour, minute, second, nanosecond / 1000000);
+    return dateObj.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  }
+  return new Date(date).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
 export default function SummaryPage() {
   const theme = useTheme();
   const { groupId } = useParams();
@@ -156,8 +196,8 @@ export default function SummaryPage() {
     englishName: '',
     vietnameseName: '',
     oldSapCode: '',
-    newSapCode: '',
-    unit: '',
+    hanaSapCode: '',
+    supplierName: '',
     departmentName: '',
   });
   const [page, setPage] = useState(0);
@@ -167,6 +207,7 @@ export default function SummaryPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
@@ -214,32 +255,51 @@ export default function SummaryPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
+      const hasSearch = Object.values(searchValues).some(
+        (value) => value && value.trim() !== ''
+      );
+      
+      const queryParams = new URLSearchParams({
+        groupId,
+        hasFilter: hasSearch ? 'true' : 'false',
+        disablePagination: 'false',
+        page: page.toString(),
+        size: rowsPerPage.toString(),
+        ...(sortConfig.key && sortConfig.direction && {
+          sort: `${sortConfig.key},${sortConfig.direction}`,
+        }),
+        ...searchValues,
+      });
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/summary-requisitions/search?${queryParams.toString()}`,
+        {
+          method: 'GET',
+          headers: { Accept: '*/*' },
+        }
+      );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const result = await response.json();
-      const filteredData = result.filter(item => {
-        return (
-          (!searchValues.productType1Name || item.productType1Name?.toLowerCase().includes(searchValues.productType1Name.toLowerCase())) &&
-          (!searchValues.productType2Name || item.productType2Name?.toLowerCase().includes(searchValues.productType2Name.toLowerCase())) &&
-          (!searchValues.englishName || item.requisition.englishName?.toLowerCase().includes(searchValues.englishName.toLowerCase())) &&
-          (!searchValues.vietnameseName || item.requisition.vietnameseName?.toLowerCase().includes(searchValues.vietnameseName.toLowerCase())) &&
-          (!searchValues.oldSapCode || item.requisition.oldSapCode?.toLowerCase().includes(searchValues.oldSapCode.toLowerCase())) &&
-          (!searchValues.newSapCode || item.requisition.newSapCode?.toLowerCase().includes(searchValues.newSapCode.toLowerCase())) &&
-          (!searchValues.unit || item.supplierProduct?.unit?.toLowerCase().includes(searchValues.unit.toLowerCase())) &&
-          (!searchValues.departmentName || item.departmentRequests.some(dept => dept.departmentName?.toLowerCase().includes(searchValues.departmentName.toLowerCase())))
-        );
-      });
-      setData(filteredData);
-      setOriginalData(filteredData);
+      
+      const mappedData = result.content.map((item) => ({
+        ...item,
+        requestQty: item.sumBuy,
+        amount: item.totalPrice,
+        currency: item.supplierProduct?.currency || 'VND',
+        goodType: item.supplierProduct?.goodType || '',
+      }));
+      
+      setData(mappedData);
+      setOriginalData(mappedData);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
     }
-  }, [groupId, searchValues]);
+  }, [groupId, searchValues, page, rowsPerPage, sortConfig]);
 
   useEffect(() => {
     fetchGroupStatus();
@@ -322,9 +382,14 @@ export default function SummaryPage() {
     }
   };
 
-  const handleOpenAddDialog = () => setOpenAddDialog(true);
+  const handleOpenAddDialog = (currency = '') => {
+    setSelectedCurrency(currency);
+    setOpenAddDialog(true);
+  };
+
   const handleCloseAddDialog = (message) => {
     setOpenAddDialog(false);
+    setSelectedCurrency('');
     if (message) {
       setNotification({
         open: true,
@@ -356,8 +421,8 @@ export default function SummaryPage() {
       englishName: '',
       vietnameseName: '',
       oldSapCode: '',
-      newSapCode: '',
-      unit: '',
+      hanaSapCode: '',
+      supplierName: '',
       departmentName: '',
     });
     setSortConfig({ key: null, direction: null });
@@ -387,12 +452,15 @@ export default function SummaryPage() {
     const sortedData = [...data].sort((a, b) => {
       let aValue, bValue;
 
-      if (['englishName', 'vietnameseName', 'oldSapCode', 'newSapCode', 'reason', 'remark', 'stock', 'purchasingSuggest'].includes(key)) {
+      if (['englishName', 'vietnameseName', 'oldSapCode', 'hanaSapCode', 'reason', 'remark', 'stock', 'orderQty'].includes(key)) {
         aValue = a.requisition[key] || '';
         bValue = b.requisition[key] || '';
-      } else if (['unit', 'supplierName', 'price'].includes(key)) {
-        aValue = a.supplierProduct ? a.supplierProduct[key === 'price' ? 'price' : key] : '';
-        bValue = b.supplierProduct ? b.supplierProduct[key === 'price' ? 'price' : key] : '';
+      } else if (['supplierName', 'price', 'currency', 'goodType'].includes(key)) {
+        aValue = a.supplierProduct ? a.supplierProduct[key] : '';
+        bValue = b.supplierProduct ? b.supplierProduct[key] : '';
+      } else if (['createdDate', 'updatedDate'].includes(key)) {
+        aValue = a[key] || '';
+        bValue = b[key] || '';
       } else {
         aValue = a[key] || '';
         bValue = b[key] || '';
@@ -401,7 +469,7 @@ export default function SummaryPage() {
       if (aValue === null || aValue === undefined) aValue = '';
       if (bValue === null || bValue === undefined) bValue = '';
 
-      if (['sumBuy', 'supplierPrice', 'totalPrice', 'stock'].includes(key)) {
+      if (['requestQty', 'price', 'amount', 'stock', 'orderQty'].includes(key)) {
         aValue = Number(aValue) || 0;
         bValue = Number(bValue) || 0;
         return direction === 'asc' ? aValue - bValue : bValue - aValue;
@@ -413,6 +481,12 @@ export default function SummaryPage() {
     });
 
     setData(sortedData);
+  };
+
+  const handleCurrencyClick = (currency) => {
+    if (currency && !isCompleted) {
+      handleOpenAddDialog(currency);
+    }
   };
 
   const handlePopoverOpen = (event, imageUrls) => {
@@ -471,7 +545,7 @@ export default function SummaryPage() {
             fontSize: '1rem',
           }}
         >
-          Requisition Urgent
+          Weekly Requisition
         </Typography>
 
         <Stack direction="row" spacing={0.5}>
@@ -556,7 +630,7 @@ export default function SummaryPage() {
               <Button
                 variant="contained"
                 startIcon={<AddIcon fontSize="small" />}
-                onClick={handleOpenAddDialog}
+                onClick={() => handleOpenAddDialog('')}
                 disabled={isCompleted}
                 sx={{
                   textTransform: 'none',
@@ -621,14 +695,14 @@ export default function SummaryPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 1800 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1900 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key, sortable }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Sup. price', 'Total price', 'Order Unit', 'Buying Qty', 'Stock', 'Images', 'Actions'].includes(label)
+                        ['No', 'Price', 'Currency', 'Amount', 'Request Qty', 'Stock', 'Order Qty', 'Good Type', 'Created Date', 'Updated Date', 'Images', 'Actions'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -677,7 +751,7 @@ export default function SummaryPage() {
               <TableBody>
                 {displayData.length > 0 ? (
                   displayData.map((item, idx) => {
-                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests, sumBuy, totalPrice } = item;
+                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests, requestQty, amount, currency, goodType } = item;
                     const imageUrls = requisition.imageUrls || supplierProduct?.imageUrls || [];
 
                     return (
@@ -724,37 +798,57 @@ export default function SummaryPage() {
                           {requisition.oldSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {requisition.newSapCode || ''}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {supplierProduct?.unit || ''}
+                          {requisition.hanaSapCode || ''}
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={departmentRequests} />
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
-                          {sumBuy || 0}
+                          {requestQty || 0}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {requisition.orderQty || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {supplierProduct?.supplierName || ''}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {supplierProduct?.price ? supplierProduct.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {supplierProduct?.price ? formatCurrency(supplierProduct.price, currency) : '0'}
                         </TableCell>
-                        <TableCell align="right" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
-                          {totalPrice ? totalPrice.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '0'}
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            cursor: isCompleted ? 'default' : 'pointer',
+                            color: isCompleted ? '#888' : theme.palette.primary.main,
+                            '&:hover': isCompleted ? {} : { backgroundColor: '#e1f0ff' },
+                          }}
+                          onClick={() => handleCurrencyClick(currency)}
+                        >
+                          {currency || '-'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
+                          {amount ? formatCurrency(amount, currency) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.stock || 0}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {requisition.purchasingSuggest || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.reason || ''}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.remark || ''}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {goodType || ''}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {formatDate(item.createdDate)}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {formatDate(item.updatedDate)}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
                           {imageUrls.length > 0 ? (
@@ -944,6 +1038,7 @@ export default function SummaryPage() {
             onClose={handleCloseAddDialog}
             onRefresh={fetchData}
             groupId={groupId}
+            currency={selectedCurrency}
           />
         </>
       )}

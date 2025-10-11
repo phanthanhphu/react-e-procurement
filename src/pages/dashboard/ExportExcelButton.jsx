@@ -44,12 +44,20 @@ export default function ExportExcelButton({ data, groupId }) {
       return [];
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/group/${groupId}`);
+      const queryParams = new URLSearchParams({
+        groupId,
+        hasFilter: 'false',
+        disablePagination: 'true',
+      });
+      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/search?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const result = await response.json();
-      return result || [];
+      return result.content || [];
     } catch (error) {
       console.error('Error fetching group data for export:', error);
       return [];
@@ -75,30 +83,35 @@ export default function ExportExcelButton({ data, groupId }) {
     const wsData = [];
 
     // Title row
-    const titleRow = new Array(6 + allDeptKeys.length + 5).fill('');
+    const totalCols = 8 + allDeptKeys.length + 5; // Includes Product Type 1 and 2
+    const titleRow = new Array(totalCols).fill('');
     titleRow[0] = 'SUMMARY REQUISITION';
     wsData.push(titleRow);
 
     // Header rows
     wsData.push([
       'No',
+      'Product Type 1',
+      'Product Type 2',
       'Description',
       '',
       'Old SAP Code',
-      'SAP Code in New SAP',
+      'Hana SAP Code',
       'Unit',
-      ...Array(allDeptKeys.length).fill("Department Buy Q'ty"),
-      'Total Buy Qty',
+      ...Array(allDeptKeys.length).fill("Department"),
+      'Request Qty',
       `Stock (${stockDate})`,
-      'Purchasing Suggest',
+      'Order Qty',
       'Reason',
       'Remark',
     ]);
 
     wsData.push([
       '',
-      'English Name',
-      'Vietnamese Name',
+      '',
+      '',
+      'EN',
+      'VN',
       '',
       '',
       '',
@@ -112,7 +125,7 @@ export default function ExportExcelButton({ data, groupId }) {
 
     // Data rows
     exportData.forEach((item, index) => {
-      const { requisition, supplierProduct, departmentRequests, sumBuy } = item;
+      const { requisition, supplierProduct, departmentRequests, sumBuy, productType1Name, productType2Name } = item;
       const deptBuy = {};
       (departmentRequests || []).forEach((dept) => {
         deptBuy[dept.departmentName] = dept.buy;
@@ -120,15 +133,17 @@ export default function ExportExcelButton({ data, groupId }) {
 
       const row = [
         index + 1,
+        productType1Name || '',
+        productType2Name || '',
         requisition.englishName || '',
         requisition.vietnameseName || '',
         requisition.oldSapCode || '',
-        requisition.newSapCode || '',
+        requisition.hanaSapCode || '',
         supplierProduct?.unit || '',
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
         sumBuy || 0,
         requisition.stock || 0,
-        requisition.purchasingSuggest || '',
+        requisition.orderQty || '', // Use requisition.orderQty for Order Qty
         requisition.reason || '',
         requisition.remark || '',
       ];
@@ -136,7 +151,6 @@ export default function ExportExcelButton({ data, groupId }) {
       wsData.push(row);
     });
 
-    const totalCols = 6 + allDeptKeys.length + 5;
     const dataEndRow = 3 + exportData.length - 1;
 
     // Signature rows
@@ -238,17 +252,19 @@ export default function ExportExcelButton({ data, groupId }) {
     // Merges
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
-      { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } },
-      { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
-      { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
-      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
-      { s: { r: 1, c: 6 }, e: { r: 1, c: 6 + allDeptKeys.length - 1 } },
-      { s: { r: 1, c: 6 + allDeptKeys.length }, e: { r: 2, c: 6 + allDeptKeys.length } },
-      { s: { r: 1, c: 7 + allDeptKeys.length }, e: { r: 2, c: 7 + allDeptKeys.length } },
-      { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } },
-      { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } },
-      { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } },
+      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
+      { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } }, // Product Type 1
+      { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } }, // Product Type 2
+      { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } }, // Description (EN, VN)
+      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } }, // Old SAP Code
+      { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } }, // Hana SAP Code
+      { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } }, // Unit
+      { s: { r: 1, c: 8 }, e: { r: 1, c: 8 + allDeptKeys.length - 1 } }, // Department
+      { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } }, // Request Qty
+      { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } }, // Stock
+      { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } }, // Order Qty
+      { s: { r: 1, c: 11 + allDeptKeys.length }, e: { r: 2, c: 11 + allDeptKeys.length } }, // Reason
+      { s: { r: 1, c: 12 + allDeptKeys.length }, e: { r: 2, c: 12 + allDeptKeys.length } }, // Remark
     ];
 
     startPositions.forEach((startCol, index) => {
@@ -262,10 +278,22 @@ export default function ExportExcelButton({ data, groupId }) {
     ws['!merges'] = merges;
 
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
-    ws['!cols'][0] = { wch: 5 };
+    ws['!cols'][0] = { wch: 5 }; // No
+    ws['!cols'][1] = { wch: 20 }; // Product Type 1
+    ws['!cols'][2] = { wch: 20 }; // Product Type 2
+    ws['!cols'][3] = { wch: 20 }; // EN
+    ws['!cols'][4] = { wch: 20 }; // VN
+    ws['!cols'][5] = { wch: 15 }; // Old SAP Code
+    ws['!cols'][6] = { wch: 15 }; // Hana SAP Code
+    ws['!cols'][7] = { wch: 10 }; // Unit
     allDeptKeys.forEach((_, idx) => {
-      ws['!cols'][6 + idx] = { wch: 12 };
+      ws['!cols'][8 + idx] = { wch: 12 }; // Department columns
     });
+    ws['!cols'][8 + allDeptKeys.length] = { wch: 12 }; // Request Qty
+    ws['!cols'][9 + allDeptKeys.length] = { wch: 12 }; // Stock
+    ws['!cols'][10 + allDeptKeys.length] = { wch: 12 }; // Order Qty
+    ws['!cols'][11 + allDeptKeys.length] = { wch: 20 }; // Reason
+    ws['!cols'][12 + allDeptKeys.length] = { wch: 20 }; // Remark
 
     // Generate file name
     const sanitizedGroupName = groupName.replace(/\s+/g, '-');
@@ -292,7 +320,7 @@ export default function ExportExcelButton({ data, groupId }) {
         fontSize: '0.75rem',
       }}
     >
-      Export Urgent Excel
+      Summary
     </Button>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -28,15 +28,27 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
+// Utility function to normalize currency codes
+const normalizeCurrencyCode = (code) => {
+  const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP']; // Add more as needed
+  const currencyMap = {
+    EURO: 'EUR', // Normalize incorrect codes
+  };
+
+  if (!code) return 'VND'; // Default to VND if code is empty
+  const normalizedCode = currencyMap[code.toUpperCase()] || code.toUpperCase();
+  return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
+};
+
 export default function EditRequisitionMonthly({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
-    fullItemDescriptionVN: '',
+    fullDescription: '',
     oldSAPCode: '',
-    sapCodeNewSAP: '',
-    totalNotIssuedQty: '',
-    inHand: '',
+    hanaSAPCode: '',
+    dailyMedInventory: '',
+    safeStock: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -67,6 +79,38 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [translating, setTranslating] = useState(false);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [initialVNDescription, setInitialVNDescription] = useState('');
+  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [loadingCurrency, setLoadingCurrency] = useState(false);
+  const [currencyError, setCurrencyError] = useState(null);
+
+  // Fetch currency from API
+  const fetchGroupCurrency = useCallback(async () => {
+    if (!formData.groupId) {
+      setCurrencyError('Invalid Group ID');
+      setGroupCurrency('VND'); // Fallback to default
+      return;
+    }
+    setLoadingCurrency(true);
+    setCurrencyError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${formData.groupId}`, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result = await response.json();
+      const validatedCurrency = normalizeCurrencyCode(result.currency); // Normalize currency
+      setGroupCurrency(validatedCurrency); // Use validated currency
+    } catch (err) {
+      console.error('Fetch group currency error:', err);
+      setCurrencyError('Failed to fetch group currency. Using default (VND).');
+      setGroupCurrency('VND'); // Fallback to default
+    } finally {
+      setLoadingCurrency(false);
+    }
+  }, [formData.groupId]);
 
   useEffect(() => {
     console.log('EditRequisitionMonthly opened with item:', item);
@@ -82,6 +126,12 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   }, [open, item]);
 
+  useEffect(() => {
+    if (formData.groupId) {
+      fetchGroupCurrency(); // Fetch currency when groupId is available
+    }
+  }, [formData.groupId, fetchGroupCurrency]);
+
   const fetchData = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`, {
@@ -94,11 +144,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setFormData({
         itemDescriptionEN: data.itemDescriptionEN || '',
         itemDescriptionVN: data.itemDescriptionVN || '',
-        fullItemDescriptionVN: data.fullDescription || '',
+        fullDescription: data.fullDescription || '',
         oldSAPCode: data.oldSAPCode || '',
-        sapCodeNewSAP: data.sapCodeNewSAP || '',
-        totalNotIssuedQty: data.totalNotIssuedQty?.toString() || '',
-        inHand: data.inHand?.toString() || '',
+        hanaSAPCode: data.hanaSAPCode || '',
+        dailyMedInventory: data.dailyMedInventory?.toString() || '',
+        safeStock: data.safeStock?.toString() || '',
         reason: data.reason || '',
         remark: data.remark || '',
         remarkComparison: data.remarkComparison || '',
@@ -135,11 +185,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           ? {
               id: data.supplierId,
               supplierName: data.supplierName || '',
-              unit: data.unit || '',
+              sapCode: data.oldSAPCode || '',
               price: parseFloat(data.price) || 0,
-              oldSAPCode: data.oldSAPCode || '',
-              itemDescriptionVN: data.itemDescriptionVN || '',
-              fullItemDescriptionVN: data.fullDescription || '',
+              unit: data.unit || '',
+              fullDescription: data.fullDescription || '',
             }
           : null
       );
@@ -157,11 +206,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setFormData({
       itemDescriptionEN: '',
       itemDescriptionVN: '',
-      fullItemDescriptionVN: '',
+      fullDescription: '',
       oldSAPCode: '',
-      sapCodeNewSAP: '',
-      totalNotIssuedQty: '',
-      inHand: '',
+      hanaSAPCode: '',
+      dailyMedInventory: '',
+      safeStock: '',
       reason: '',
       remark: '',
       remarkComparison: '',
@@ -182,6 +231,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setShowSupplierSelector(true);
     setIsEnManuallyEdited(false);
     setInitialVNDescription('');
+    setGroupCurrency('VND'); // Reset currency
+    setCurrencyError(null);
   };
 
   const translateText = async (text) => {
@@ -268,14 +319,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   };
 
-  useEffect(() => {
-    if (formData.productType1Id) {
-      fetchProductType2List(formData.productType1Id);
-    } else {
-      setProductType2List([]);
-    }
-  }, [formData.productType1Id]);
-
   const fetchProductType2List = async (type1Id) => {
     setLoadingType2(true);
     try {
@@ -292,6 +335,15 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setLoadingType2(false);
     }
   };
+
+  useEffect(() => {
+    if (formData.productType1Id) {
+      fetchProductType2List(formData.productType1Id);
+    } else {
+      setProductType2List([]);
+      setFormData((prev) => ({ ...prev, productType2Id: '' }));
+    }
+  }, [formData.productType1Id]);
 
   const fetchDepartmentList = async () => {
     setLoadingDepartments(true);
@@ -314,21 +366,20 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: supplierData.fullItemDescriptionVN,
+        fullDescription: supplierData.fullItemDescriptionVN,
         oldSAPCode: supplierData.oldSapCode,
         supplierId: supplierData.supplierId,
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
+        productType1Id: supplierData.productType1Id || '',
+        productType2Id: supplierData.productType2Id || '',
       }));
       setSelectedSupplier({
         id: supplierData.supplierId,
         sapCode: supplierData.oldSapCode || '',
-        itemNo: supplierData.itemDescriptionEN || '',
-        itemDescription: supplierData.itemDescriptionVN || '',
-        supplierCode: supplierData.supplierCode || '',
-        supplierName: supplierData.supplierName || '',
         price: supplierData.supplierPrice || 0,
         unit: supplierData.unit || '',
+        supplierName: supplierData.supplierName || '',
         fullDescription: supplierData.fullItemDescriptionVN || '',
       });
       setShowSupplierSelector(false);
@@ -341,11 +392,13 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     } else {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: '',
+        fullDescription: '',
         oldSAPCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
+        productType1Id: '',
+        productType2Id: '',
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -353,7 +406,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['totalNotIssuedQty', 'inHand'].includes(field)
+    const value = ['dailyMedInventory', 'safeStock'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -537,11 +590,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     Object.entries({
       itemDescriptionEN: formData.itemDescriptionEN || '',
       itemDescriptionVN: formData.itemDescriptionVN || '',
-      fullDescription: formData.fullItemDescriptionVN || '',
+      fullDescription: formData.fullDescription || '',
       oldSAPCode: formData.oldSAPCode || '',
-      sapCodeNewSAP: formData.sapCodeNewSAP || '',
-      totalNotIssuedQty: parseFloat(formData.totalNotIssuedQty) || 0,
-      inHand: parseFloat(formData.inHand) || 0,
+      hanaSAPCode: formData.hanaSAPCode || '',
+      dailyMedInventory: parseFloat(formData.dailyMedInventory) || 0,
+      safeStock: parseFloat(formData.safeStock) || 0,
       reason: formData.reason || '',
       remark: formData.remark || '',
       remarkComparison: formData.remarkComparison || '',
@@ -610,51 +663,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-            <Select
-              labelId="product-type-1-label"
-              value={formData.productType1Id}
-              label="Product Type 1"
-              onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType1List.map((type1) => (
-                <MenuItem key={type1.id} value={type1.id}>
-                  {type1.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-          </FormControl>
-
-          <FormControl
-            fullWidth
-            size="small"
-            disabled={!formData.productType1Id || loadingType2}
-          >
-            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-            <Select
-              labelId="product-type-2-label"
-              value={formData.productType2Id}
-              label="Product Type 2"
-              onChange={handleChange('productType2Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType2List.map((type2) => (
-                <MenuItem key={type2.id} value={type2.id}>
-                  {type2.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-          </FormControl>
-
+          {currencyError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {currencyError}
+            </Alert>
+          )}
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -663,11 +676,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
               size="small"
               fullWidth
               sx={{ flex: 1 }}
+              InputLabelProps={{
+                style: { color: 'inherit' },
+              }}
             />
             <TextField
-              label="New SAP Code"
-              value={formData.sapCodeNewSAP}
-              onChange={handleChange('sapCodeNewSAP')}
+              label="Hana SAP Code"
+              value={formData.hanaSAPCode}
+              onChange={handleChange('hanaSAPCode')}
               size="small"
               fullWidth
               sx={{ flex: 1 }}
@@ -704,9 +720,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           </Stack>
 
           <TextField
-            label="Full Description (VN)"
-            value={formData.fullItemDescriptionVN}
-            onChange={handleChange('fullItemDescriptionVN')}
+            label="Full Description"
+            value={formData.fullDescription}
+            onChange={handleChange('fullDescription')}
             fullWidth
             size="small"
             multiline
@@ -717,14 +733,17 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
             <SupplierSelector
               oldSapCode={formData.oldSAPCode}
               onSelectSupplier={handleSelectSupplier}
-              selectedSupplier={selectedSupplier}
+              productType1List={productType1List}
+              productType2List={productType2List}
+              currency={groupCurrency} // Use normalized groupCurrency
+              disabled={loadingCurrency} // Disable while loading currency
             />
           ) : (
             selectedSupplier && (
               <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
                 <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
                 <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('en-US')} ₫</Typography>
+                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
                 <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
                   Change Supplier
                 </Button>
@@ -827,28 +846,28 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('en-US')} ₫</span>
+                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</span>
               </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('en-US')} ₫</span>
-              </Typography>
+              {/* <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</span>
+              </Typography> */}
             </Stack>
           </Paper>
 
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
-              label="Total Not Issued Quantity"
-              value={formData.totalNotIssuedQty}
-              onChange={handleChange('totalNotIssuedQty')}
+              label="Daily Med Inventory"
+              value={formData.dailyMedInventory}
+              onChange={handleChange('dailyMedInventory')}
               size="small"
               fullWidth
               type="number"
               sx={{ flex: 1 }}
             />
             <TextField
-              label="In Hand"
-              value={formData.inHand}
-              onChange={handleChange('inHand')}
+              label="Safe Stock"
+              value={formData.safeStock}
+              onChange={handleChange('safeStock')}
               size="small"
               fullWidth
               type="number"
@@ -874,15 +893,23 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
             multiline
             rows={2}
           />
-          <TextField
-            label="Remark Comparison"
-            value={formData.remarkComparison}
-            onChange={handleChange('remarkComparison')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
+          <FormControl fullWidth size="small">
+            <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
+            <Select
+              labelId="remark-comparison-label"
+              value={formData.remarkComparison}
+              label="Remark Comparison"
+              onChange={handleChange('remarkComparison')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              <MenuItem value="Old price">Old price</MenuItem>
+              <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
+                The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
+              </MenuItem>
+            </Select>
+          </FormControl>
 
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
@@ -953,7 +980,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || deptErrors.some((error) => error)}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || deptErrors.some((error) => error) || loadingCurrency}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>

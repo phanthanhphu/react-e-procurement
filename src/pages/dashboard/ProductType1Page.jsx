@@ -39,6 +39,16 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.9rem', color: '#666' }}>No Data</Typography>;
   }
 
+  // Hàm chuyển đổi mảng createdDate sang định dạng DD/MM/YYYY
+  const formatCreatedDate = (createdDateArray) => {
+    if (!createdDateArray || createdDateArray.length < 3) return '';
+    const [year, month, day] = createdDateArray;
+    const formattedDay = String(day).padStart(2, '0');
+    const formattedMonth = String(month).padStart(2, '0');
+    const formattedYear = year;
+    return `${formattedDay}/${formattedMonth}/${formattedYear}`;
+  };
+
   return (
     <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
       <Table size="small" sx={{ minWidth: 600 }}>
@@ -103,7 +113,7 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>{productType.name || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>
-                {productType.createdDate ? new Date(...productType.createdDate).toLocaleString() : ''}
+                {formatCreatedDate(productType.createdDate)}
               </TableCell>
               <TableCell align="center" sx={{ py: 0.3, px: 0.5 }}>
                 <Stack direction="row" spacing={0.2} justifyContent="center">
@@ -400,9 +410,12 @@ export default function ProductType1Page() {
       if (bValue === null || bValue === undefined) bValue = '';
 
       if (key === 'createdDate') {
-        aValue = new Date(...aValue).getTime();
-        bValue = new Date(...bValue).getTime();
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+        if (aValue.length < 3 || bValue.length < 3) return 0;
+        const [aYear, aMonth, aDay] = aValue;
+        const [bYear, bMonth, bDay] = bValue;
+        const aDate = new Date(aYear, aMonth - 1, aDay);
+        const bDate = new Date(bYear, bMonth - 1, bDay);
+        return direction === 'asc' ? aDate - bDate : bDate - aDate;
       }
 
       return direction === 'asc'
@@ -433,6 +446,7 @@ export default function ProductType1Page() {
   return (
     <Box sx={{ p: 1, fontSize: '0.85rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1.25rem' }}>
+        Product Type 1
       </Typography>
       <ProductTypeSearch
         type1NameValue={type1Name}
@@ -457,7 +471,7 @@ export default function ProductType1Page() {
           }}
           disabled={loading}
         >
-          Add Product Type
+          Add Product Type 1
         </Button>
       </Stack>
       {loading && (
@@ -469,14 +483,14 @@ export default function ProductType1Page() {
         open={notification.open}
         autoHideDuration={notification.autoHideDuration || 6000}
         onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // Position at top center
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         sx={{
           '& .MuiSnackbarContent-root': {
-            width: { xs: '90%', sm: '400px' }, // Responsive width
+            width: { xs: '90%', sm: '400px' },
             maxWidth: '500px',
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-            zIndex: 1500, // Ensure Snackbar is above other content
+            zIndex: 1500,
           },
         }}
       >
@@ -519,7 +533,7 @@ export default function ProductType1Page() {
         }}
       />
       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Add Product Type</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Add Product Type 1</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -550,7 +564,7 @@ export default function ProductType1Page() {
         </DialogActions>
       </Dialog>
       <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type 1</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus

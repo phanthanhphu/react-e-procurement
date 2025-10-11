@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,83 +7,322 @@ import {
   TextField,
   Button,
   Stack,
+  Box,
+  Typography,
+  IconButton,
+  Snackbar,
+  Alert,
+  CircularProgress,
+  InputLabel,
 } from '@mui/material';
+import PhotoCamera from '@mui/icons-material/PhotoCamera';
+import CloseIcon from '@mui/icons-material/Close';
+import { API_BASE_URL } from '../../config';
 
 const AddUserDialog = ({ open, onClose, onAdd }) => {
-  const [user, setUser] = useState({
+  const [formData, setFormData] = useState({
     username: '',
-    password: '',
     email: '',
+    password: '',
     address: '',
     phone: '',
     role: '',
   });
+  const [profileImage, setProfileImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [emailError, setEmailError] = useState('');
 
-  const handleSubmit = () => {
-    onAdd(user);
-    setUser({ username: '', password: '', email: '', address: '', phone: '', role: '' });
+  // Email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // Clean up image preview when dialog closes
+  useEffect(() => {
+    return () => {
+      if (imagePreview && profileImage) {
+        URL.revokeObjectURL(imagePreview);
+      }
+      setImagePreview(null);
+      setProfileImage(null);
+    };
+  }, [imagePreview, open]);
+
+  // Handle input changes with email validation
+  const handleChange = (field) => (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'email') {
+      if (value && !emailRegex.test(value)) {
+        setEmailError('Invalid email format');
+      } else {
+        setEmailError('');
+      }
+    }
+  };
+
+  // Handle file input
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      setSnackbarMessage('No file selected.');
+      setSnackbarSeverity('warning');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setSnackbarMessage('Only image files are accepted.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      e.target.value = null;
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSnackbarMessage('Image file size must be under 5MB.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      e.target.value = null;
+      return;
+    }
+
+    // Clean up previous preview
+    if (imagePreview && profileImage) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setProfileImage(file);
+    setImagePreview(URL.createObjectURL(file));
+    e.target.value = null;
+  };
+
+  // Remove profile image
+  const handleRemoveImage = () => {
+    if (imagePreview && profileImage) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setProfileImage(null);
+    setImagePreview(null);
+  };
+
+  // Submit form
+  const handleSubmit = async () => {
+    if (!formData.username) {
+      setSnackbarMessage('Username is required.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (!formData.email) {
+      setSnackbarMessage('Email is required.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (!formData.password) {
+      setSnackbarMessage('Password is required.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (formData.email && !emailRegex.test(formData.email)) {
+      setSnackbarMessage('Invalid email format.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const formDataToSend = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        formDataToSend.append(key, value);
+      }
+    });
+    if (profileImage) {
+      formDataToSend.append('profileImage', profileImage);
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/add`, {
+        method: 'POST',
+        headers: {
+          accept: '*/*',
+        },
+        body: formDataToSend,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `Add user failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+      setSnackbarMessage(data.message || 'User added successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      setProfileImage(null);
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+        setImagePreview(null);
+      }
+      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: '' });
+      setEmailError('');
+      onAdd(data);
+      onClose();
+    } catch (err) {
+      setSnackbarMessage(err.message);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ bgcolor: '#1976d2', color: '#fff', py: 2 }}>
+      <DialogTitle
+        sx={{
+          bgcolor: (theme) => theme.palette.primary.main,
+          color: (theme) => theme.palette.primary.contrastText,
+          fontWeight: 'bold',
+          fontSize: '1.25rem',
+          textTransform: 'capitalize',
+          letterSpacing: 1,
+        }}
+      >
         Add New User
       </DialogTitle>
-      <DialogContent sx={{ pt: 3 }}>
+      <DialogContent dividers sx={{ pt: 3 }}>
         <Stack spacing={3}>
           <TextField
             label="Username"
-            value={user.username}
-            onChange={(e) => setUser({ ...user, username: e.target.value })}
+            value={formData.username}
+            onChange={handleChange('username')}
             fullWidth
-            variant="outlined"
+            size="small"
+            required
+            error={formData.username === '' && snackbarOpen}
+            helperText={formData.username === '' && snackbarOpen ? 'Username is required' : ''}
+          />
+          <TextField
+            label="Email"
+            value={formData.email}
+            onChange={handleChange('email')}
+            fullWidth
+            size="small"
+            required
+            error={!!emailError || (formData.email === '' && snackbarOpen)}
+            helperText={emailError || (formData.email === '' && snackbarOpen ? 'Email is required' : '')}
           />
           <TextField
             label="Password"
             type="password"
-            value={user.password}
-            onChange={(e) => setUser({ ...user, password: e.target.value })}
+            value={formData.password}
+            onChange={handleChange('password')}
             fullWidth
-            variant="outlined"
-          />
-          <TextField
-            label="Email"
-            value={user.email}
-            onChange={(e) => setUser({ ...user, email: e.target.value })}
-            fullWidth
-            variant="outlined"
+            size="small"
+            required
+            error={formData.password === '' && snackbarOpen}
+            helperText={formData.password === '' && snackbarOpen ? 'Password is required' : 'Password is required'}
           />
           <TextField
             label="Address"
-            value={user.address}
-            onChange={(e) => setUser({ ...user, address: e.target.value })}
+            value={formData.address}
+            onChange={handleChange('address')}
             fullWidth
-            variant="outlined"
+            size="small"
           />
           <TextField
             label="Phone"
-            value={user.phone}
-            onChange={(e) => setUser({ ...user, phone: e.target.value })}
+            value={formData.phone}
+            onChange={handleChange('phone')}
             fullWidth
-            variant="outlined"
+            size="small"
           />
           <TextField
             label="Role"
-            value={user.role}
-            onChange={(e) => setUser({ ...user, role: e.target.value })}
+            value={formData.role}
+            onChange={handleChange('role')}
             fullWidth
-            variant="outlined"
+            size="small"
           />
+          <Box>
+            <InputLabel sx={{ mb: 1 }}>Profile Image</InputLabel>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+                Select Image
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                />
+              </Button>
+              {imagePreview && (
+                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                  1 image selected
+                </Typography>
+              )}
+            </Stack>
+            {imagePreview && (
+              <Box mt={2} sx={{ position: 'relative', display: 'inline-block' }}>
+                <img
+                  src={imagePreview}
+                  alt="Profile Preview"
+                  style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
+                  onError={(e) => {
+                    console.error(`Failed to load image: ${imagePreview}`);
+                    setSnackbarMessage('Failed to load image preview.');
+                    setSnackbarSeverity('error');
+                    setSnackbarOpen(true);
+                    e.target.style.display = 'none';
+                  }}
+                />
+                <IconButton
+                  sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
+                  onClick={handleRemoveImage}
+                >
+                  <CloseIcon color="error" />
+                </IconButton>
+              </Box>
+            )}
+            {!imagePreview && (
+              <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                No image selected
+              </Typography>
+            )}
+          </Box>
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ p: 3 }}>
-        <Button onClick={onClose} variant="outlined" color="secondary">
+      <DialogActions sx={{ px: 3, py: 1.5 }}>
+        <Button onClick={onClose} disabled={saving} variant="outlined" color="secondary">
           Cancel
         </Button>
-        <Button onClick={handleSubmit} variant="contained" color="primary">
-          Add
+        <Button
+          onClick={handleSubmit}
+          disabled={saving}
+          variant="contained"
+          color="primary"
+        >
+          {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
         </Button>
       </DialogActions>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Dialog>
   );
 };

@@ -16,22 +16,37 @@ import {
   MenuItem,
   FormHelperText,
   IconButton,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
 import { API_BASE_URL } from '../../config';
 import Notification from './Notification';
 
-// New: Helper functions for VND formatting
-const formatVND = (number) => {
+// Helper functions for currency formatting
+const formatPrice = (number, currency) => {
   if (!number && number !== 0) return '';
-  return Number(number).toLocaleString('vi-VN', { minimumFractionDigits: 0 });
+  if (currency === 'VND') {
+    return Number(number).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  } else if (currency === 'USD' || currency === 'EURO') {
+    return Number(number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return number.toString();
 };
 
-const parseVND = (value) => {
+const parsePrice = (value, currency) => {
   if (!value) return '';
-  const cleanValue = value.replace(/[^0-9]/g, '');
-  return cleanValue ? parseInt(cleanValue, 10).toString() : '';
+  let cleanValue;
+  if (currency === 'VND') {
+    cleanValue = value.replace(/[^0-9]/g, '');
+  } else if (currency === 'USD' || currency === 'EURO') {
+    cleanValue = value.replace(/[^0-9.]/g, '');
+  } else {
+    cleanValue = value.replace(/[^0-9.]/g, '');
+  }
+  return cleanValue ? cleanValue : '';
 };
 
 export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, disabled }) {
@@ -45,15 +60,13 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
     itemDescription: '',
     fullDescription: '',
     size: '',
-    materialGroupFullDescription: '',
     unit: '',
     price: '',
     currency: '',
+    goodType: '',
   });
 
-  // New: State for formatted price display
   const [formattedPrice, setFormattedPrice] = useState('');
-
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -130,13 +143,16 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
   };
 
   const handleChange = (field) => (e) => {
+    const value = e.target.value;
     if (field === 'price') {
-      // New: Handle price input with VND formatting
-      const rawValue = parseVND(e.target.value);
+      const rawValue = parsePrice(value, formData.currency);
       setFormData((prev) => ({ ...prev, price: rawValue }));
-      setFormattedPrice(formatVND(rawValue));
+      setFormattedPrice(formatPrice(rawValue, formData.currency));
+    } else if (field === 'currency') {
+      // Reset price when currency changes
+      setFormData((prev) => ({ ...prev, currency: value, price: '' }));
+      setFormattedPrice('');
     } else {
-      const value = e.target.value;
       setFormData((prev) => ({ ...prev, [field]: value }));
     }
   };
@@ -196,6 +212,42 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
       });
       return false;
     }
+    if (!formData.currency) {
+      setNotification({
+        open: true,
+        message: 'Currency is required',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
+    if (!['VND', 'USD', 'EURO'].includes(formData.currency)) {
+      setNotification({
+        open: true,
+        message: 'Currency must be VND, USD, or EURO',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
+    if (!formData.goodType) {
+      setNotification({
+        open: true,
+        message: 'Good Type is required',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
+    if (!['Common', 'Special'].includes(formData.goodType)) {
+      setNotification({
+        open: true,
+        message: 'Good Type must be Common or Special',
+        severity: 'error',
+        autoHideDuration: 6000,
+      });
+      return false;
+    }
     if (formData.price && isNaN(formData.price)) {
       setNotification({
         open: true,
@@ -222,10 +274,10 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
     multipartForm.append('itemDescription', formData.itemDescription || '');
     multipartForm.append('fullDescription', formData.fullDescription || '');
     multipartForm.append('size', formData.size || '');
-    multipartForm.append('materialGroupFullDescription', formData.materialGroupFullDescription || '');
     multipartForm.append('unit', formData.unit || '');
-    multipartForm.append('price', formData.price || '0'); // Clean number is sent to backend
-    multipartForm.append('currency', formData.currency || '');
+    multipartForm.append('price', formData.price || '0');
+    multipartForm.append('currency', formData.currency);
+    multipartForm.append('goodType', formData.goodType);
 
     files.forEach((file) => {
       multipartForm.append('files', file);
@@ -268,14 +320,12 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
         message = text || message;
       }
 
-      // Truyền thông báo thành công về parent component
       if (typeof onSuccess === 'function') {
         onSuccess(message);
       } else {
         console.warn('onSuccess is not a function');
       }
 
-      // Làm mới dữ liệu
       if (typeof onRefresh === 'function') {
         await onRefresh();
       } else {
@@ -308,16 +358,15 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
       itemDescription: '',
       fullDescription: '',
       size: '',
-      materialGroupFullDescription: '',
       unit: '',
       price: '',
       currency: '',
+      goodType: '',
     });
     previews.forEach((preview) => URL.revokeObjectURL(preview));
     setFiles([]);
     setPreviews([]);
     setNotification({ open: false, message: '', severity: 'info' });
-    // New: Reset formatted price
     setFormattedPrice('');
   };
 
@@ -328,6 +377,48 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
+          <FormControl fullWidth size="small" disabled={loadingType1 || saving || disabled}>
+            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+            <Select
+              labelId="product-type-1-label"
+              value={formData.productType1Id}
+              label="Product Type 1"
+              onChange={handleChange('productType1Id')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType1List.map((type1) => (
+                <MenuItem key={type1.id} value={type1.id}>
+                  {type1.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
+          </FormControl>
+          <FormControl
+            fullWidth
+            size="small"
+            disabled={!formData.productType1Id || loadingType2 || saving || disabled}
+          >
+            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+            <Select
+              labelId="product-type-2-label"
+              value={formData.productType2Id}
+              label="Product Type 2"
+              onChange={handleChange('productType2Id')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              {productType2List.map((type2) => (
+                <MenuItem key={type2.id} value={type2.id}>
+                  {type2.name}
+                </MenuItem>
+              ))}
+            </Select>
+            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
+          </FormControl>
           <TextField
             label="Supplier Code"
             value={formData.supplierCode}
@@ -338,7 +429,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
             disabled={saving || disabled}
           />
           <TextField
-            label="Supplier Name"
+            label="Supplier Description"
             value={formData.supplierName}
             onChange={handleChange('supplierName')}
             size="small"
@@ -382,6 +473,40 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
             rows={4}
             disabled={saving || disabled}
           />
+          <FormControl fullWidth size="small" disabled={saving || disabled}>
+            <InputLabel id="good-type-label">Good Type</InputLabel>
+            <Select
+              labelId="good-type-label"
+              value={formData.goodType}
+              label="Good Type"
+              onChange={handleChange('goodType')}
+              required
+            >
+              <MenuItem value="">
+                <em>Select Good Type</em>
+              </MenuItem>
+              <MenuItem value="Common">Common</MenuItem>
+              <MenuItem value="Special">Special</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl component="fieldset" disabled={saving || disabled} required>
+            <Typography variant="subtitle2" gutterBottom>
+              Currency
+            </Typography>
+            <RadioGroup
+              row
+              name="currency"
+              value={formData.currency}
+              onChange={handleChange('currency')}
+            >
+              <FormControlLabel value="VND" control={<Radio />} label="VND" />
+              <FormControlLabel value="USD" control={<Radio />} label="USD" />
+              <FormControlLabel value="EURO" control={<Radio />} label="EURO" />
+            </RadioGroup>
+            {!formData.currency && (
+              <FormHelperText error>Please select a currency</FormHelperText>
+            )}
+          </FormControl>
           <Stack direction="row" spacing={2}>
             <TextField
               label="Size"
@@ -392,16 +517,6 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
               disabled={saving || disabled}
             />
             <TextField
-              label="Material Group Full Description"
-              value={formData.materialGroupFullDescription}
-              onChange={handleChange('materialGroupFullDescription')}
-              size="small"
-              fullWidth
-              disabled={saving || disabled}
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            <TextField
               label="Unit"
               value={formData.unit}
               onChange={handleChange('unit')}
@@ -409,68 +524,18 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
               fullWidth
               disabled={saving || disabled}
             />
-            {/* Modified: Price TextField with VND formatting */}
             <TextField
               label="Price"
               value={formattedPrice}
               onChange={handleChange('price')}
               size="small"
               fullWidth
-              type="text" // Changed from type="number" to allow formatted input
-              disabled={saving || disabled}
-              inputProps={{ inputMode: 'numeric', pattern: '[0-9.]*' }} // Restrict to numeric-like input
+              type="text"
+              disabled={!formData.currency || saving || disabled}
+              inputProps={{ inputMode: 'numeric', pattern: formData.currency === 'VND' ? '[0-9]*' : '[0-9.]*' }}
+              helperText={!formData.currency ? 'Please select a currency first' : ''}
             />
           </Stack>
-          <TextField
-            label="Currency"
-            value={formData.currency}
-            onChange={handleChange('currency')}
-            size="small"
-            fullWidth
-            disabled={saving || disabled}
-          />
-          <FormControl fullWidth size="small" disabled={loadingType1 || saving || disabled}>
-            <InputLabel id="product-type-1-label">Group Item 1</InputLabel>
-            <Select
-              labelId="product-type-1-label"
-              value={formData.productType1Id}
-              label="Group Item 1"
-              onChange={handleChange('productType1Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType1List.map((type1) => (
-                <MenuItem key={type1.id} value={type1.id}>
-                  {type1.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-          </FormControl>
-          <FormControl
-            fullWidth
-            size="small"
-            disabled={!formData.productType1Id || loadingType2 || saving || disabled}
-          >
-            <InputLabel id="product-type-2-label">Group Item 2</InputLabel>
-            <Select
-              labelId="product-type-2-label"
-              value={formData.productType2Id}
-              label="Group Item 2"
-              onChange={handleChange('productType2Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType2List.map((type2) => (
-                <MenuItem key={type2.id} value={type2.id}>
-                  {type2.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-          </FormControl>
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">

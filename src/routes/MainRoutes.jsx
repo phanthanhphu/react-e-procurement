@@ -16,6 +16,7 @@ const ProductType2Page = Loadable(lazy(() => import('pages/dashboard/ProductType
 const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManagementPage')));
 const RequisitionMonthlyPage = Loadable(lazy(() => import('pages/dashboard/RequisitionMonthlyPage')));
 const ComparisonPage = Loadable(lazy(() => import('pages/dashboard/ComparisonPage')));
+const RequestMonthlyComparisonPage = Loadable(lazy(() => import('pages/dashboard/RequestMonthlyComparisonPage')));
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const TypographyPage = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
@@ -114,7 +115,11 @@ const MainRoutes = {
             {
               path: 'comparison/:groupId',
               element: <ComparisonPage />
-            }
+            },
+            {
+              path: 'request-monthly-comparison/:groupId',
+              element: <RequestMonthlyComparisonPage />
+            },
           ]
         },
         {

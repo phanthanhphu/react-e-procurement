@@ -1,14 +1,87 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
 import { Button } from '@mui/material';
+import axios from 'axios';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
+import { API_BASE_URL } from '../../config.js';
 
-export default function ExportRequisitionMonthlyExcelButton({ groupId, data, searchValues }) {
+export default function ExportRequisitionMonthlyExcelButton({ groupId, searchValues }) {
+  const [data, setData] = useState([]);
+  const [totals, setTotals] = useState({
+    totalSumRequestQty: 0,
+    totalSumDailyMedInventory: 0,
+    totalSumSafeStock: 0,
+    totalSumUseStockQty: 0,
+    totalSumOrderQty: 0,
+    totalSumAmount: 0,
+    totalSumPrice: 0,
+  });
+
+  // Fetch data from API
   useEffect(() => {
-    console.log('ExportRequisitionMonthlyExcelButton data:', data);
-    console.log('ExportRequisitionMonthlyExcelButton groupId:', groupId);
-  }, [data, groupId]);
+    if (!groupId) {
+      console.warn('No groupId provided for export');
+      return;
+    }
+
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
+          params: {
+            groupId,
+            hasFilter: false,
+            disablePagination: true,
+            page: 0,
+            size: 2147483647,
+            sort: 'string',
+          },
+          headers: { Accept: '*/*' },
+        });
+
+        const responseData = response.data.requisitions.content;
+        const mappedData = responseData.map((item) => ({
+          id: item.id || '',
+          groupItem1: item.productType1Name || '',
+          groupItem2: item.productType2Name || '',
+          itemDescriptionEN: item.itemDescriptionEN || '',
+          itemDescriptionVN: item.itemDescriptionVN || '',
+          oldSAPCode: item.oldSAPCode || '',
+          hanaSAPCode: item.hanaSAPCode || '',
+          unit: item.unit || '',
+          departmentRequests: item.departmentRequisitions.map((dept) => ({
+            id: dept.id || '',
+            name: dept.name || '',
+            qty: dept.qty || 0,
+            buy: dept.buy || 0,
+          })),
+          sumBuy: item.totalRequestQty || 0,
+          dailyMedInventory: item.dailyMedInventory || 0,
+          useStockQty: item.useStockQty || 0,
+          orderQty: item.orderQty || 0,
+          price: item.price || 0,
+          amount: item.amount || 0,
+          supplierName: item.supplierName || '',
+        }));
+
+        setData(mappedData);
+        setTotals({
+          totalSumRequestQty: response.data.totalSumRequestQty || 0,
+          totalSumDailyMedInventory: response.data.totalSumDailyMedInventory || 0,
+          totalSumSafeStock: response.data.totalSumSafeStock || 0,
+          totalSumUseStockQty: response.data.totalSumUseStockQty || 0,
+          totalSumOrderQty: response.data.totalSumOrderQty || 0,
+          totalSumAmount: response.data.totalSumAmount || 0,
+          totalSumPrice: response.data.totalSumPrice || 0,
+        });
+      } catch (error) {
+        console.error('Error fetching data for export:', error);
+        alert('Failed to fetch data for export. Please try again.');
+      }
+    };
+
+    fetchData();
+  }, [groupId]);
 
   const exportToExcel = () => {
     if (!data || data.length === 0) {
@@ -40,19 +113,19 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
     // Header rows
     wsData.push([
       'No',
-      'Product Type 1 Code',
-      'Product Type 2 Code',
+      'Product Type 1',
+      'Product Type 2',
       'Description',
       '',
       'Old SAP Code',
-      'SAP Code in New SAP',
+      'Hana SAP Code',
       'Unit',
-      ...Array(allDeptKeys.length).fill("Department Buy Q'ty"),
-      'Total Buy Qty',
-      'Total Not Issued Qty',
-      'In Hand',
-      'Actual In Hand',
-      'Purchasing Suggest',
+      ...Array(allDeptKeys.length).fill('Departments'),
+      'Total Request',
+      'Daily Med Inventory',
+      'Safe Stock',
+      'Use Stock Q\'ty',
+      'Order Q\'ty',
       'Price',
       'Amount',
       'Suppliers',
@@ -62,8 +135,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
       '',
       '',
       '',
-      'English Name',
-      'Vietnamese Name',
+      'EN',
+      'VN',
       '',
       '',
       '',
@@ -85,7 +158,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
         deptBuy[dept.name] = dept.buy || 0;
       });
 
-      // Định dạng giá tiền cho Price và Amount
+      // Format Price and Amount
       const formattedPrice = (item.price || 0).toLocaleString('vi-VN', {
         style: 'decimal',
         minimumFractionDigits: 0,
@@ -104,14 +177,14 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
         item.itemDescriptionEN || '',
         item.itemDescriptionVN || '',
         item.oldSAPCode || '',
-        item.sapCodeNewSAP || '',
+        item.hanaSAPCode || '',
         item.unit || '',
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
         item.sumBuy || 0,
-        item.totalNotIssuedQty || 0,
-        item.inHand || 0,
-        item.actualInHand || 0,
-        item.orderQty || '',
+        item.dailyMedInventory || 0,
+        item.useStockQty || 0,
+        item.useStockQty || 0, // Repeated for Actual In Hand (mapped to useStockQty)
+        item.orderQty || 0,
         formattedPrice,
         formattedAmount,
         item.supplierName || '',
@@ -120,35 +193,25 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
       wsData.push(row);
     });
 
-    // Calculate total values manually
-    const totalBuyQty = data.reduce((sum, item) => sum + (item.sumBuy || 0), 0);
-    const totalNotIssuedQty = data.reduce((sum, item) => sum + (item.totalNotIssuedQty || 0), 0);
-    const totalInHand = data.reduce((sum, item) => sum + (item.inHand || 0), 0);
-    const totalActualInHand = data.reduce((sum, item) => sum + (item.actualInHand || 0), 0);
-    const totalPurchasingSuggest = data.reduce((sum, item) => sum + (item.orderQty || 0), 0);
-    const totalPrice = data.reduce((sum, item) => sum + (item.price || 0), 0);
-    const totalAmount = data.reduce((sum, item) => sum + (item.amount || 0), 0);
-
-    // Định dạng tổng giá tiền cho Total Price và Total Amount
-    const formattedTotalPrice = totalPrice.toLocaleString('vi-VN', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-    const formattedTotalAmount = totalAmount.toLocaleString('vi-VN', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-
     // Insert total row
+    const formattedTotalPrice = (totals.totalSumPrice || 0).toLocaleString('vi-VN', {
+      style: 'decimal',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+    const formattedTotalAmount = (totals.totalSumAmount || 0).toLocaleString('vi-VN', {
+      style: 'decimal',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+
     const totalRow = new Array(9 + allDeptKeys.length + 7).fill('');
     totalRow[0] = 'Total';
-    totalRow[8 + allDeptKeys.length] = totalBuyQty;
-    totalRow[9 + allDeptKeys.length] = totalNotIssuedQty;
-    totalRow[10 + allDeptKeys.length] = totalInHand;
-    totalRow[11 + allDeptKeys.length] = totalActualInHand;
-    totalRow[12 + allDeptKeys.length] = totalPurchasingSuggest;
+    totalRow[8 + allDeptKeys.length] = totals.totalSumRequestQty || 0;
+    totalRow[9 + allDeptKeys.length] = totals.totalSumDailyMedInventory || 0;
+    totalRow[10 + allDeptKeys.length] = totals.totalSumUseStockQty || 0;
+    totalRow[11 + allDeptKeys.length] = totals.totalSumUseStockQty || 0; // Repeated for Actual In Hand
+    totalRow[12 + allDeptKeys.length] = totals.totalSumOrderQty || 0;
     totalRow[13 + allDeptKeys.length] = formattedTotalPrice;
     totalRow[14 + allDeptKeys.length] = formattedTotalAmount;
     wsData.push(totalRow);
@@ -293,7 +356,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
     ws['!cols'][16] = { wch: 12 };
 
     // Generate dynamic file name
-    const now = new Date('2025-09-24T13:33:00+07:00'); // Hardcoded for provided date/time
+    const now = new Date('2025-10-01T16:01:00+07:00'); // Updated to match provided date/time
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
@@ -321,7 +384,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, data, sea
         fontSize: '0.75rem',
       }}
     >
-      Export Request Monthly
+      Summary
     </Button>
   );
 }

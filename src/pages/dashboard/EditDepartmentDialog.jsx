@@ -38,20 +38,22 @@ export default function EditDepartmentDialog({ open, onClose, onUpdate, departme
           fullWidth
           variant="outlined"
           size="small"
-          value={departmentName}
-          onChange={(e) => setDepartmentName(e.target.value)}
-          placeholder="Department Name"
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          variant="outlined"
-          size="small"
           value={division}
           onChange={(e) => setDivision(e.target.value)}
           placeholder="Division"
           sx={{ mb: 2 }}
         />
+        
+        <TextField
+          fullWidth
+          variant="outlined"
+          size="small"
+          value={departmentName}
+          onChange={(e) => setDepartmentName(e.target.value)}
+          placeholder="Department Name"
+          sx={{ mb: 2 }}
+        />
+        
       </DialogContent>
       <DialogActions>
         <Button

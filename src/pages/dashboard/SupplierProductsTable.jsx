@@ -35,21 +35,49 @@ import EditProductDialog from './EditProductDialog';
 import SupplierSearch from './SupplierSearch';
 import Notification from './Notification';
 
+// Hàm định dạng màu sắc cho tiền tệ
+const getCurrencyColor = (currency) => {
+  switch (currency) {
+    case 'VND':
+      return '#4caf50'; // Green
+    case 'EURO':
+      return '#2196f3'; // Blue
+    case 'USD':
+      return '#e57373'; // Red
+    default:
+      return '#9e9e9e'; // Gray
+  }
+};
+
+// Hàm định dạng màu sắc cho goodType
+const getGoodTypeColor = (goodType) => {
+  switch (goodType) {
+    case 'Common':
+      return '#4caf50'; // Green
+    case 'Special':
+      return '#2196f3'; // Blue
+    case 'Electronics':
+      return '#e57373'; // Red
+    default:
+      return '#9e9e9e'; // Gray
+  }
+};
+
 const headers = [
   { label: 'No', key: 'no', sortable: false },
+  { label: 'Product Item 1', key: 'productType1Name', sortable: true },
+  { label: 'Product Item 2', key: 'productType2Name', sortable: true },
   { label: 'Supplier Code', key: 'supplierCode', sortable: true },
-  { label: 'Supplier Name', key: 'supplierName', sortable: true },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true },
   { label: 'SAP Code', key: 'sapCode', sortable: true },
   { label: 'Item No', key: 'itemNo', sortable: true },
   { label: 'Item Description', key: 'itemDescription', sortable: true },
   { label: 'Full Description', key: 'fullDescription', sortable: true },
   { label: 'Size', key: 'size', sortable: true },
-  { label: 'Material Group Full Description', key: 'materialGroupFullDescription', sortable: true },
   { label: 'Unit', key: 'unit', sortable: true },
   { label: 'Price', key: 'price', sortable: true },
   { label: 'Currency', key: 'currency', sortable: true },
-  { label: 'Group Item 1', key: 'productType1Name', sortable: true },
-  { label: 'Group Item 2', key: 'productType2Name', sortable: true },
+  { label: 'Good Type', key: 'goodType', sortable: true },
   { label: 'Images', key: 'image', sortable: false },
   { label: 'Action', key: 'action', sortable: false },
 ];
@@ -87,13 +115,13 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
 
   return (
     <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
-      <Table size="small" sx={{ minWidth: 1400 }}>
+      <Table size="small" sx={{ minWidth: 1500 }}>
         <TableHead>
           <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
             {headers.map(({ label, key, sortable }) => (
               <TableCell
                 key={key}
-                align={label === 'Action' || label === 'Images' ? 'center' : 'left'}
+                align={label === 'Action' || label === 'Images' || label === 'Currency' || label === 'Good Type' ? 'center' : 'left'}
                 sx={{
                   fontWeight: 'bold',
                   fontSize: '0.55rem',
@@ -113,7 +141,7 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                 }}
                 onClick={() => sortable && handleSort(key)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' || label === 'Images' ? 'center' : 'flex-start' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' || label === 'Images' || label === 'Currency' || label === 'Good Type' ? 'center' : 'flex-start' }}>
                   <Tooltip title={label} arrow>
                     <span>{label}</span>
                   </Tooltip>
@@ -149,6 +177,8 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
               <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>
                 {idx + 1 + page * rowsPerPage}
               </TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.productType1Name || ''}</TableCell>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.productType2Name || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierCode || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierName || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.sapCode || ''}</TableCell>
@@ -178,28 +208,39 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                 {product.fullDescription || ''}
               </TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.size || ''}</TableCell>
-              <TableCell
-                sx={{
-                  fontSize: '0.55rem',
-                  py: 0.2,
-                  px: 0.4,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  width: '200px',
-                }}
-              >
-                {product.materialGroupFullDescription || ''}
-              </TableCell>
               <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.unit || ''}</TableCell>
               <TableCell align="left" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.price ? product.price.toLocaleString() : ''}
+                {product.price ? Number(product.price).toLocaleString() : ''}
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.currency || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.productType1Name || ''}
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
+                <Box
+                  sx={{
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '0.55rem',
+                    fontWeight: 600,
+                    color: '#fff',
+                    backgroundColor: getCurrencyColor(product.currency),
+                    display: 'inline-block',
+                  }}
+                >
+                  {product.currency || 'N/A'}
+                </Box>
               </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.productType2Name || ''}
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
+                <Box
+                  sx={{
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontSize: '0.55rem',
+                    fontWeight: 600,
+                    color: '#fff',
+                    backgroundColor: getGoodTypeColor(product.goodType),
+                    display: 'inline-block',
+                  }}
+                >
+                  {product.goodType || 'N/A'}
+                </Box>
               </TableCell>
               <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
                 {product.imageUrls && product.imageUrls.length > 0 ? (
@@ -312,6 +353,8 @@ export default function SupplierProductsPage() {
   const [searchMaterialGroupFullDescription, setSearchMaterialGroupFullDescription] = useState('');
   const [searchProductType1Id, setSearchProductType1Id] = useState('');
   const [searchProductType2Id, setSearchProductType2Id] = useState('');
+  const [searchCurrency, setSearchCurrency] = useState('');
+  const [searchGoodType, setSearchGoodType] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   const handleCloseNotification = () => {
@@ -332,6 +375,8 @@ export default function SupplierProductsPage() {
       if (searchMaterialGroupFullDescription) params.materialGroupFullDescription = searchMaterialGroupFullDescription;
       if (searchProductType1Id) params.productType1Id = searchProductType1Id;
       if (searchProductType2Id) params.productType2Id = searchProductType2Id;
+      if (searchCurrency) params.currency = searchCurrency;
+      if (searchGoodType) params.goodType = searchGoodType;
       params.page = page;
       params.size = rowsPerPage;
       params.sortBy = 'createdAt';
@@ -383,6 +428,8 @@ export default function SupplierProductsPage() {
     searchMaterialGroupFullDescription,
     searchProductType1Id,
     searchProductType2Id,
+    searchCurrency,
+    searchGoodType,
   ]);
 
   useEffect(() => {
@@ -390,14 +437,14 @@ export default function SupplierProductsPage() {
   }, [fetchData]);
 
   const handleAddSuccess = async (message) => {
-    setPage(0); // Đặt lại trang về 0 để hiển thị dữ liệu mới
+    setPage(0);
     setNotification({
       open: true,
       message: message,
       severity: 'success',
       autoHideDuration: 6000,
     });
-    await fetchData(); // Gọi lại fetchData để làm mới dữ liệu
+    await fetchData();
   };
 
   const handleEdit = (product) => {
@@ -445,8 +492,8 @@ export default function SupplierProductsPage() {
       } catch (parseError) {
         message = text || 'Product deleted successfully';
       }
-      setPage(0); // Đặt lại trang về 0
-      await fetchData(); // Làm mới dữ liệu
+      setPage(0);
+      await fetchData();
       setNotification({
         open: true,
         message: message,
@@ -534,8 +581,8 @@ export default function SupplierProductsPage() {
       } catch (parseError) {
         message = text || 'File uploaded successfully';
       }
-      setPage(0); // Đặt lại trang về 0
-      await fetchData(); // Làm mới dữ liệu
+      setPage(0);
+      await fetchData();
       setNotification({
         open: true,
         message: message,
@@ -681,6 +728,10 @@ export default function SupplierProductsPage() {
         setSearchProductType1Id={setSearchProductType1Id}
         searchProductType2Id={searchProductType2Id}
         setSearchProductType2Id={setSearchProductType2Id}
+        searchCurrency={searchCurrency}
+        setSearchCurrency={setSearchCurrency}
+        searchGoodType={searchGoodType}
+        setSearchGoodType={setSearchGoodType}
         setPage={setPage}
         onSearch={fetchData}
         onReset={() => {
@@ -693,6 +744,8 @@ export default function SupplierProductsPage() {
           setSearchMaterialGroupFullDescription('');
           setSearchProductType1Id('');
           setSearchProductType2Id('');
+          setSearchCurrency('');
+          setSearchGoodType('');
           setSortConfig({ key: null, direction: null });
           setPage(0);
           fetchData();

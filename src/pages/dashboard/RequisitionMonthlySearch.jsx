@@ -82,9 +82,9 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
       productType2Name: '',
       englishName: '',
       vietnameseName: '',
-      oldSapCode: '', // Match with cURL
-      newSapCode: '', // Match with cURL
-      unit: '',
+      oldSapCode: '',
+      hanaSapCode: '',
+      supplierName: '',
       departmentName: '',
     });
     onReset();
@@ -137,7 +137,7 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Product Type 1 Name"
+                label="Product Type 1"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -159,7 +159,7 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Product Type 2 Name"
+                label="Product Type 2"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -173,7 +173,7 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="English Name"
+            label="Item Description (EN)"
             variant="outlined"
             size="small"
             value={searchValues.englishName || ''}
@@ -187,7 +187,7 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Vietnamese Name"
+            label="Item Description (VN)"
             variant="outlined"
             size="small"
             value={searchValues.vietnameseName || ''}
@@ -235,8 +235,8 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
             label="Old SAP Code"
             variant="outlined"
             size="small"
-            value={searchValues.oldSapCode || ''} // Match with cURL
-            onChange={handleInputChange('oldSapCode')} // Match with cURL
+            value={searchValues.oldSapCode || ''}
+            onChange={handleInputChange('oldSapCode')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -246,11 +246,11 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="New SAP Code"
+            label="Hana SAP Code"
             variant="outlined"
             size="small"
-            value={searchValues.newSapCode || ''} // Match with cURL
-            onChange={handleInputChange('newSapCode')} // Match with cURL
+            value={searchValues.hanaSapCode || ''}
+            onChange={handleInputChange('hanaSapCode')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -260,11 +260,11 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Unit"
+            label="Supplier Description"
             variant="outlined"
             size="small"
-            value={searchValues.unit || ''}
-            onChange={handleInputChange('unit')}
+            value={searchValues.supplierName || ''}
+            onChange={handleInputChange('supplierName')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -274,7 +274,7 @@ export default function RequisitionMonthlySearch({ searchValues, onSearchChange,
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Department Name"
+            label="Department"
             variant="outlined"
             size="small"
             value={searchValues.departmentName || ''}

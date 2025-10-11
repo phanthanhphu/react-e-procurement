@@ -61,7 +61,7 @@ export default function ProductTypeSearch({
       >
         <Grid item xs={12} sm={6} sx={{ minWidth: { xs: '100%', sm: 300 } }}>
           <TextField
-            label="Parent Type Name"
+            label="Product Type 1 Name"
             variant="outlined"
             size="small"
             value={type1NameSearch}

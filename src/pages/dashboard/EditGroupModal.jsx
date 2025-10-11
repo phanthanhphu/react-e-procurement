@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, Select, DatePicker } from 'antd';
+import { Modal, Form, Input, Select, DatePicker, Radio } from 'antd';
 import { Snackbar, Alert } from '@mui/material';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config';
 
-// Kiểm tra phiên bản React
+// Check React version
 const reactVersion = React.version.split('.')[0];
 if (reactVersion >= 19) {
   console.warn('React 19 detected. Ant Design v5.x may have compatibility issues. See https://u.ant.design/v5-for-19 for details.');
@@ -28,10 +28,11 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
       console.log('Setting form values:', currentItem);
       form.setFieldsValue({
         name: currentItem.name || '',
-        type: currentItem.type || 'Requisition_urgent',
-        status: currentItem.status || 'NOT_STARTED',
+        type: currentItem.type || 'Requisition_weekly',
+        status: currentItem.status || 'Not Started',
         createdBy: currentItem.createdBy || '',
         stockDate: currentItem.stockDate ? dayjs(formatDate(currentItem.stockDate)) : null,
+        currency: currentItem.currency || 'VND',
       });
     } else {
       console.log('Resetting form');
@@ -91,6 +92,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
         id: currentItem.id,
         createdDate: currentItem.createdDate, // Preserve existing createdDate
         stockDate: values.stockDate ? toDateArray(values.stockDate.toISOString()) : null,
+        currency: values.currency.toUpperCase(), // Ensure currency is uppercase
       };
       console.log('Formatted API payload:', formattedValues);
 
@@ -193,9 +195,9 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
             name="type"
             rules={[{ required: true, message: 'Please select a type!' }]}
           >
-            <Select placeholder="Select Type">
-              <Select.Option value="Requisition_urgent">Requisition Urgent</Select.Option>
-              <Select.Option value="Requisition_monthly">Requisition Monthly</Select.Option>
+            <Select placeholder="Select Type" disabled={currentItem?.used}>
+              <Select.Option value="Requisition_weekly">Weekly Requisition</Select.Option>
+              <Select.Option value="Requisition_monthly">Monthly Requisition</Select.Option>
             </Select>
           </Form.Item>
 
@@ -229,6 +231,19 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
               style={{ width: '100%' }}
               placeholder="Select stock date"
             />
+          </Form.Item>
+
+          <Form.Item
+            label="Currency"
+            name="currency"
+            rules={[{ required: true, message: 'Please select a currency!' }]}
+            initialValue="VND"
+          >
+            <Radio.Group disabled={currentItem?.used}>
+              <Radio value="VND">VND</Radio>
+              <Radio value="EURO">EURO</Radio>
+              <Radio value="USD">USD</Radio>
+            </Radio.Group>
           </Form.Item>
         </Form>
       </Modal>

@@ -34,9 +34,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     itemDescriptionVN: '',
     fullItemDescriptionVN: '',
     oldSapCode: '',
-    newSapCode: '',
+    hanaSapCode: '',
     stock: '',
-    purchasingSuggest: '',
+    orderQty: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -67,11 +67,61 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [translating, setTranslating] = useState(false);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [initialVNDescription, setInitialVNDescription] = useState('');
+  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [loadingCurrency, setLoadingCurrency] = useState(false);
+  const [currencyError, setCurrencyError] = useState(null);
+
+  // Fetch currency from API
+  const fetchGroupCurrency = useCallback(async () => {
+    if (!item?.requisition?.groupId) {
+      setCurrencyError('ID nhóm không hợp lệ');
+      setGroupCurrency('VND'); // Mặc định về VND
+      return;
+    }
+    setLoadingCurrency(true);
+    setCurrencyError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+      });
+      if (!response.ok) {
+        throw new Error(`Lỗi HTTP! trạng thái: ${response.status}`);
+      }
+      const result = await response.json();
+      const apiCurrency = result.currency || 'VND';
+      console.log('Mã tiền tệ từ API:', apiCurrency); // Ghi log để kiểm tra
+      // Ánh xạ các mã tiền tệ không chuẩn sang mã ISO 4217
+      const currencyCodeMap = {
+        EURO: 'EUR',
+        VND: 'VND',
+        USD: 'USD',
+      };
+      // Chuẩn hóa mã tiền tệ
+      const normalizedCurrency = currencyCodeMap[apiCurrency.toUpperCase()] || apiCurrency;
+      // Kiểm tra mã tiền tệ
+      try {
+        new Intl.NumberFormat('vi-VN', { style: 'currency', currency: normalizedCurrency }).format(0);
+        setGroupCurrency(normalizedCurrency);
+      } catch (err) {
+        console.error('Mã tiền tệ không hợp lệ:', normalizedCurrency);
+        setCurrencyError(`Mã tiền tệ không hợp lệ: ${normalizedCurrency}. Sử dụng mặc định (VND).`);
+        setGroupCurrency('VND'); // Mặc định về VND
+      }
+    } catch (err) {
+      console.error('Lỗi khi lấy mã tiền tệ:', err);
+      setCurrencyError('Không thể lấy mã tiền tệ. Sử dụng mặc định (VND).');
+      setGroupCurrency('VND'); // Mặc định về VND
+    } finally {
+      setLoadingCurrency(false);
+    }
+  }, [item]);
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item);
     if (open && item && item.requisition && item.requisition.id) {
       fetchData();
+      fetchGroupCurrency(); // Fetch currency when dialog opens
     } else {
       resetForm();
       setShowSupplierSelector(true);
@@ -80,7 +130,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       fetchProductType1List();
       fetchDepartmentList();
     }
-  }, [open, item]);
+  }, [open, item, fetchGroupCurrency]);
 
   const fetchData = async () => {
     try {
@@ -97,9 +147,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         itemDescriptionVN: vietnameseName,
         fullItemDescriptionVN: requisition.fullDescription || '',
         oldSapCode: requisition.oldSapCode || '',
-        newSapCode: requisition.newSapCode || '',
+        hanaSapCode: requisition.hanaSapCode || '',
         stock: requisition.stock || '',
-        purchasingSuggest: requisition.purchasingSuggest || '',
+        orderQty: requisition.orderQty || '',
         reason: requisition.reason || '',
         remark: requisition.remark || '',
         remarkComparison: requisition.remarkComparison || '',
@@ -122,7 +172,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       );
       setDeptErrors(
         data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
-          ? data.departmentRequestQuantities.map(() => '') // Khởi tạo lỗi rỗng
+          ? data.departmentRequestQuantities.map(() => '') // Initialize empty errors
           : ['']
       );
 
@@ -149,9 +199,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       itemDescriptionVN: '',
       fullItemDescriptionVN: '',
       oldSapCode: '',
-      newSapCode: '',
+      hanaSapCode: '',
       stock: '',
-      purchasingSuggest: '',
+      orderQty: '',
       reason: '',
       remark: '',
       remarkComparison: '',
@@ -163,7 +213,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       supplierPrice: 0,
     });
     setDeptRows([{ department: '', qty: '', buy: '' }]);
-    setDeptErrors(['']); // Reset lỗi
+    setDeptErrors(['']);
     setImageUrls([]);
     setImagesToDelete([]);
     setFiles([]);
@@ -172,6 +222,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     setShowSupplierSelector(true);
     setIsEnManuallyEdited(false);
     setInitialVNDescription('');
+    setGroupCurrency('VND'); // Reset currency
+    setCurrencyError(null);
   };
 
   const translateText = async (text) => {
@@ -309,6 +361,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         supplierId: supplierData.supplierId,
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
+        productType1Id: supplierData.productType1Id || '',
+        productType2Id: supplierData.productType2Id || '',
       }));
       setSelectedSupplier({
         id: supplierData.supplierId,
@@ -320,6 +374,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         price: supplierData.supplierPrice || 0,
         unit: supplierData.unit || '',
         fullDescription: supplierData.fullItemDescriptionVN || '',
+        productType1Id: supplierData.productType1Id || '',
+        productType2Id: supplierData.productType2Id || '',
       });
       setShowSupplierSelector(false);
       if (supplierData.itemDescriptionVN) {
@@ -336,6 +392,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         supplierId: '',
         unit: '',
         supplierPrice: 0,
+        productType1Id: '',
+        productType2Id: '',
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -343,7 +401,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['stock', 'purchasingSuggest'].includes(field)
+    const value = ['stock', 'orderQty'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -366,7 +424,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     updatedRows[index][field] = value;
     setDeptRows(updatedRows);
 
-    // Kiểm tra trùng lặp phòng ban
     const updatedErrors = deptRows.map((row, i) => {
       if (i === index && field === 'department' && value) {
         const isDuplicate = deptRows.some(
@@ -457,7 +514,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const newImageUrls = [...imageUrls];
       const removedUrl = newImageUrls.splice(index, 1)[0];
       setImageUrls(newImageUrls);
-      setImagesToDelete((prev) => [...prev, removedUrl]); // Đảm bảo không trùng lặp
+      setImagesToDelete((prev) => [...prev, removedUrl]);
       console.log('Updated imageUrls:', newImageUrls);
       console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
     } else {
@@ -521,10 +578,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       vietnameseName: formData.itemDescriptionVN || '',
       fullDescription: formData.fullItemDescriptionVN || '',
       oldSapCode: formData.oldSapCode || '',
-      newSapCode: formData.newSapCode || '',
+      hanaSapCode: formData.hanaSapCode || '',
       departmentRequestQty: JSON.stringify(deptQtyMap),
       stock: parseFloat(formData.stock) || 0,
-      purchasingSuggest: parseFloat(formData.purchasingSuggest) || 0,
+      orderQty: parseFloat(formData.orderQty) || 0,
       reason: formData.reason || '',
       remark: formData.remark || '',
       remarkComparison: formData.remarkComparison || '',
@@ -532,6 +589,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       groupId: formData.groupId || '',
       productType1Id: formData.productType1Id || undefined,
       productType2Id: formData.productType2Id || undefined,
+      unit: formData.unit || '',
+      supplierPrice: formData.supplierPrice || 0,
     }).forEach(([key, value]) => {
       if (value !== undefined) {
         formDataToSend.append(key, value);
@@ -553,7 +612,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         const errorText = await res.text();
         let errorData = {};
         try {
-          errorData = JSON.parse(errorText); // Thử parse thành JSON
+          errorData = JSON.parse(errorText);
         } catch (e) {
           console.warn('Error response is not JSON:', errorText);
         }
@@ -575,10 +634,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setPreviews([]);
       setImagesToDelete([]);
       await onRefresh();
-      onClose(successMessage); // Truyền thông báo thành công khi đóng dialog
+      onClose(successMessage);
     } catch (err) {
       console.error('Update error:', err);
-      setSnackbarMessage(err.message); // Sử dụng thông báo từ API hoặc lỗi chung
+      setSnackbarMessage(err.message);
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
@@ -601,51 +660,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-            <Select
-              labelId="product-type-1-label"
-              value={formData.productType1Id}
-              label="Product Type 1"
-              onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType1List.map((type1) => (
-                <MenuItem key={type1.id} value={type1.id}>
-                  {type1.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-          </FormControl>
-
-          <FormControl
-            fullWidth
-            size="small"
-            disabled={!formData.productType1Id || loadingType2}
-          >
-            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-            <Select
-              labelId="product-type-2-label"
-              value={formData.productType2Id}
-              label="Product Type 2"
-              onChange={handleChange('productType2Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType2List.map((type2) => (
-                <MenuItem key={type2.id} value={type2.id}>
-                  {type2.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-          </FormControl>
-
+          {currencyError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {currencyError}
+            </Alert>
+          )}
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -656,9 +675,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               sx={{ flex: 1 }}
             />
             <TextField
-              label="New SAP Code"
-              value={formData.newSapCode}
-              onChange={handleChange('newSapCode')}
+              label="Hana SAP Code"
+              value={formData.hanaSapCode}
+              onChange={handleChange('hanaSapCode')}
               size="small"
               fullWidth
               sx={{ flex: 1 }}
@@ -667,7 +686,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Product Description (VN)"
+              label="Item Description (VN)"
               value={formData.itemDescriptionVN}
               onChange={handleChange('itemDescriptionVN')}
               fullWidth
@@ -677,7 +696,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               }}
             />
             <TextField
-              label="Product Description (EN)"
+              label="Item Description (EN)"
               value={formData.itemDescriptionEN}
               onChange={handleChange('itemDescriptionEN')}
               fullWidth
@@ -709,13 +728,17 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               oldSapCode={formData.oldSapCode}
               onSelectSupplier={handleSelectSupplier}
               selectedSupplier={selectedSupplier}
+              productType1List={productType1List}
+              productType2List={productType2List}
+              currency={groupCurrency} // Use groupCurrency
+              disabled={loadingCurrency} // Disable while loading currency
             />
           ) : (
             selectedSupplier && (
               <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
                 <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
                 <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('en-US')} ₫</Typography>
+                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
                 <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
                   Change Supplier
                 </Button>
@@ -809,19 +832,13 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               }}
             >
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Requested Quantity: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+                Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('en-US')} ₫</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('en-US')} ₫</span>
               </Typography>
             </Stack>
           </Paper>
@@ -837,9 +854,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               sx={{ flex: 1 }}
             />
             <TextField
-              label="Purchase Suggestion"
-              value={formData.purchasingSuggest}
-              onChange={handleChange('purchasingSuggest')}
+              label="Order Q'ty"
+              value={formData.orderQty}
+              onChange={handleChange('orderQty')}
               size="small"
               fullWidth
               type="number"
@@ -865,15 +882,23 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             multiline
             rows={2}
           />
-          <TextField
-            label="Remark Comparison"
-            value={formData.remarkComparison}
-            onChange={handleChange('remarkComparison')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
+          <FormControl fullWidth size="small">
+            <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
+            <Select
+              labelId="remark-comparison-label"
+              value={formData.remarkComparison}
+              label="Remark Comparison"
+              onChange={handleChange('remarkComparison')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              <MenuItem value="Old price">Old price</MenuItem>
+              <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
+                The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
+              </MenuItem>
+            </Select>
+          </FormControl>
 
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
@@ -944,7 +969,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || deptErrors.some((error) => error)}>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+        >
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
         </Button>
       </DialogActions>
@@ -954,7 +983,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'} sx={{ width: '100%' }}>
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'}
+          sx={{ width: '100%' }}
+        >
           {snackbarMessage}
         </Alert>
       </Snackbar>

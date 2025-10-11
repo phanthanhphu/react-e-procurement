@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert } from '@mui/material';
+import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 
@@ -16,10 +16,16 @@ export default function SupplierSearch({
   setSearchItemDescription,
   searchFullDescription,
   setSearchFullDescription,
+  searchMaterialGroupFullDescription,
+  setSearchMaterialGroupFullDescription,
   searchProductType1Id,
   setSearchProductType1Id,
   searchProductType2Id,
   setSearchProductType2Id,
+  searchCurrency,
+  setSearchCurrency,
+  searchGoodType,
+  setSearchGoodType,
   setPage,
   onSearch,
   onReset,
@@ -35,7 +41,7 @@ export default function SupplierSearch({
   const [searchGroupItem2, setSearchGroupItem2] = useState('');
   const [error, setError] = useState(null);
 
-  // Lấy danh sách product-type-1 khi component mount
+  // Fetch product-type-1 list when component mounts
   useEffect(() => {
     const fetchProductType1 = async () => {
       try {
@@ -43,14 +49,14 @@ export default function SupplierSearch({
         setProductType1Options(response.data.content);
         setFilteredProductType1Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-1. Vui lòng thử lại.');
+        setError('Cannot load product-type-1 list. Please try again.');
         console.error("Error fetching product type 1:", error);
       }
     };
     fetchProductType1();
   }, []);
 
-  // Lấy danh sách product-type-2 ban đầu, sử dụng selectedProductType1Id nếu có
+  // Fetch product-type-2 list initially, using selectedProductType1Id if available
   useEffect(() => {
     const fetchProductType2 = async () => {
       try {
@@ -64,14 +70,14 @@ export default function SupplierSearch({
         setProductType2Options(response.data.content);
         setFilteredProductType2Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-2. Vui lòng thử lại.');
+        setError('Cannot load product-type-2 list. Please try again.');
         console.error("Error fetching product type 2:", error);
       }
     };
     fetchProductType2();
   }, [selectedProductType1Id]);
 
-  // Xử lý tìm kiếm product-type-1
+  // Handle product-type-1 search
   const handleGroupItem1Change = async (event, value) => {
     setSearchGroupItem1(value || '');
     try {
@@ -80,19 +86,22 @@ export default function SupplierSearch({
       });
       setFilteredProductType1Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-1. Vui lòng thử lại.');
+      setError('Cannot search product-type-1. Please try again.');
       console.error("Error searching product type 1:", error);
     }
   };
 
-  // Xử lý chọn product-type-1
+  // Handle product-type-1 selection
   const handleGroupItem1Select = (event, value) => {
     setSelectedProductType1Id(value ? value.id : null);
     setSearchGroupItem1(value ? value.name : '');
     setSearchProductType1Id(value ? value.id : '');
+    setSelectedProductType2Id(null);
+    setSearchGroupItem2('');
+    setSearchProductType2Id('');
   };
 
-  // Xử lý tìm kiếm product-type-2
+  // Handle product-type-2 search
   const handleGroupItem2Change = async (event, value) => {
     setSearchGroupItem2(value || '');
     try {
@@ -107,19 +116,33 @@ export default function SupplierSearch({
       setProductType2Options(response.data.content);
       setFilteredProductType2Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-2. Vui lòng thử lại.');
+      setError('Cannot search product-type-2. Please try again.');
       console.error("Error searching product type 2:", error);
     }
   };
 
-  // Xử lý chọn product-type-2
+  // Handle product-type-2 selection
   const handleGroupItem2Select = (event, value) => {
     setSelectedProductType2Id(value ? value.id : null);
     setSearchGroupItem2(value ? value.name : '');
     setSearchProductType2Id(value ? value.id : '');
   };
 
-  // Xử lý reset
+  // Handle currency change
+  const handleCurrencyChange = (event) => {
+    const value = event.target.value;
+    setSearchCurrency(value);
+    setPage(0);
+  };
+
+  // Handle goodType change
+  const handleGoodTypeChange = (event) => {
+    const value = event.target.value;
+    setSearchGoodType(value);
+    setPage(0);
+  };
+
+  // Handle reset
   const handleReset = () => {
     setPage(0);
     setSearchGroupItem1('');
@@ -128,18 +151,27 @@ export default function SupplierSearch({
     setSelectedProductType2Id(null);
     setSearchProductType1Id('');
     setSearchProductType2Id('');
+    setSearchSupplierCode('');
+    setSearchSupplierName('');
+    setSearchSapCode('');
+    setSearchItemNo('');
+    setSearchItemDescription('');
+    setSearchFullDescription('');
+    setSearchMaterialGroupFullDescription('');
+    setSearchCurrency('');
+    setSearchGoodType('');
     setFilteredProductType1Options(productType1Options);
     setFilteredProductType2Options(productType2Options);
     onReset();
   };
 
-  // Xử lý search
+  // Handle search
   const handleSearch = () => {
     setPage(0);
-    onSearch({ productType1Id: selectedProductType1Id, productType2Id: selectedProductType2Id });
+    onSearch();
   };
 
-  // Đóng Snackbar lỗi
+  // Close error Snackbar
   const handleCloseError = () => {
     setError(null);
   };
@@ -164,7 +196,7 @@ export default function SupplierSearch({
         </Alert>
       </Snackbar>
 
-      {/* Row 1: 4 inputs + Search button */}
+      {/* Row 1: Product Type 1, Product Type 2, Supplier Code, Supplier Name, Currency, Search */}
       <Box
         sx={{
           display: 'flex',
@@ -174,7 +206,53 @@ export default function SupplierSearch({
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType1Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+            value={searchGroupItem1}
+            onInputChange={handleGroupItem1Change}
+            onChange={handleGroupItem1Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Product Type 1"
+                variant="outlined"
+                size="small"
+                sx={{
+                  width: '100%',
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                }}
+              />
+            )}
+          />
+        </Box>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
+          <Autocomplete
+            freeSolo
+            options={filteredProductType2Options}
+            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
+            value={searchGroupItem2}
+            onInputChange={handleGroupItem2Change}
+            onChange={handleGroupItem2Select}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Product Type 2"
+                variant="outlined"
+                size="small"
+                sx={{
+                  width: '100%',
+                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
+                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
+                }}
+              />
+            )}
+          />
+        </Box>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
             label="Supplier Code"
             variant="outlined"
@@ -191,9 +269,9 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
-            label="Supplier Name"
+            label="Supplier Description"
             variant="outlined"
             size="small"
             value={searchSupplierName}
@@ -208,7 +286,64 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="currency-label" sx={{ fontSize: '0.55rem', top: '-6px' }}>
+              Currency
+            </InputLabel>
+            <Select
+              labelId="currency-label"
+              value={searchCurrency}
+              label="Currency"
+              onChange={handleCurrencyChange}
+              sx={{
+                height: '30px',
+                borderRadius: '6px',
+                fontSize: '0.55rem',
+              }}
+            >
+              <MenuItem value="">
+                <em>All</em>
+              </MenuItem>
+              <MenuItem value="VND">VND</MenuItem>
+              <MenuItem value="USD">USD</MenuItem>
+              <MenuItem value="EURO">EURO</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
+          <Button
+            variant="contained"
+            onClick={handleSearch}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 500,
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              px: 1.5,
+              py: 0.3,
+              borderRadius: '6px',
+              fontSize: '0.55rem',
+              height: 30,
+              width: '100%',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Search
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Row 2: SAP Code, Item No, Item Description, Full Description, Good Type, Reset */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: 1,
+          alignItems: 'center',
+        }}
+      >
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
             label="SAP Code"
             variant="outlined"
@@ -225,7 +360,7 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
             label="Item No"
             variant="outlined"
@@ -242,41 +377,9 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Button
-            variant="contained"
-            onClick={handleSearch}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              px: 1.5,
-              py: 0.3,
-              borderRadius: '6px',
-              fontSize: '0.65rem',
-              height: 30,
-              width: '100%',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Search
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Row 2: 4 inputs + Reset button */}
-      <Box
-        sx={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          gap: 1,
-          alignItems: 'center',
-        }}
-      >
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
-            label="Short Item Description"
+            label="Item Description"
             variant="outlined"
             size="small"
             value={searchItemDescription}
@@ -291,7 +394,7 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <TextField
             label="Full Description"
             variant="outlined"
@@ -308,53 +411,31 @@ export default function SupplierSearch({
             }}
           />
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Autocomplete
-            freeSolo
-            options={filteredProductType1Options}
-            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
-            value={searchGroupItem1}
-            onInputChange={handleGroupItem1Change}
-            onChange={handleGroupItem1Select}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Group Item 1"
-                variant="outlined"
-                size="small"
-                sx={{
-                  width: '100%',
-                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-                }}
-              />
-            )}
-          />
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="good-type-label" sx={{ fontSize: '0.55rem', top: '-6px' }}>
+              Good Type
+            </InputLabel>
+            <Select
+              labelId="good-type-label"
+              value={searchGoodType}
+              label="Good Type"
+              onChange={handleGoodTypeChange}
+              sx={{
+                height: '30px',
+                borderRadius: '6px',
+                fontSize: '0.55rem',
+              }}
+            >
+              <MenuItem value="">
+                <em>All</em>
+              </MenuItem>
+              <MenuItem value="Common">Common</MenuItem>
+              <MenuItem value="Special">Special</MenuItem>
+            </Select>
+          </FormControl>
         </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Autocomplete
-            freeSolo
-            options={filteredProductType2Options}
-            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
-            value={searchGroupItem2}
-            onInputChange={handleGroupItem2Change}
-            onChange={handleGroupItem2Select}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Group Item 2"
-                variant="outlined"
-                size="small"
-                sx={{
-                  width: '100%',
-                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-                }}
-              />
-            )}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
+        <Box sx={{ width: '16.67%', minWidth: 150 }}>
           <Button
             variant="outlined"
             onClick={handleReset}
@@ -364,7 +445,7 @@ export default function SupplierSearch({
               px: 1.5,
               py: 0.3,
               borderRadius: '6px',
-              fontSize: '0.65rem',
+              fontSize: '0.55rem',
               color: theme.palette.grey[800],
               borderColor: theme.palette.grey[400],
               height: 30,

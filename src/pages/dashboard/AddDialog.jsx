@@ -17,7 +17,6 @@ import {
   IconButton,
   FormHelperText,
   Box,
-  Dialog as ErrorDialog,
   Snackbar,
   Alert,
 } from '@mui/material';
@@ -25,7 +24,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'; // Icon cho lỗi
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
@@ -36,9 +35,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     itemDescriptionVN: '',
     fullItemDescriptionVN: '',
     oldSapCode: '',
-    newSapCode: '',
+    hanaSapCode: '',
     stock: '',
-    purchasingSuggest: '',
+    orderQty: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -63,17 +62,49 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [translating, setTranslating] = useState(false);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [errorOpen, setErrorOpen] = useState(false); // State cho dialog lỗi
-  const [errorMessage, setErrorMessage] = useState(''); // Nội dung thông báo lỗi
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [loadingCurrency, setLoadingCurrency] = useState(false);
+  const [currencyError, setCurrencyError] = useState(null);
+
+  // Fetch currency from API
+  const fetchGroupCurrency = useCallback(async () => {
+    if (!groupId) {
+      setCurrencyError('Invalid Group ID');
+      setGroupCurrency('VND'); // Fallback to default
+      return;
+    }
+    setLoadingCurrency(true);
+    setCurrencyError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
+        method: 'GET',
+        headers: { Accept: '*/*' },
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result = await response.json();
+      setGroupCurrency(result.currency || 'VND'); // Use API currency or fallback to 'VND'
+    } catch (err) {
+      console.error('Fetch group currency error:', err);
+      setCurrencyError('Failed to fetch group currency. Using default (VND).');
+      setGroupCurrency('VND'); // Fallback to default
+    } finally {
+      setLoadingCurrency(false);
+    }
+  }, [groupId]);
 
   useEffect(() => {
     if (open) {
+      fetchGroupCurrency(); // Fetch currency when dialog opens
       fetchProductType1List();
       fetchDepartmentList();
-      setFormData((prev) => ({
+      setFormData({
         ...defaultFormData,
         groupId: groupId || '',
-      }));
+      });
       if (previews.length > 0) {
         previews.forEach((preview) => URL.revokeObjectURL(preview));
         setFiles([]);
@@ -81,10 +112,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       }
       setDeptRows([{ department: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
-      setErrorOpen(false); // Đóng dialog lỗi khi mở lại
-      setErrorMessage(''); // Reset lỗi khi mở lại
+      setErrorOpen(false);
+      setErrorMessage('');
     }
-  }, [open, groupId]);
+  }, [open, groupId, fetchGroupCurrency]);
 
   const translateText = async (text) => {
     if (!text) {
@@ -185,7 +216,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     }
   };
 
-  const handleSelectSupplier = (supplierData) => {
+  const handleSelectSupplier = async (supplierData) => {
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
@@ -194,7 +225,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         supplierId: supplierData.supplierId,
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
+        productType1Id: supplierData.productType1Id || '',
+        productType2Id: supplierData.productType2Id || '',
       }));
+
+      if (supplierData.productType1Id) {
+        await fetchProductType2List(supplierData.productType1Id);
+      }
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -203,17 +240,20 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         supplierId: '',
         unit: '',
         supplierPrice: 0,
+        productType1Id: '',
+        productType2Id: '',
       }));
+      setProductType2List([]);
     }
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['stock', 'purchasingSuggest'].includes(field)
+    const value = ['stock', 'orderQty'].includes(field)
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
-    setErrorOpen(false); // Đóng dialog lỗi khi thay đổi input
-    setErrorMessage(''); // Reset lỗi khi thay đổi
+    setErrorOpen(false);
+    setErrorMessage('');
   };
 
   const handleDeptChange = (index, field, value) => {
@@ -232,8 +272,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return deptErrors[i] || '';
     });
     setDeptErrors(updatedErrors);
-    setErrorOpen(false); // Đóng dialog lỗi khi thay đổi department
-    setErrorMessage(''); // Reset lỗi khi thay đổi
+    setErrorOpen(false);
+    setErrorMessage('');
   };
 
   const handleAddDeptRow = () => {
@@ -246,14 +286,21 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     const updatedErrors = deptErrors.filter((_, i) => i !== index);
     setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
     setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
-    setErrorOpen(false); // Đóng dialog lỗi khi xóa department
-    setErrorMessage(''); // Reset lỗi khi xóa
+    setErrorOpen(false);
+    setErrorMessage('');
   };
 
   const calcTotalBuy = () => {
     return deptRows.reduce((sum, row) => {
       const b = parseFloat(row.buy);
       return sum + (isNaN(b) ? 0 : b);
+    }, 0);
+  };
+
+  const calcTotalRequestQty = () => {
+    return deptRows.reduce((sum, row) => {
+      const q = parseFloat(row.qty) || 0;
+      return sum + q;
     }, 0);
   };
 
@@ -268,7 +315,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return;
     }
 
-    const validFiles = selectedFiles.filter(file =>
+    const validFiles = selectedFiles.filter((file) =>
       file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
     );
     if (validFiles.length !== selectedFiles.length) {
@@ -288,14 +335,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map(file => ({
+    console.log('Updated files state:', newFiles.map((file) => ({
       name: file.name,
       size: file.size,
       type: file.type,
     })));
     e.target.value = null;
-    setErrorOpen(false); // Đóng dialog lỗi khi chọn file hợp lệ
-    setErrorMessage(''); // Reset lỗi
+    setErrorOpen(false);
+    setErrorMessage('');
   };
 
   const handleRemoveFile = (index) => {
@@ -305,9 +352,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     const newPreviews = previews.filter((_, i) => i !== index);
     setFiles(newFiles);
     setPreviews(newPreviews);
-    console.log('Updated files:', newFiles.map(file => file.name));
-    setErrorOpen(false); // Đóng dialog lỗi khi xóa file
-    setErrorMessage(''); // Reset lỗi
+    console.log('Updated files:', newFiles.map((file) => file.name));
+    setErrorOpen(false);
+    setErrorMessage('');
   };
 
   const handleAdd = async () => {
@@ -352,10 +399,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     formDataToSend.append('vietnameseName', formData.itemDescriptionVN || '');
     formDataToSend.append('fullDescription', formData.fullItemDescriptionVN || '');
     formDataToSend.append('oldSapCode', formData.oldSapCode || '');
-    formDataToSend.append('newSapCode', formData.newSapCode || '');
+    formDataToSend.append('hanaSapCode', formData.hanaSapCode || '');
     formDataToSend.append('departmentRequestQty', JSON.stringify(deptQtyMap));
     formDataToSend.append('stock', parseFloat(formData.stock) || 0);
-    formDataToSend.append('purchasingSuggest', parseFloat(formData.purchasingSuggest) || 0);
+    formDataToSend.append('orderQty', parseFloat(formData.orderQty) || 0);
     formDataToSend.append('reason', formData.reason || '');
     formDataToSend.append('remark', formData.remark || '');
     formDataToSend.append('remarkComparison', formData.remarkComparison || '');
@@ -363,14 +410,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     formDataToSend.append('groupId', formData.groupId || '');
     formDataToSend.append('productType1Id', formData.productType1Id || '');
     formDataToSend.append('productType2Id', formData.productType2Id || '');
+    formDataToSend.append('unit', formData.unit || '');
+    formDataToSend.append('supplierPrice', formData.supplierPrice || 0);
 
     files.forEach((file) => {
       formDataToSend.append('files', file);
     });
 
     setSaving(true);
-    setErrorOpen(false); // Đóng dialog lỗi trước khi gửi
-    setErrorMessage(''); // Reset lỗi trước khi gửi
+    setErrorOpen(false);
+    setErrorMessage('');
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/create`, {
         method: 'POST',
@@ -431,51 +480,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-            <Select
-              labelId="product-type-1-label"
-              value={formData.productType1Id}
-              label="Product Type 1"
-              onChange={handleChange('productType1Id')}
-              disabled={loadingType1}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType1List.map((type1) => (
-                <MenuItem key={type1.id} value={type1.id}>
-                  {type1.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-          </FormControl>
-
-          <FormControl
-            fullWidth
-            size="small"
-            disabled={!formData.productType1Id || loadingType2}
-          >
-            <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-            <Select
-              labelId="product-type-2-label"
-              value={formData.productType2Id}
-              label="Product Type 2"
-              onChange={handleChange('productType2Id')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {productType2List.map((type2) => (
-                <MenuItem key={type2.id} value={type2.id}>
-                  {type2.name}
-                </MenuItem>
-              ))}
-            </Select>
-            {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-          </FormControl>
-
+          {currencyError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {currencyError}
+            </Alert>
+          )}
           <Stack direction="row" spacing={2}>
             <TextField
               label="Old SAP Code"
@@ -489,9 +498,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               }}
             />
             <TextField
-              label="New SAP Code"
-              value={formData.newSapCode}
-              onChange={handleChange('newSapCode')}
+              label="Hana SAP Code"
+              value={formData.hanaSapCode}
+              onChange={handleChange('hanaSapCode')}
               size="small"
               fullWidth
               sx={{ flex: 1 }}
@@ -540,6 +549,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           <SupplierSelector
             oldSapCode={formData.oldSapCode}
             onSelectSupplier={handleSelectSupplier}
+            productType1List={productType1List}
+            productType2List={productType2List}
+            currency={groupCurrency} // Use groupCurrency instead of prop currency
+            disabled={loadingCurrency} // Disable while loading currency
           />
 
           <Paper variant="outlined" sx={{ p: 2 }}>
@@ -554,7 +567,12 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 key={index}
                 sx={{ mb: 1 }}
               >
-                <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
+                <FormControl
+                  fullWidth
+                  size="small"
+                  disabled={loadingDepartments}
+                  error={!!deptErrors[index]}
+                >
                   <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                   <Select
                     labelId={`department-label-${index}`}
@@ -576,7 +594,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     )}
                   </Select>
                   {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                  {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                  {loadingDepartments && (
+                    <FormHelperText>Loading departments...</FormHelperText>
+                  )}
                 </FormControl>
                 <TextField
                   label="Qty"
@@ -628,16 +648,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               }}
             >
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
                 Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN')} ₫</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Price: <span style={{ color: '#1976d2' }}>{calcTotalPrice().toLocaleString('vi-VN')} ₫</span>
               </Typography>
             </Stack>
           </Paper>
@@ -653,9 +670,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               sx={{ flex: 1 }}
             />
             <TextField
-              label="Purchasing Suggest"
-              value={formData.purchasingSuggest}
-              onChange={handleChange('purchasingSuggest')}
+              label="Order Q'ty"
+              value={formData.orderQty}
+              onChange={handleChange('orderQty')}
               size="small"
               fullWidth
               type="number"
@@ -681,15 +698,23 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
             multiline
             rows={2}
           />
-          <TextField
-            label="Remark Comparison"
-            value={formData.remarkComparison}
-            onChange={handleChange('remarkComparison')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
+          <FormControl fullWidth size="small">
+            <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
+            <Select
+              labelId="remark-comparison-label"
+              value={formData.remarkComparison}
+              label="Remark Comparison"
+              onChange={handleChange('remarkComparison')}
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              <MenuItem value="Old price">Old price</MenuItem>
+              <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
+                The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
+              </MenuItem>
+            </Select>
+          </FormControl>
 
           <Box>
             <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
@@ -729,9 +754,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 ))}
               </Box>
             )}
-            {files.length === 0 && (
+            {files.length > 0 && (
               <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
-                No images selected
+                {files.length} image(s) selected
               </Typography>
             )}
           </Box>
@@ -741,12 +766,15 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         <Button onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleAdd} disabled={saving || deptErrors.some((error) => error)}>
+        <Button
+          variant="contained"
+          onClick={handleAdd}
+          disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+        >
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
         </Button>
       </DialogActions>
 
-      {/* Dialog lỗi với giao diện giống Notification */}
       <Snackbar
         open={errorOpen}
         autoHideDuration={6000}

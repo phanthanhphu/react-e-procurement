@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Paper,
   Table,
@@ -16,23 +16,23 @@ import { API_BASE_URL } from '../../config';
 export default function SupplierSelector({
   oldSapCode,
   onSelectSupplier,
+  productType1List = [], // Default to empty array
+  productType2List = [], // Default to empty array
+  currency = '', // Add currency prop with default empty string
 }) {
   const [supplierOptions, setSupplierOptions] = useState([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
-  const [filterValue, setFilterValue] = useState('');
 
   // Function to search for suppliers
-  const searchSupplier = async (sapCode, filter = '') => {
+  const searchSupplier = async (sapCode, currencyFilter) => {
     setSearchLoading(true);
     try {
       const queryParams = new URLSearchParams({ page: '0', size: '100' });
       if (sapCode.trim()) queryParams.append('sapCode', sapCode.trim());
-      if (filter.trim()) queryParams.append('itemDescription', filter.trim());
+      // Always include currency in query params, even if empty (API should handle empty currency as no filter)
+      queryParams.append('currency', currencyFilter || '');
 
-      const endpoint = queryParams.toString()
-        ? `${API_BASE_URL}/api/supplier-products/filter-by-sapcode?${queryParams.toString()}`
-        : `${API_BASE_URL}/api/supplier-products/filter-by-sapcode?page=0&size=100`;
+      const endpoint = `${API_BASE_URL}/api/supplier-products/filter-by-sapcode?${queryParams.toString()}`;
 
       const res = await fetch(endpoint, {
         headers: { accept: '*/*' },
@@ -48,64 +48,83 @@ export default function SupplierSelector({
     }
   };
 
-  // Trigger search when oldSapCode or filter changes
+  // Trigger search when oldSapCode or currency changes
   useEffect(() => {
-    searchSupplier(oldSapCode, filterValue);
-  }, [oldSapCode, filterValue]);
+    // Only trigger search if currency is defined (avoid initial call with undefined)
+    if (currency !== undefined) {
+      searchSupplier(oldSapCode, currency);
+    }
+  }, [oldSapCode, currency]);
 
   // Handle supplier selection from the table
   const handleSelectSupplier = (opt) => {
-    setSelectedSupplierId(opt.id);
     onSelectSupplier({
-      itemDescriptionVN: opt.itemDescription || '',
-      itemDescriptionEN: opt.itemNo || '',
       fullItemDescriptionVN: opt.fullDescription || '',
       oldSapCode: opt.sapCode || '',
-      supplierPrice: opt.price || 0,
-      unit: opt.unit || '',
       supplierId: opt.id,
-      supplierName: opt.supplierName || '',
+      unit: opt.unit || '',
+      supplierPrice: opt.price || 0,
+      productType1Id: opt.productType1Id || '',
+      productType2Id: opt.productType2Id || '',
+      itemDescriptionVN: opt.itemDescription || '',
     });
+  };
+
+  // Map productType1Id and productType2Id to names
+  const getProductTypeName = (id, typeList) => {
+    if (!typeList || !Array.isArray(typeList)) return '-';
+    const type = typeList.find((item) => item.id === id);
+    return type ? type.name : '-';
   };
 
   return (
     <Paper variant="outlined" sx={{ mb: 1, p: 1 }}>
+      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+        Select Supplier{currency ? ` (Filtered by Currency: ${currency})` : ''}
+      </Typography>
       {searchLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
           <CircularProgress size={24} />
         </div>
       ) : supplierOptions.length > 0 ? (
         <TableContainer sx={{ maxHeight: '300px', overflowY: 'auto' }}>
-          <Table stickyHeader sx={{ minWidth: 1100 }} aria-label="supplier table">
+          <Table stickyHeader sx={{ minWidth: 1200 }} aria-label="supplier table">
             <TableHead>
               <TableRow>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>No</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Product Type 1</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Product Type 2</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>SAP Code</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Item Number</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Description</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier Code</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Price</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Currency</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Unit</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {supplierOptions.map((opt) => (
+              {supplierOptions.map((opt, index) => (
                 <TableRow
                   key={opt.id}
                   hover
-                  selected={selectedSupplierId === opt.id}
                   sx={{
                     '&:hover': { bgcolor: '#e3f2fd' },
                     '&.Mui-selected': { bgcolor: '#bbdefb' },
                   }}
                 >
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{opt.productType1Name || getProductTypeName(opt.productType1Id, productType1List)}</TableCell>
+                  <TableCell>{opt.productType2Name || getProductTypeName(opt.productType2Id, productType2List)}</TableCell>
                   <TableCell>{opt.sapCode || '-'}</TableCell>
                   <TableCell>{opt.itemNo || '-'}</TableCell>
                   <TableCell>{opt.itemDescription || '-'}</TableCell>
                   <TableCell>{opt.supplierCode || '-'}</TableCell>
                   <TableCell>{opt.supplierName || '-'}</TableCell>
-                  <TableCell>{opt.price ? opt.price.toLocaleString('en-US', { style: 'currency', currency: 'VND' }) : '0'}</TableCell>
+                  <TableCell>{opt.price ? opt.price.toLocaleString('vi-VN', { style: 'currency', currency: opt.currency || 'VND' }) : '0'}</TableCell>
+                  <TableCell>{opt.currency || '-'}</TableCell>
                   <TableCell>{opt.unit || '-'}</TableCell>
                   <TableCell>
                     <Button

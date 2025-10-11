@@ -19,11 +19,13 @@ export default function GroupSearchBar({
   statusFilter,
   createdByFilter,
   typeFilter,
-  dateRange,
+  currencyFilter, // Added currencyFilter prop
   setNameFilter,
   setStatusFilter,
   setCreatedByFilter,
   setTypeFilter,
+  setCurrencyFilter, // Added setCurrencyFilter prop
+  dateRange,
   setDateRange,
   setPage,
   handleSearch,
@@ -45,20 +47,20 @@ export default function GroupSearchBar({
         maxWidth: '100%',
       }}
     >
-      {/* Row 1: 4 inputs + Search/Reset buttons */}
+      {/* Row 1: 5 inputs + Search/Reset buttons */}
       <Box
         sx={{
           display: 'flex',
           flexWrap: 'nowrap',
           gap: 1,
           alignItems: 'center',
-          minHeight: '60px', // Tăng chiều cao của toàn bộ thẻ body chứa input
+          minHeight: '60px',
         }}
       >
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 100, flexShrink: 1 }}>
           <TextField
             fullWidth
-            label="Request Group Name"
+            label="Name"
             variant="outlined"
             size="small"
             value={nameFilter || ''}
@@ -73,7 +75,30 @@ export default function GroupSearchBar({
             }}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 100, flexShrink: 1 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Type</InputLabel>
+            <Select
+              value={typeFilter || ''}
+              label="Type"
+              onChange={(e) => {
+                setPage(0);
+                setTypeFilter(e.target.value);
+              }}
+              sx={{
+                height: '30px',
+                borderRadius: '6px',
+                fontSize: '0.55rem',
+                '& .MuiSelect-select': { padding: '8px' },
+              }}
+            >
+              <MenuItem value="" sx={{ fontSize: '0.55rem' }}>All</MenuItem>
+              <MenuItem value="Requisition_weekly" sx={{ fontSize: '0.55rem' }}>Weekly Requisition</MenuItem>
+              <MenuItem value="Requisition_monthly" sx={{ fontSize: '0.55rem' }}>Monthly Requisition</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+        <Box sx={{ width: '12.5%', minWidth: 100, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
             <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Status</InputLabel>
             <Select
@@ -97,7 +122,7 @@ export default function GroupSearchBar({
             </Select>
           </FormControl>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 100, flexShrink: 1 }}>
           <TextField
             fullWidth
             label="Created By (User)"
@@ -115,15 +140,15 @@ export default function GroupSearchBar({
             }}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 100, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 100, flexShrink: 1 }}>
           <FormControl fullWidth size="small">
-            <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Type</InputLabel>
+            <InputLabel sx={{ fontSize: '0.55rem', top: '-6px' }}>Currency</InputLabel>
             <Select
-              value={typeFilter || ''}
-              label="Type"
+              value={currencyFilter || ''}
+              label="Currency"
               onChange={(e) => {
                 setPage(0);
-                setTypeFilter(e.target.value);
+                setCurrencyFilter(e.target.value);
               }}
               sx={{
                 height: '30px',
@@ -133,12 +158,13 @@ export default function GroupSearchBar({
               }}
             >
               <MenuItem value="" sx={{ fontSize: '0.55rem' }}>All</MenuItem>
-              <MenuItem value="Requisition_urgent" sx={{ fontSize: '0.55rem' }}>Requisition Urgent</MenuItem>
-              <MenuItem value="Requisition_monthly" sx={{ fontSize: '0.55rem' }}>Requisition Monthly</MenuItem>
+              <MenuItem value="VND" sx={{ fontSize: '0.55rem' }}>VND</MenuItem>
+              <MenuItem value="EURO" sx={{ fontSize: '0.55rem' }}>EURO</MenuItem>
+              <MenuItem value="USD" sx={{ fontSize: '0.55rem' }}>USD</MenuItem>
             </Select>
           </FormControl>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 150, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 150, flexShrink: 1 }}>
           <RangePicker
             style={{
               width: '100%',
@@ -156,7 +182,7 @@ export default function GroupSearchBar({
             placeholder={['Start Date', 'End Date']}
           />
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 80, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 80, flexShrink: 1 }}>
           <Button
             variant="contained"
             onClick={() => {
@@ -179,7 +205,7 @@ export default function GroupSearchBar({
             Search
           </Button>
         </Box>
-        <Box sx={{ width: '14.29%', minWidth: 80, flexShrink: 1 }}>
+        <Box sx={{ width: '12.5%', minWidth: 80, flexShrink: 1 }}>
           <Button
             variant="outlined"
             onClick={() => {

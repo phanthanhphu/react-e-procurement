@@ -5,7 +5,7 @@ import { Button } from '@mui/material';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
-export default function ExportComparisonExcelButton({ disabled, groupId }) {
+export default function ExportRequestMonthlyExcelButton({ disabled, groupId }) {
   const [data, setData] = useState([]);
   const [totalAmt, setTotalAmt] = useState(0);
   const [totalAmtDifference, setTotalAmtDifference] = useState(0);
@@ -15,13 +15,13 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
     const fetchData = async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&hasFilter=false&disablePagination=true&page=0&size=1000&sort=string`,
+          `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false`,
           { headers: { Accept: '*/*' } }
         );
         if (!response.ok) throw new Error('Network response was not ok');
         const result = await response.json();
         console.log('API Response:', result); // Debug log
-        setData(result.page?.content || []);
+        setData(result.requisitions || result.page?.content || []);
         setTotalAmt(result.totalAmt || 0);
         setTotalAmtDifference(result.totalAmtDifference || 0);
         setTotalDifferencePercentage(result.totalDifferencePercentage || 0);
@@ -99,7 +99,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
         remarkComparison,
         unit,
         orderQty,
-        amtVnd,
+        amount,
         amtDifference,
         percentage,
       } = item;
@@ -123,7 +123,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
         ...allSupplierKeys.map((key) => supplierInfo[key] || ''),
         selectedSupplier ? selectedSupplier.supplierName : '',
         selectedSupplier ? selectedSupplier.price?.toLocaleString('vi-VN') || '' : '',
-        amtVnd != null ? amtVnd.toLocaleString('vi-VN') : '',
+        amount != null ? amount.toLocaleString('vi-VN') : '',
         amtDifference != null ? amtDifference.toLocaleString('vi-VN') : '',
         percentage != null ? `${parseFloat(percentage).toFixed(2)}%` : '0%',
         remarkComparison || '',
@@ -287,7 +287,7 @@ export default function ExportComparisonExcelButton({ disabled, groupId }) {
     ws['!cols'][9 + allSupplierKeys.length + 5] = { wch: 30 };
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_${groupId}.xlsx`);
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`);
   };
 
   return (

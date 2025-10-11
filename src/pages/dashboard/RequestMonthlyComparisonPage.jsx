@@ -17,16 +17,15 @@ import {
   Button,
 } from '@mui/material';
 import InboxIcon from '@mui/icons-material/Inbox';
-import ArrowUpward from '@mui/icons-material/ArrowUpward';
-import ArrowDownward from '@mui/icons-material/ArrowDownward';
-import ExportComparisonExcelButton from './ExportComparisonExcelButton.jsx';
+import ExportRequestMonthlyExcelButton from './ExportRequestMonthlyExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
+import AddDialog from './AddDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
 import { API_BASE_URL } from '../../config.js';
 
-// Function to normalize currency codes for toLocaleString
+// Normalize currency codes for toLocaleString
 const normalizeCurrencyCode = (currency) => {
-  if (!currency) return 'VND'; // Fallback to VND if currency is missing
+  if (!currency) return 'VND';
   switch (currency.toUpperCase()) {
     case 'EURO':
       return 'EUR';
@@ -35,50 +34,54 @@ const normalizeCurrencyCode = (currency) => {
     case 'USD':
       return 'USD';
     default:
-      return 'VND'; // Fallback for unknown currencies
+      return 'VND'; // Fallback
   }
 };
 
-// Function to get display currency name (for UI labels)
+// Get display currency name for UI labels
 const getDisplayCurrency = (currency) => {
   if (!currency) return 'VND';
-  return currency.toUpperCase(); // Keep original name (e.g., "EURO" instead of "EUR")
+  return currency.toUpperCase(); // Keep original name (e.g., "EURO")
 };
 
-// Function to get locale based on currency
-const getLocaleForCurrency = (currency) => {
-  switch (currency) {
+// Format currency based on normalized code
+const formatCurrency = (value, currency) => {
+  if (!value || !currency) return '0';
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+  switch (normalizedCurrency) {
     case 'VND':
-      return 'vi-VN';
+      return value.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
     case 'USD':
-      return 'en-US';
+      return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
     case 'EUR':
-      return 'de-DE';
+      return value.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
     default:
-      return 'en-US'; // Fallback
+      return value.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
   }
 };
 
-// Updated table headers with sortable property, including Order Qty, dynamic currency
+// Dynamic headers with currency
 const getHeaders = (currency = 'VND') => [
-  { label: 'No', key: 'no', sortable: false },
-  { label: 'Product Type 1', key: 'type1Name', sortable: true },
-  { label: 'Product Type 2', key: 'type2Name', sortable: true },
-  { label: 'Item Description (Vietnamese)', key: 'vietnameseName', sortable: true },
-  { label: 'Item Description (English)', key: 'englishName', sortable: true },
-  { label: 'Old SAP Code', key: 'oldSapCode', sortable: true },
-  { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true },
-  { label: 'Supplier Description', key: 'supplierName', sortable: true },
-  { label: 'Supplier List', key: 'suppliers', sortable: false },
-  { label: 'Department', key: 'departmentRequests', sortable: false },
-  { label: 'Request Qty', key: 'requestQty', sortable: true },
-  { label: 'Order Qty', key: 'orderQty', sortable: true },
-  { label: `Price (${getDisplayCurrency(currency)})`, key: 'selectedPrice', sortable: true },
-  { label: `Amount (${getDisplayCurrency(currency)})`, key: 'amtVnd', sortable: true },
-  { label: `Highest Price (${getDisplayCurrency(currency)})`, key: 'highestPrice', sortable: true },
-  { label: `Amount Difference (${getDisplayCurrency(currency)})`, key: 'amtDifference', sortable: true },
-  { label: 'Difference (%)', key: 'percentage', sortable: true },
-  { label: 'Remark', key: 'remarkComparison', sortable: true },
+  { label: 'No', key: 'no' },
+  { label: 'Product Type 1', key: 'type1Name' },
+  { label: 'Product Type 2', key: 'type2Name' },
+  { label: 'Item Description (VN)', key: 'vietnameseName' },
+  { label: 'Item Description (EN)', key: 'englishName' },
+  { label: 'Old SAP Code', key: 'oldSapCode' },
+  { label: 'Hana SAP Code', key: 'hanaSapCode' },
+  { label: 'Unit', key: 'unit' },
+  { label: 'Suppliers', key: 'suppliers' },
+  { label: 'Department Requests', key: 'departmentRequests' },
+  { label: 'Request Qty', key: 'totalRequestQty' },
+  { label: 'Order Qty', key: 'orderQty' },
+  { label: `Price (${getDisplayCurrency(currency)})`, key: 'price' },
+  { label: 'Currency', key: 'currency' },
+  { label: `Amount (${getDisplayCurrency(currency)})`, key: 'amount' },
+  { label: `Highest Price (${getDisplayCurrency(currency)})`, key: 'highestPrice' },
+  { label: `Amount Difference (${getDisplayCurrency(currency)})`, key: 'amtDifference' },
+  { label: 'Difference (%)', key: 'percentage' },
+  { label: 'Remark', key: 'remarkComparison' },
+  { label: 'Good Type', key: 'productType2Name' },
 ];
 
 function DeptRequestTable({ departmentRequests }) {
@@ -113,7 +116,7 @@ function DeptRequestTable({ departmentRequests }) {
                 width: '40%',
               }}
             >
-              Name
+              Dept
             </TableCell>
             <TableCell
               align="center"
@@ -126,7 +129,7 @@ function DeptRequestTable({ departmentRequests }) {
                 width: '30%',
               }}
             >
-              Request Qty
+              Request
             </TableCell>
             <TableCell
               align="center"
@@ -192,8 +195,6 @@ function SupplierTable({ suppliers, currency }) {
   if (!suppliers || suppliers.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.55rem', color: '#666' }}>No Suppliers</Typography>;
   }
-
-  const normalizedCurrency = normalizeCurrencyCode(currency);
 
   return (
     <div>
@@ -276,7 +277,7 @@ function SupplierTable({ suppliers, currency }) {
                 {supplier.supplierName}
               </TableCell>
               <TableCell align="right" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '20%' }}>
-                {supplier.price ? supplier.price.toLocaleString(getLocaleForCurrency(normalizedCurrency), { style: 'currency', currency: normalizedCurrency }) : '0'}
+                {supplier.price ? formatCurrency(supplier.price, currency) : '0'}
               </TableCell>
               <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '15%' }}>
                 {supplier.unit || ''}
@@ -307,12 +308,11 @@ function SupplierTable({ suppliers, currency }) {
   );
 }
 
-export default function ComparisonPage() {
+export default function RequestMonthlyComparisonPage() {
   const theme = useTheme();
   const { groupId } = useParams();
 
   const [data, setData] = useState([]);
-  const [originalData, setOriginalData] = useState([]);
   const [unfilteredTotals, setUnfilteredTotals] = useState({
     totalAmt: 0,
     totalAmtDifference: 0,
@@ -325,6 +325,8 @@ export default function ComparisonPage() {
   const [error, setError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [currency, setCurrency] = useState('VND'); // State for dynamic currency
+
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
     productType2Name: '',
@@ -332,14 +334,11 @@ export default function ComparisonPage() {
     vietnameseName: '',
     oldSapCode: '',
     hanaSapCode: '',
-    supplierName: '',
+    unit: '',
     departmentName: '',
-    filter: false,
   });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-  const [currency, setCurrency] = useState('VND'); // State to hold the currency
 
-  // Extract currency from data when it changes
+  // Extract currency from data
   useEffect(() => {
     if (data.length > 0 && data[0].currency) {
       setCurrency(data[0].currency);
@@ -350,12 +349,12 @@ export default function ComparisonPage() {
     if (!groupId) return;
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&hasFilter=false&disablePagination=true`,
+        `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false`,
         {
           headers: { Accept: '*/*' },
         }
       );
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
       setUnfilteredTotals({
         totalAmt: result.totalAmt || 0,
@@ -363,53 +362,45 @@ export default function ComparisonPage() {
         totalDifferencePercentage: result.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      console.error('Error fetching unfiltered totals:', err);
+      console.error('Fetch unfiltered totals error:', err);
       setError('Failed to fetch unfiltered totals. Please try again.');
     }
   }, [groupId]);
 
-  const fetchData = useCallback(async (filters = {}, pageNum = 0, size = 25, sort = 'string') => {
+  const fetchData = useCallback(async (filters = {}) => {
     if (!groupId) return;
     setLoading(true);
     setError(null);
     try {
       const queryParams = new URLSearchParams({
         groupId,
-        productType1Name: filters.productType1Name || '',
-        productType2Name: filters.productType2Name || '',
-        englishName: filters.englishName || '',
-        vietnameseName: filters.vietnameseName || '',
-        oldSapCode: filters.oldSapCode || '',
-        hanaSapCode: filters.hanaSapCode || '',
-        supplierName: filters.supplierName || '',
-        departmentName: filters.departmentName || '',
-        hasFilter: filters.filter ? 'true' : 'false',
-        disablePagination: 'false',
-        page: pageNum,
-        size,
-        sort,
+        filter: true,
+        ...(filters.productType1Name && { productType1Name: filters.productType1Name }),
+        ...(filters.productType2Name && { productType2Name: filters.productType2Name }),
+        ...(filters.englishName && { englishName: filters.englishName }),
+        ...(filters.vietnameseName && { vietnameseName: filters.vietnameseName }),
+        ...(filters.oldSapCode && { oldSapCode: filters.oldSapCode }),
+        ...(filters.hanaSapCode && { hanaSapCode: filters.hanaSapCode }),
+        ...(filters.unit && { unit: filters.unit }),
+        ...(filters.departmentName && { departmentName: filters.departmentName }),
       }).toString();
 
-      console.log('Fetching data with params:', queryParams);
-
       const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search/comparison?${queryParams}`,
+        `${API_BASE_URL}/search/comparison-monthly?${queryParams}`,
         {
           headers: { Accept: '*/*' },
         }
       );
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      const mappedData = result.page.content.map(item => ({
+      const mappedData = result.requisitions?.map(item => ({
         ...item,
-        requestQty: Math.floor(item.requestQty || 0),
-        orderQty: item.orderQty || 0,
-      }));
+        productType2Name: item.goodtype || item.productType2Name || '',
+      })) || [];
       setData(mappedData);
-      setOriginalData(mappedData);
-      setTotalElements(result.page.totalElements);
+      setTotalElements(mappedData.length);
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error('Fetch error:', err);
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
@@ -418,8 +409,8 @@ export default function ComparisonPage() {
 
   useEffect(() => {
     fetchUnfilteredTotals();
-    fetchData({}, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
-  }, [fetchUnfilteredTotals, fetchData, page, rowsPerPage, sortConfig]);
+    fetchData();
+  }, [fetchUnfilteredTotals, fetchData]);
 
   const handleSearchChange = (newSearchValues) => {
     setSearchValues(newSearchValues);
@@ -427,7 +418,7 @@ export default function ComparisonPage() {
 
   const handleSearch = (filters) => {
     setPage(0);
-    fetchData(filters, 0, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
+    fetchData(filters);
   };
 
   const handleReset = () => {
@@ -438,13 +429,11 @@ export default function ComparisonPage() {
       vietnameseName: '',
       oldSapCode: '',
       hanaSapCode: '',
-      supplierName: '',
+      unit: '',
       departmentName: '',
-      filter: false,
     });
-    setSortConfig({ key: null, direction: null });
     setPage(0);
-    fetchData({ filter: false }, 0, rowsPerPage, 'string');
+    fetchData();
   };
 
   const handleDelete = async (oldSapCode) => {
@@ -456,12 +445,12 @@ export default function ComparisonPage() {
       });
       if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
       await fetchUnfilteredTotals();
-      await fetchData(searchValues, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
+      await fetchData(searchValues);
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete item. Please try again.');
+      alert('Delete failed. Please try again.');
     }
   };
 
@@ -475,37 +464,13 @@ export default function ComparisonPage() {
     setSelectedItem(null);
   };
 
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null;
-    }
-    setSortConfig({ key: direction ? key : null, direction });
-    setPage(0);
-
-    if (!direction) {
-      fetchData(searchValues, 0, rowsPerPage, 'string');
-      return;
-    }
-
-    fetchData(searchValues, 0, rowsPerPage, `${key},${direction}`);
-  };
-
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage);
-    fetchData(searchValues, newPage, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
-  };
-
+  const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
-    const newRowsPerPage = parseInt(event.target.value, 10);
-    setRowsPerPage(newRowsPerPage);
+    setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-    fetchData(searchValues, 0, newRowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
   };
 
-  const paginatedData = data;
+  const paginatedData = data.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
 
   const mappedDataForExport = paginatedData.map(item => ({
     englishName: item.englishName || '',
@@ -514,10 +479,11 @@ export default function ComparisonPage() {
     hanaSapCode: item.hanaSapCode || '',
     suppliers: item.suppliers || [],
     remarkComparison: item.remarkComparison || '',
-    supplierName: item.suppliers?.find(s => s.isSelected === 1)?.supplierName || '',
-    requestQty: item.requestQty || 0,
+    unit: item.unit || '',
+    totalRequestQty: item.totalRequestQty || 0,
     orderQty: item.orderQty || 0,
     currency: item.currency || 'VND',
+    productType2Name: item.productType2Name || '',
   }));
 
   return (
@@ -543,7 +509,7 @@ export default function ComparisonPage() {
         mb={1}
         sx={{ userSelect: 'none' }}
       >
-        <ExportComparisonExcelButton
+        <ExportRequestMonthlyExcelButton
           data={mappedDataForExport}
           disabled={loading}
           groupId={groupId}
@@ -585,7 +551,7 @@ export default function ComparisonPage() {
                 color: '#1976d2',
               }}
             >
-              Total Amount ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmt ? unfilteredTotals.totalAmt.toLocaleString(getLocaleForCurrency(normalizeCurrencyCode(currency)), { style: 'currency', currency: normalizeCurrencyCode(currency) }) : '0'}
+              Total Amount ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmt ? formatCurrency(unfilteredTotals.totalAmt, currency) : '0'}
             </Typography>
             <Typography
               sx={{
@@ -594,7 +560,7 @@ export default function ComparisonPage() {
                 color: unfilteredTotals.totalAmtDifference < 0 ? theme.palette.error.main : '#1976d2',
               }}
             >
-              Total Difference ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmtDifference ? unfilteredTotals.totalAmtDifference.toLocaleString(getLocaleForCurrency(normalizeCurrencyCode(currency)), { style: 'currency', currency: normalizeCurrencyCode(currency) }) : '0'}
+              Total Difference ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmtDifference ? formatCurrency(unfilteredTotals.totalAmtDifference, currency) : '0'}
             </Typography>
             <Typography
               sx={{
@@ -619,11 +585,11 @@ export default function ComparisonPage() {
             <Table stickyHeader size="small" sx={{ minWidth: 1700 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {getHeaders(currency).map(({ label, key, sortable }) => (
+                  {getHeaders(currency).map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Supplier Name', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
+                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -640,31 +606,11 @@ export default function ComparisonPage() {
                         left: label === 'No' ? 0 : undefined,
                         zIndex: label === 'No' ? 2 : 1,
                         backgroundColor: '#027aff',
-                        cursor: sortable ? 'pointer' : 'default',
-                        '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                        ...(label === 'Remark' && { minWidth: 200 }),
                       }}
-                      onClick={() => sortable && handleSort(key)}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Supplier List', 'Department'].includes(label) ? 'center' : 'flex-start' }}>
-                        <Tooltip title={label} arrow>
-                          <span>{label}</span>
-                        </Tooltip>
-                        {sortable && (
-                          <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
-                            {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                              <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                            ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                              <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                            ) : (
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
-                                <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
-                              </Box>
-                            )}
-                          </Box>
-                        )}
-                      </Box>
+                      <Tooltip title={label} arrow>
+                        <span>{label}</span>
+                      </Tooltip>
                     </TableCell>
                   ))}
                 </TableRow>
@@ -673,7 +619,6 @@ export default function ComparisonPage() {
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, idx) => {
                     const rowBackgroundColor = idx % 2 === 0 ? '#fff' : '#f7f9fc';
-                    const itemCurrency = normalizeCurrencyCode(item.currency || currency);
                     return (
                       <TableRow
                         key={item.oldSapCode + idx}
@@ -726,37 +671,43 @@ export default function ComparisonPage() {
                           {item.hanaSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.suppliers?.find(s => s.isSelected === 1)?.supplierName || ''}
+                          {item.unit || ''}
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
-                          <SupplierTable suppliers={item.suppliers} currency={item.currency || currency} />
+                          <SupplierTable suppliers={item.suppliers} currency={item.currency} />
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={item.departmentRequests} />
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.requestQty || 0}
+                          {item.totalRequestQty != null ? item.totalRequestQty.toString() : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.orderQty || 0}
+                          {item.orderQty != null ? item.orderQty.toString() : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.selectedPrice ? item.selectedPrice.toLocaleString(getLocaleForCurrency(itemCurrency), { style: 'currency', currency: itemCurrency }) : '0'}
+                          {item.price ? formatCurrency(item.price, item.currency) : '0'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {getDisplayCurrency(item.currency) || 'VND'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
-                          {item.amtVnd ? item.amtVnd.toLocaleString(getLocaleForCurrency(itemCurrency), { style: 'currency', currency: itemCurrency }) : '0'}
+                          {item.amount ? formatCurrency(item.amount, item.currency) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.highestPrice ? item.highestPrice.toLocaleString(getLocaleForCurrency(itemCurrency), { style: 'currency', currency: itemCurrency }) : '0'}
+                          {item.highestPrice ? formatCurrency(item.highestPrice, item.currency) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.amtDifference ? item.amtDifference.toLocaleString(getLocaleForCurrency(itemCurrency), { style: 'currency', currency: itemCurrency }) : '0'}
+                          {item.amtDifference ? formatCurrency(item.amtDifference, item.currency) : '0'}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.percentage ? item.percentage.toFixed(2) + '%' : '0%'}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 0.4, py: 0.2, fontSize: '0.55rem', minWidth: 200 }}>
+                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.remarkComparison || ''}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          {item.productType2Name || ''}
                         </TableCell>
                       </TableRow>
                     );
@@ -805,7 +756,7 @@ export default function ComparisonPage() {
         onClose={handleCloseEditDialog}
         onSave={() => {
           fetchUnfilteredTotals();
-          fetchData(searchValues, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
+          fetchData(searchValues);
         }}
       />
     </Box>

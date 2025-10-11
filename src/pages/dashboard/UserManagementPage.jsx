@@ -19,30 +19,38 @@ import {
   TablePagination,
   Tooltip,
   Container,
+  useTheme,
+  Snackbar,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import PersonIcon from '@mui/icons-material/Person';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ArrowUpward from '@mui/icons-material/ArrowUpward';
+import ArrowDownward from '@mui/icons-material/ArrowDownward';
 import AddUserDialog from './AddUserDialog';
 import EditUserDialog from './EditUserDialog';
-
-const API_URL = 'http://localhost:8080/users';
+import { API_BASE_URL } from '../../config';
 
 const headers = [
-  { label: 'No', key: 'no' },
-  { label: 'Username', key: 'username' },
-  { label: 'Email', key: 'email' },
-  { label: 'Address', key: 'address' },
-  { label: 'Phone', key: 'phone' },
-  { label: 'Role', key: 'role' },
-  { label: 'Profile Image', key: 'profileImage' },
-  { label: 'Actions', key: 'actions' },
+  { label: 'No', key: 'no', sortable: false },
+  { label: 'Username', key: 'username', sortable: true },
+  { label: 'Email', key: 'email', sortable: true },
+  { label: 'Address', key: 'address', sortable: true },
+  { label: 'Phone', key: 'phone', sortable: true },
+  { label: 'Role', key: 'role', sortable: true },
+  { label: 'Profile Image', key: 'profileImage', sortable: false },
+  { label: 'Actions', key: 'actions', sortable: false },
 ];
 
 const UserManagementPage = () => {
+  const theme = useTheme();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState({});
+  const [imageErrors, setImageErrors] = useState({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -50,100 +58,161 @@ const UserManagementPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalRows, setTotalRows] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  const fetchUsers = async (pageNumber = 0) => {
+  const DEFAULT_IMAGE_URL = '/default-user.png';
+
+  const normalizeImageUrl = (url) => {
+    if (!url) return null;
+    let normalized = url.replace(/\\/g, '/').replace(/^[Uu]ploads/, 'uploads/users');
+    if (!normalized.startsWith('/')) {
+      normalized = `/${normalized}`;
+    }
+    return normalized;
+  };
+
+  const fetchUsers = async (pageNumber = 0, sortKey = null, sortDirection = null, fetchAll = false) => {
     setLoading(true);
+    setImageLoading({});
+    setImageErrors({});
     try {
-      const url = `${API_URL}?page=${pageNumber}&size=${rowsPerPage}`;
-      const res = await fetch(url, {
-        headers: { accept: '*/*' },
-      });
-      if (!res.ok) throw new Error('Failed to fetch users');
-      const data = await res.json();
-      const { users: userList, totalElements } = data;
+      let allUsers = [];
+      let currentPage = pageNumber;
+      let totalPages = 1;
 
-      const mapped = userList.map((user) => ({
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        address: user.address,
-        phone: user.phone,
-        role: user.role,
-        profileImageUrl: user.profileImageUrl,
-      }));
-      setUsers(mapped);
-      setTotalRows(totalElements);
+      do {
+        const url = new URL(`${API_BASE_URL}/users?page=${currentPage}&size=${rowsPerPage}`);
+        if (sortKey && sortDirection) {
+          url.searchParams.append('sort', `${sortKey},${sortDirection}`);
+        }
+        console.log(`Fetching users: ${url.toString()}`);
+        const res = await fetch(url, {
+          headers: { accept: '*/*' },
+          credentials: 'include',
+        });
+        if (!res.ok) throw new Error(`Failed to fetch users: ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        console.log(`API Response (page ${currentPage}):`, JSON.stringify(data, null, 2));
+
+        const userList = data.users || [];
+        totalPages = data.totalPages || 1;
+        const totalItems = data.totalItems || 0;
+
+        const mapped = userList.map((user) => {
+          const imageUrl = normalizeImageUrl(user.profileImageUrl);
+          console.log(`Image URL for ${user.username}: ${API_BASE_URL}${imageUrl}`);
+          return {
+            id: user.id,
+            username: user.username || '',
+            email: user.email || '',
+            address: user.address || '',
+            phone: user.phone || '',
+            role: user.role || '',
+            profileImageUrl: imageUrl,
+          };
+        });
+
+        allUsers = fetchAll ? [...allUsers, ...mapped] : mapped;
+        setTotalRows(totalItems);
+        setTotalPages(totalPages);
+        currentPage++;
+      } while (fetchAll && currentPage < totalPages);
+
+      setUsers(allUsers);
+      setImageLoading(
+        allUsers.reduce((acc, user) => {
+          if (user.profileImageUrl) {
+            acc[user.id] = true;
+          }
+          return acc;
+        }, {})
+      );
     } catch (error) {
-      console.error(error);
+      console.error('Fetch users error:', error);
+      setSnackbarMessage('Failed to fetch users: ' + error.message);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
       setUsers([]);
+      setTotalRows(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers(page);
-  }, [page, rowsPerPage]);
+    fetchUsers(0, null, null, true); // Initial fetch of all users to check for 'dungds'
+  }, []);
 
-  const handleAdd = async (newUser) => {
-    if (!newUser.username.trim() || !newUser.email.trim() || !newUser.password.trim()) return;
+  useEffect(() => {
+    fetchUsers(page, sortConfig.key, sortConfig.direction, false); // Fetch current page on pagination/sort change
+  }, [page, rowsPerPage, sortConfig]);
+
+  const handleAdd = async (data) => {
+    if (!data || !data.data) {
+      setSnackbarMessage('Invalid user data.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
     try {
-      const res = await fetch(`${API_URL}/add`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          accept: '*/*',
-        },
-        body: JSON.stringify({
-          ...newUser,
-          id: `temp_${Date.now()}`,
-          profileImageUrl: '',
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to add user');
       setAddDialogOpen(false);
-      fetchUsers(page);
+      fetchUsers(page, sortConfig.key, sortConfig.direction, false);
+      setSnackbarMessage(data.message || 'User added successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     } catch (error) {
       console.error('Add user error:', error);
+      setSnackbarMessage('Failed to add user: ' + error.message);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
   };
 
-  const handleUpdate = async (updatedUser, profileImage) => {
-    if (!updatedUser) return;
+  const handleUpdate = async (data) => {
+    if (!data || !data.data) {
+      setSnackbarMessage('Invalid user data.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
     try {
-      const formData = new FormData();
-      formData.append('user', JSON.stringify(updatedUser));
-      if (profileImage) {
-        formData.append('profileImage', profileImage);
-      }
-
-      const res = await fetch(`${API_URL}/${updatedUser.id}`, {
-        method: 'PUT',
-        headers: {
-          accept: '*/*',
-        },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Failed to update user');
       setEditDialogOpen(false);
-      fetchUsers(page);
+      fetchUsers(page, sortConfig.key, sortConfig.direction, false);
+      setSnackbarMessage(data.message || 'User updated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     } catch (error) {
       console.error('Update user error:', error);
+      setSnackbarMessage('Failed to update user: ' + error.message);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
   };
 
   const handleConfirmDelete = async () => {
     if (!selectedUser) return;
     try {
-      const res = await fetch(`${API_URL}/${selectedUser.id}`, {
+      const res = await fetch(`${API_BASE_URL}/users/${selectedUser.id}`, {
         method: 'DELETE',
         headers: { accept: '*/*' },
+        credentials: 'include',
       });
-      if (!res.ok) throw new Error('Failed to delete user');
+      if (!res.ok) throw new Error(`Failed to delete user: ${res.status} ${res.statusText}`);
+      setSnackbarMessage('User deleted successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
       setDeleteDialogOpen(false);
-      fetchUsers(page);
+      fetchUsers(page, sortConfig.key, sortConfig.direction, false);
     } catch (error) {
       console.error('Delete user error:', error);
+      setSnackbarMessage('Failed to delete user: ' + error.message);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
   };
 
@@ -166,9 +235,40 @@ const UserManagementPage = () => {
     setPage(0);
   };
 
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null;
+    }
+    setSortConfig({ key: direction ? key : null, direction });
+  };
+
+  const handleImageLoad = (userId) => {
+    console.log(`Image loaded successfully for user ID: ${userId}`);
+    setImageLoading((prev) => ({ ...prev, [userId]: false }));
+    setImageErrors((prev) => ({ ...prev, [userId]: false }));
+  };
+
+  const handleImageError = (userId, username, imageUrl) => {
+    console.error(`Failed to load image for ${username}: ${imageUrl}`);
+    setImageLoading((prev) => ({ ...prev, [userId]: false }));
+    setImageErrors((prev) => ({ ...prev, [userId]: true }));
+    setSnackbarMessage(`Failed to load image for ${username}. Click to retry.`);
+    setSnackbarSeverity('warning');
+    setSnackbarOpen(true);
+  };
+
+  const handleRetryImage = (userId) => {
+    setImageLoading((prev) => ({ ...prev, [userId]: true }));
+    setImageErrors((prev) => ({ ...prev, [userId]: false }));
+    setSnackbarOpen(false);
+  };
+
   return (
     <Box sx={{ bgcolor: '#f5f7fa', minHeight: '100vh', py: 6 }}>
-      <Container maxWidth="lg">
+      <Container maxWidth="xl">
         <Stack
           direction="row"
           alignItems="center"
@@ -230,21 +330,22 @@ const UserManagementPage = () => {
                 overflowX: 'auto',
                 maxHeight: 640,
                 boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+                width: '100%',
               }}
             >
-              <Table stickyHeader size="medium" sx={{ minWidth: 1200 }}>
+              <Table stickyHeader size="medium" sx={{ minWidth: 1400, width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                    {headers.map(({ label, key }) => (
+                    {headers.map(({ label, key, sortable }) => (
                       <TableCell
                         key={key}
                         align={['No', 'Profile Image', 'Actions'].includes(label) ? 'center' : 'left'}
                         sx={{
                           fontWeight: 'bold',
-                          fontSize: '0.75rem',
+                          fontSize: '0.8rem',
                           color: '#ffffff',
-                          py: 1,
-                          px: 1,
+                          py: 1.5,
+                          px: 2,
                           whiteSpace: 'nowrap',
                           borderRight: '1px solid rgba(255,255,255,0.15)',
                           '&:last-child': { borderRight: 'none' },
@@ -252,17 +353,36 @@ const UserManagementPage = () => {
                           top: 0,
                           zIndex: 20,
                           backgroundColor: '#027aff',
+                          cursor: sortable ? 'pointer' : 'default',
+                          '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                         }}
+                        onClick={() => sortable && handleSort(key)}
                       >
                         <Tooltip title={label} arrow>
-                          <span>{label}</span>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Actions' ? 'center' : 'flex-start' }}>
+                            <span>{label}</span>
+                            {sortable && (
+                              <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
+                                {sortConfig.key === key && sortConfig.direction === 'asc' ? (
+                                  <ArrowUpward sx={{ fontSize: '1rem', color: '#fff' }} />
+                                ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
+                                  <ArrowDownward sx={{ fontSize: '1rem', color: '#fff' }} />
+                                ) : (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <ArrowUpward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
+                                    <ArrowDownward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
+                                  </Box>
+                                )}
+                              </Box>
+                            )}
+                          </Box>
                         </Tooltip>
                       </TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {users.map((user, idx) => (
+                  {users.slice(page * rowsPerPage, (page + 1) * rowsPerPage).map((user, idx) => (
                     <TableRow
                       key={user.id}
                       sx={{
@@ -271,7 +391,7 @@ const UserManagementPage = () => {
                           backgroundColor: '#e1f0ff',
                           transition: 'background-color 0.3s ease',
                         },
-                        fontSize: '0.8rem',
+                        fontSize: '0.85rem',
                         cursor: 'default',
                         userSelect: 'none',
                       }}
@@ -280,7 +400,7 @@ const UserManagementPage = () => {
                         align="center"
                         sx={{
                           px: 2,
-                          py: 1.2,
+                          py: 1.5,
                           position: 'sticky',
                           left: 0,
                           zIndex: 1,
@@ -289,53 +409,55 @@ const UserManagementPage = () => {
                       >
                         {page * rowsPerPage + idx + 1}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2, fontWeight: 600 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5, fontWeight: 600 }}>
                         {user.username || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
                         {user.email || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
                         {user.address || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
                         {user.phone || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.2 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
                         {user.role || ''}
                       </TableCell>
-                      <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
-                        {user.profileImageUrl ? (
-                          <Box
-                            sx={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: '50%',
-                              overflow: 'hidden',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
+                      <TableCell align="center" sx={{ px: 2, py: 1.5 }}>
+                        <Box
+                          sx={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {imageLoading[user.id] ? (
+                            <CircularProgress size={24} />
+                          ) : user.profileImageUrl && !imageErrors[user.id] ? (
                             <img
-                              src={user.profileImageUrl}
+                              src={`${API_BASE_URL}${user.profileImageUrl}`}
                               alt={user.username}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
+                              onLoad={() => handleImageLoad(user.id)}
+                              onError={() => handleImageError(user.id, user.username, `${API_BASE_URL}${user.profileImageUrl}`)}
                             />
-                            <PersonIcon
-                              sx={{ fontSize: 30, color: '#1976d2' }}
-                              style={{ display: 'none' }}
+                          ) : (
+                            <img
+                              src={`${API_BASE_URL}${DEFAULT_IMAGE_URL}`}
+                              alt="Default User"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onLoad={() => handleImageLoad(user.id)}
+                              onError={() => handleImageError(user.id, user.username, `${API_BASE_URL}${DEFAULT_IMAGE_URL}`)}
                             />
-                          </Box>
-                        ) : (
-                          <PersonIcon sx={{ fontSize: 30, color: '#1976d2' }} />
-                        )}
+                          )}
+                        </Box>
                       </TableCell>
-                      <TableCell align="center" sx={{ px: 2, py: 1.2 }}>
+                      <TableCell align="center" sx={{ px: 2, py: 1.5 }}>
                         <Stack direction="row" spacing={1} justifyContent="center">
                           <IconButton
                             aria-label="edit"
@@ -372,23 +494,22 @@ const UserManagementPage = () => {
             </TableContainer>
 
             <TablePagination
-              rowsPerPageOptions={[10, 25, 50, 100]}
+              rowsPerPageOptions={[5, 10, 25]}
               component="div"
               count={totalRows}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
-              labelRowsPerPage="Rows per page:"
               sx={{
-                mt: 3,
+                mt: 1,
                 '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
                   fontSize: '0.85rem',
-                  color: '#424242',
+                  color: theme.palette.text.secondary,
                 },
                 '.MuiTablePagination-select': { fontSize: '0.85rem' },
                 '.MuiTablePagination-actions > button': {
-                  color: '#1976d2',
+                  color: theme.palette.primary.main,
                 },
               }}
             />
@@ -409,23 +530,58 @@ const UserManagementPage = () => {
         />
 
         <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle sx={{ bgcolor: '#ef5350', color: '#fff', py: 2 }}>
-            Delete User
-          </DialogTitle>
-          <DialogContent sx={{ pt: 3 }}>
-            <Typography variant="body1" sx={{ color: '#1e293b' }}>
-              Are you sure you want to delete this user?
+          <DialogTitle sx={{ fontSize: '1rem' }}>Delete User</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+              Are you sure you want to delete &quot;{selectedUser?.username || 'Unknown'}&quot;?
             </Typography>
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
-            <Button onClick={() => setDeleteDialogOpen(false)} variant="outlined" color="secondary">
+          <DialogActions>
+            <Button onClick={() => setDeleteDialogOpen(false)} sx={{ fontSize: '0.85rem' }}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmDelete} variant="contained" color="error">
+            <Button
+              onClick={handleConfirmDelete}
+              variant="contained"
+              color="error"
+              sx={{ fontSize: '0.85rem' }}
+              disabled={loading}
+            >
               Delete
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={5000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setSnackbarOpen(false)}
+            severity={snackbarSeverity}
+            sx={{ width: '100%' }}
+            action={
+              snackbarSeverity === 'warning' && (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    const failedUser = users.find((user) => imageErrors[user.id]);
+                    if (failedUser) {
+                      handleRetryImage(failedUser.id);
+                    }
+                  }}
+                >
+                  Retry
+                </Button>
+              )
+            }
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </Container>
     </Box>
   );

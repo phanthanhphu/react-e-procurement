@@ -6,7 +6,7 @@ import {
   ArrangeHorizontalSquare,
   Location,
   Box, // Icon for Product Type Management
-  Profile  // Icon for User Management
+  Profile // Icon for User Management
 } from 'iconsax-reactjs';
 
 // icons
@@ -15,69 +15,103 @@ const icons = {
   dashboard: HomeTrendUp,
   summary: Chart,
   comparison: ArrangeHorizontalSquare,
-  supplierproducts: Location, // Changed from 'locations' to 'supplierproducts'
-  groupRequest: ArrangeHorizontalSquare, // Add icon for group request
-  productType: Box, // Icon for Product Type Management
-  userManagement: Profile  // Icon for User Management
+  supplierproducts: Location,
+  groupRequest: ArrangeHorizontalSquare,
+  productType: Box,
+  userManagement: Profile
+};
+
+// CSS styles for menu items and icons
+const menuStyles = {
+  menuItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '10px 16px',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: '#333',
+    borderRadius: '8px',
+    margin: '4px 8px',
+    transition: 'background-color 0.2s, color 0.2s',
+    '&:hover': {
+      backgroundColor: '#f5f5f5',
+      color: '#1976d2'
+    }
+  },
+  icon: {
+    marginRight: '12px',
+    fontSize: '24px',
+    color: '#666',
+    transition: 'color 0.2s'
+  },
+  iconActive: {
+    color: '#1976d2'
+  },
+  groupTitle: {
+    fontSize: '1rem',
+    fontWeight: 600,
+    color: '#1976d2',
+    padding: '16px 8px 8px',
+    textTransform: 'uppercase'
+  }
 };
 
 // ==============================|| MENU ITEMS - DASHBOARD ||============================== //
 
 const dashboard = {
   id: 'group-dashboard',
-  title: 'Management', // Set title for group as "Management"
+  title: 'Management',
   icon: icons.navigation,
   type: 'group',
   children: [
     {
       id: 'dashboard',
-      title: 'Dashboard', // Changed to "Dashboard Management"
+      title: 'Dashboard',
       type: 'item',
       url: '/dashboard',
       icon: icons.dashboard,
       breadcrumbs: false
     },
     {
-      id: 'grouprequest', // New id for Group Request
-      title: 'Group Requests', // Changed to "Group Request Management"
+      id: 'grouprequest',
+      title: 'Group Requests',
       type: 'item',
-      url: '/dashboard/group-requests', // New URL for Group Request
-      icon: icons.groupRequest, // Icon for Group Request
+      url: '/dashboard/group-requests',
+      icon: icons.groupRequest,
       breadcrumbs: false
     },
     {
-      id: 'supplierproducts', // Changed id from 'locations' to 'supplierproducts'
-      title: 'Products', // Changed to "Supplier Products Management"
+      id: 'supplierproducts',
+      title: 'Products',
       type: 'item',
-      url: '/dashboard/supplier-products', // Changed url from '/locations' to '/supplier-products'
+      url: '/dashboard/supplier-products',
       icon: icons.supplierproducts,
       breadcrumbs: false
     },
     {
       id: 'department-management',
-      title: 'Departments', // Changed from "Department Management" to "Department Management"
+      title: 'Departments',
       type: 'item',
       url: '/dashboard/department-management',
       icon: icons.summary,
       breadcrumbs: false
     },
-      {
-        id: 'product-type-management',
-        title: 'Product Types',
-        type: 'item',
-        url: '/dashboard/product-type-management',
-        icon: icons.summary, // hoặc chọn icon khác tùy thích
-        breadcrumbs: false
-      },
-      {
-        id: 'user-management',
-        title: 'Users',
-        type: 'item',
-        url: '/dashboard/user-management',
-        icon: icons.summary, // hoặc chọn icon khác tùy thích
-        breadcrumbs: false
-      }
-
+    {
+      id: 'product-type-management',
+      title: 'Product Types',
+      type: 'item',
+      url: '/dashboard/product-type-management',
+      icon: icons.productType, // Sử dụng icon Box
+      breadcrumbs: false
+    },
+    {
+      id: 'user-management',
+      title: 'Users',
+      type: 'item',
+      url: '/dashboard/user-management',
+      icon: icons.userManagement, // Sử dụng icon Profile
+      breadcrumbs: false
+    }
   ]
 };
 

@@ -13,7 +13,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
   const [selectedProductType2Id, setSelectedProductType2Id] = useState(null);
   const [error, setError] = useState(null);
 
-  // Lấy danh sách product-type-1 khi component mount
+  // Fetch product-type-1 list when component mounts
   useEffect(() => {
     const fetchProductType1 = async () => {
       try {
@@ -21,14 +21,14 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         setProductType1Options(response.data.content);
         setFilteredProductType1Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-1. Vui lòng thử lại.');
+        setError('Failed to load product-type-1 list. Please try again.');
         console.error("Error fetching product type 1:", error);
       }
     };
     fetchProductType1();
   }, []);
 
-  // Lấy danh sách product-type-2 ban đầu, sử dụng selectedProductType1Id nếu có
+  // Fetch product-type-2 list, using selectedProductType1Id if available
   useEffect(() => {
     const fetchProductType2 = async () => {
       try {
@@ -42,14 +42,14 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         setProductType2Options(response.data.content);
         setFilteredProductType2Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-2. Vui lòng thử lại.');
+        setError('Failed to load product-type-2 list. Please try again.');
         console.error("Error fetching product type 2:", error);
       }
     };
     fetchProductType2();
   }, [selectedProductType1Id]);
 
-  // Xử lý tìm kiếm product-type-1
+  // Handle product-type-1 search input
   const handleProductType1Change = async (event, value) => {
     onSearchChange({ ...searchValues, productType1Name: value || '' });
     try {
@@ -58,18 +58,18 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
       });
       setFilteredProductType1Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-1. Vui lòng thử lại.');
+      setError('Failed to search product-type-1. Please try again.');
       console.error("Error searching product type 1:", error);
     }
   };
 
-  // Xử lý chọn product-type-1
+  // Handle product-type-1 selection
   const handleProductType1Select = (event, value) => {
     setSelectedProductType1Id(value ? value.id : null);
     onSearchChange({ ...searchValues, productType1Name: value ? value.name : '' });
   };
 
-  // Xử lý tìm kiếm product-type-2
+  // Handle product-type-2 search input
   const handleProductType2Change = async (event, value) => {
     onSearchChange({ ...searchValues, productType2Name: value || '' });
     try {
@@ -84,28 +84,28 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
       setProductType2Options(response.data.content);
       setFilteredProductType2Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-2. Vui lòng thử lại.');
+      setError('Failed to search product-type-2. Please try again.');
       console.error("Error searching product type 2:", error);
     }
   };
 
-  // Xử lý chọn product-type-2
+  // Handle product-type-2 selection
   const handleProductType2Select = (event, value) => {
     setSelectedProductType2Id(value ? value.id : null);
     onSearchChange({ ...searchValues, productType2Name: value ? value.name : '' });
   };
 
-  // Xử lý input change cho các trường khác
+  // Handle input changes for other fields
   const handleInputChange = (field) => (e) => {
     onSearchChange({ ...searchValues, [field]: e.target.value });
   };
 
-  // Xử lý search
+  // Handle search action
   const handleSearch = () => {
     onSearch({ productType1Id: selectedProductType1Id, productType2Id: selectedProductType2Id });
   };
 
-  // Xử lý reset
+  // Handle reset action
   const handleReset = () => {
     setSelectedProductType1Id(null);
     setSelectedProductType2Id(null);
@@ -114,7 +114,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
     onReset();
   };
 
-  // Đóng Snackbar lỗi
+  // Close error Snackbar
   const handleCloseError = () => {
     setError(null);
   };
@@ -162,7 +162,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Product Type 1 Name"
+                label="Product Type 1"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -185,7 +185,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Product Type 2 Name"
+                label="Product Type 2"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -199,7 +199,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="English Name"
+            label="Item Description (EN)"
             variant="outlined"
             size="small"
             value={searchValues.englishName || ''}
@@ -213,7 +213,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Vietnamese Name"
+            label="Item Description (VN)"
             variant="outlined"
             size="small"
             value={searchValues.vietnameseName || ''}
@@ -272,11 +272,11 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="New SAP Code"
+            label="Hana SAP Code"
             variant="outlined"
             size="small"
-            value={searchValues.newSapCode || ''}
-            onChange={handleInputChange('newSapCode')}
+            value={searchValues.hanaSapCode || ''}
+            onChange={handleInputChange('hanaSapCode')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -286,11 +286,11 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Unit"
+            label="Supplier Description"
             variant="outlined"
             size="small"
-            value={searchValues.unit || ''}
-            onChange={handleInputChange('unit')}
+            value={searchValues.supplierName || ''}
+            onChange={handleInputChange('supplierName')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -300,7 +300,7 @@ export default function RequisitionSearch({ searchValues, onSearchChange, onSear
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Department Name"
+            label="Department"
             variant="outlined"
             size="small"
             value={searchValues.departmentName || ''}

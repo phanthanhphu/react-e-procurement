@@ -46,6 +46,7 @@ const headers = [
   { label: 'Created By', key: 'createdBy', sortable: true },
   { label: 'Created Date', key: 'createdDate', sortable: true },
   { label: 'Stock Date', key: 'stockDate', sortable: true },
+  { label: 'Currency', key: 'currency', sortable: true },
   { label: 'Actions', key: 'actions', sortable: false },
 ];
 
@@ -56,6 +57,7 @@ const fetchGroups = async (
   status = '',
   createdBy = '',
   type = '',
+  currency = '',
   startDate = null,
   endDate = null,
   stockStartDate = null,
@@ -69,6 +71,7 @@ const fetchGroups = async (
       status: status || '',
       createdBy: createdBy || '',
       type: type || '',
+      currency: currency || '',
     });
     if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DD'));
     if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DD'));
@@ -134,10 +137,23 @@ const getStatusColor = (status) => {
 
 const getTypeColor = (type) => {
   switch (type) {
-    case 'Requisition_urgent':
-      return '#e57373'; // Red
     case 'Requisition_monthly':
       return '#64b5f6'; // Blue
+    case 'Requisition_weekly':
+      return '#e57373'; // Red
+    default:
+      return '#9e9e9e'; // Gray
+  }
+};
+
+const getCurrencyColor = (currency) => {
+  switch (currency) {
+    case 'VND':
+      return '#4caf50'; // Green
+    case 'EURO':
+      return '#2196f3'; // Blue
+    case 'USD':
+      return '#e57373'; // Red
     default:
       return '#9e9e9e'; // Gray
   }
@@ -147,11 +163,12 @@ export default function GroupRequestPage() {
   const theme = useTheme();
   const navigate = useNavigate();
   const [data, setData] = useState([]);
-  const [originalData, setOriginalData] = useState([]); // Store original data for sorting
+  const [originalData, setOriginalData] = useState([]);
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [currencyFilter, setCurrencyFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
   const [stockDateRange, setStockDateRange] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -178,6 +195,7 @@ export default function GroupRequestPage() {
       statusFilter,
       createdByFilter,
       typeFilter,
+      currencyFilter,
       startDate,
       endDate,
       stockStartDate,
@@ -185,10 +203,10 @@ export default function GroupRequestPage() {
     );
     console.log('Fetched groups:', content);
     setData(content || []);
-    setOriginalData(content || []); // Store original data
+    setOriginalData(content || []);
     setTotalPages(totalPages || 1);
     setLoading(false);
-  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, dateRange, stockDateRange]);
+  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter, dateRange, stockDateRange]);
 
   useEffect(() => {
     fetchData();
@@ -265,6 +283,7 @@ export default function GroupRequestPage() {
     setStatusFilter('');
     setCreatedByFilter('');
     setTypeFilter('');
+    setCurrencyFilter('');
     setDateRange([]);
     setStockDateRange([]);
     setPage(0);
@@ -277,17 +296,16 @@ export default function GroupRequestPage() {
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null; // Reset to unsorted state
+      direction = null;
     }
     setSortConfig({ key: direction ? key : null, direction });
-    setPage(0); // Reset to first page on sort
+    setPage(0);
 
     if (!direction) {
-      setData([...originalData]); // Restore original data
+      setData([...originalData]);
       return;
     }
 
-    // Sort data locally
     const sortedData = [...data].sort((a, b) => {
       let aValue = a[key];
       let bValue = b[key];
@@ -374,7 +392,7 @@ export default function GroupRequestPage() {
             },
           }}
         >
-          Add New Request Group
+          Add Request Group
         </Button>
       </Stack>
 
@@ -383,10 +401,12 @@ export default function GroupRequestPage() {
         statusFilter={statusFilter}
         createdByFilter={createdByFilter}
         typeFilter={typeFilter}
+        currencyFilter={currencyFilter}
         setNameFilter={setNameFilter}
         setStatusFilter={setStatusFilter}
         setCreatedByFilter={setCreatedByFilter}
         setTypeFilter={setTypeFilter}
+        setCurrencyFilter={setCurrencyFilter}
         dateRange={dateRange}
         setDateRange={setDateRange}
         stockDateRange={stockDateRange}
@@ -424,13 +444,13 @@ export default function GroupRequestPage() {
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 800 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 900 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {headers.map(({ label, key, sortable }) => (
                     <TableCell
                       key={key}
-                      align={['No', 'Status', 'Actions'].includes(label) ? 'center' : 'left'}
+                      align={['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'left'}
                       sx={{
                         fontWeight: 'bold',
                         fontSize: '0.55rem',
@@ -447,10 +467,14 @@ export default function GroupRequestPage() {
                         ...(key === 'no' && { left: 0, zIndex: 21 }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
+                        ...(label === 'Name' && { width: '200px' }),
+                        ...(label === 'Created By' && { width: '150px' }),
+                        ...(label === 'Created Date' && { width: '120px' }),
+                        ...(label === 'Stock Date' && { width: '120px' }),
                       }}
                       onClick={() => sortable && handleSort(key)}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['No', 'Status', 'Actions'].includes(label) ? 'center' : 'flex-start' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'flex-start' }}>
                         <Tooltip title={label} arrow>
                           <span>{label}</span>
                         </Tooltip>
@@ -507,10 +531,19 @@ export default function GroupRequestPage() {
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            width: '200px',
+                          }}
+                        >
                           {group.name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           <Box
                             sx={{
                               padding: '2px 6px',
@@ -522,10 +555,10 @@ export default function GroupRequestPage() {
                               display: 'inline-block',
                             }}
                           >
-                            {group.type === 'Requisition_urgent'
-                              ? 'Requisition Urgent'
-                              : group.type === 'Requisition_monthly'
-                              ? 'Requisition Monthly'
+                            {group.type === 'Requisition_monthly'
+                              ? 'Monthly Requisition'
+                              : group.type === 'Requisition_weekly'
+                              ? 'Weekly Requisition'
                               : 'Unknown'}
                           </Box>
                         </TableCell>
@@ -549,14 +582,38 @@ export default function GroupRequestPage() {
                             {group.status || ''}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            width: '150px',
+                          }}
+                        >
                           {group.createdBy || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', width: '120px' }}>
                           {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', width: '120px' }}>
                           {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                          <Box
+                            sx={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.55rem',
+                              fontWeight: 600,
+                              color: '#fff',
+                              backgroundColor: getCurrencyColor(group.currency),
+                              display: 'inline-block',
+                            }}
+                          >
+                            {group.currency || 'N/A'}
+                          </Box>
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
                           <Stack direction="row" spacing={0.2} justifyContent="center">
@@ -574,7 +631,7 @@ export default function GroupRequestPage() {
                                 console.log('Navigating to group:', group.id, 'type:', group.type);
                                 if (group.type === 'Requisition_monthly') {
                                   navigate(`/dashboard/requisition-monthly/${group.id}`);
-                                } else if (group.type === 'Requisition_urgent') {
+                                } else if (group.type === 'Requisition_weekly') {
                                   navigate(`/dashboard/summary/${group.id}`);
                                 } else {
                                   navigate(`/dashboard/summary/${group.id}`);
@@ -682,7 +739,7 @@ export default function GroupRequestPage() {
         <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Group</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
-            Are you sure you want to delete &quot;{selectedGroup?.name || 'Unknown'}&quot;?
+            Are you sure you want to delete "{selectedGroup?.name || 'Unknown'}"?
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -696,7 +753,7 @@ export default function GroupRequestPage() {
             sx={{ fontSize: '0.65rem' }}
             disabled={loading}
           >
-            Delete
+            Deletess
           </Button>
         </DialogActions>
       </Dialog>

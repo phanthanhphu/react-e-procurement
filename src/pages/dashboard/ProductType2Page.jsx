@@ -99,6 +99,16 @@ function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsP
     );
   }
 
+  // Hàm chuyển đổi mảng createdDate sang định dạng DD/MM/YYYY
+  const formatCreatedDate = (createdDateArray) => {
+    if (!createdDateArray || createdDateArray.length < 3) return '';
+    const [year, month, day] = createdDateArray;
+    const formattedDay = String(day).padStart(2, '0');
+    const formattedMonth = String(month).padStart(2, '0');
+    const formattedYear = year;
+    return `${formattedDay}/${formattedMonth}/${formattedYear}`;
+  };
+
   return (
     <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
       <Table size="small" sx={{ minWidth: 600 }}>
@@ -163,7 +173,7 @@ function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsP
               </TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>{productType.name || ''}</TableCell>
               <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>
-                {productType.createdDate ? new Date(...productType.createdDate).toLocaleString() : ''}
+                {formatCreatedDate(productType.createdDate)}
               </TableCell>
               <TableCell align="center" sx={{ py: 0.3, px: 0.5 }}>
                 <Stack direction="row" spacing={0.2} justifyContent="center">
@@ -441,9 +451,12 @@ export default function ProductType2Page() {
       if (bValue === null || bValue === undefined) bValue = '';
 
       if (key === 'createdDate') {
-        aValue = new Date(...aValue).getTime();
-        bValue = new Date(...bValue).getTime();
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+        if (aValue.length < 3 || bValue.length < 3) return 0;
+        const [aYear, aMonth, aDay] = aValue;
+        const [bYear, bMonth, bDay] = bValue;
+        const aDate = new Date(aYear, aMonth - 1, aDay);
+        const bDate = new Date(bYear, bMonth - 1, bDay);
+        return direction === 'asc' ? aDate - bDate : bDate - aDate;
       }
 
       return direction === 'asc'
@@ -523,6 +536,7 @@ export default function ProductType2Page() {
         <ArrowBack />
       </IconButton>
       <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1.25rem' }}>
+        Product Type 2
       </Typography>
       <Stack direction="row" spacing={1} mb={1} justifyContent="space-between" alignItems="center">
         <ProductType2Search
@@ -547,7 +561,7 @@ export default function ProductType2Page() {
           }}
           disabled={loading}
         >
-          Add Sub-Type
+          Add Product Type 2
         </Button>
       </Stack>
       {loading && (
@@ -608,7 +622,7 @@ export default function ProductType2Page() {
         }}
       />
       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Add Sub Type</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Add Product Type 2</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -639,7 +653,7 @@ export default function ProductType2Page() {
         </DialogActions>
       </Dialog>
       <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type 2</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus

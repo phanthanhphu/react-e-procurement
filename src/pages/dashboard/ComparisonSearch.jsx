@@ -21,7 +21,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         setProductType1Options(response.data.content);
         setFilteredProductType1Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-1. Vui lòng thử lại.');
+        setError('Failed to load product-type-1 list. Please try again.');
         console.error("Error fetching product type 1:", error);
       }
     };
@@ -42,7 +42,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         setProductType2Options(response.data.content);
         setFilteredProductType2Options(response.data.content);
       } catch (error) {
-        setError('Không thể tải danh sách product-type-2. Vui lòng thử lại.');
+        setError('Failed to load product-type-2 list. Please try again.');
         console.error("Error fetching product type 2:", error);
       }
     };
@@ -58,7 +58,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
       });
       setFilteredProductType1Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-1. Vui lòng thử lại.');
+      setError('Failed to search product-type-1. Please try again.');
       console.error("Error searching product type 1:", error);
     }
   };
@@ -84,7 +84,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
       setProductType2Options(response.data.content);
       setFilteredProductType2Options(response.data.content);
     } catch (error) {
-      setError('Không thể tìm kiếm product-type-2. Vui lòng thử lại.');
+      setError('Failed to search product-type-2. Please try again.');
       console.error("Error searching product type 2:", error);
     }
   };
@@ -102,16 +102,26 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
 
   // Handle search
   const handleSearch = () => {
+    const hasFilters =
+      searchValues.productType1Name ||
+      searchValues.productType2Name ||
+      searchValues.englishName ||
+      searchValues.vietnameseName ||
+      searchValues.oldSapCode ||
+      searchValues.hanaSapCode ||
+      searchValues.supplierName ||
+      searchValues.departmentName;
+
     onSearch({
-      productType1Name: searchValues.productType1Name,
-      productType2Name: searchValues.productType2Name,
-      englishName: searchValues.englishName,
-      vietnameseName: searchValues.vietnameseName,
-      oldSapCode: searchValues.oldSapCode,
-      newSapCode: searchValues.newSapCode,
-      unit: searchValues.unit,
-      departmentName: searchValues.departmentName,
-      filter: true, // Always set filter to true
+      productType1Name: searchValues.productType1Name || '',
+      productType2Name: searchValues.productType2Name || '',
+      englishName: searchValues.englishName || '',
+      vietnameseName: searchValues.vietnameseName || '',
+      oldSapCode: searchValues.oldSapCode || '',
+      hanaSapCode: searchValues.hanaSapCode || '',
+      supplierName: searchValues.supplierName || '',
+      departmentName: searchValues.departmentName || '',
+      filter: hasFilters, // Set filter to true if any filter field is non-empty
     });
   };
 
@@ -122,6 +132,17 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
     setFilteredProductType1Options(productType1Options);
     setFilteredProductType2Options(productType2Options);
     onReset();
+    onSearchChange({
+      productType1Name: '',
+      productType2Name: '',
+      englishName: '',
+      vietnameseName: '',
+      oldSapCode: '',
+      hanaSapCode: '',
+      supplierName: '',
+      departmentName: '',
+      filter: false, // Ensure filter is false on reset
+    });
   };
 
   // Close error Snackbar
@@ -172,7 +193,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Group Type 1"
+                label="Product Type 1"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -195,7 +216,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Group Type 2"
+                label="Product Type 2"
                 variant="outlined"
                 size="small"
                 sx={{
@@ -209,7 +230,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Item Description (EN)"
+            label="Item Description (English)"
             variant="outlined"
             size="small"
             value={searchValues.englishName || ''}
@@ -223,7 +244,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Item Description (VN)"
+            label="Item Description (Vietnamese)"
             variant="outlined"
             size="small"
             value={searchValues.vietnameseName || ''}
@@ -282,11 +303,11 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="SAP Code in New SAP"
+            label="Hana SAP Code"
             variant="outlined"
             size="small"
-            value={searchValues.newSapCode || ''}
-            onChange={handleInputChange('newSapCode')}
+            value={searchValues.hanaSapCode || ''}
+            onChange={handleInputChange('hanaSapCode')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -296,11 +317,11 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Order Unit"
+            label="Supplier Name"
             variant="outlined"
             size="small"
-            value={searchValues.unit || ''}
-            onChange={handleInputChange('unit')}
+            value={searchValues.supplierName || ''}
+            onChange={handleInputChange('supplierName')}
             sx={{
               '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
               '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
@@ -310,7 +331,7 @@ export default function ComparisonSearch({ searchValues, onSearchChange, onSearc
         </Box>
         <Box sx={{ width: '20%', minWidth: 150 }}>
           <TextField
-            label="Department Name"
+            label="Department"
             variant="outlined"
             size="small"
             value={searchValues.departmentName || ''}

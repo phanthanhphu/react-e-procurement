@@ -42,23 +42,30 @@ import { API_BASE_URL } from '../../config';
 // Define table headers for the requisition table
 const headers = [
   { label: 'No', key: 'no', sortable: false },
-  { label: 'Group Type 1', key: 'groupItem1', sortable: true },
-  { label: 'Group Type 2', key: 'groupItem2', sortable: true },
-  { label: 'Item Description (EN)', key: 'itemDescriptionEN', sortable: true },
-  { label: 'Item Description (VN)', key: 'itemDescriptionVN', sortable: true },
-  { label: 'Old SAP Code', key: 'oldSAPCode', sortable: true },
-  { label: 'SAP Code in New SAP', key: 'sapCodeNewSAP', sortable: true },
-  { label: 'Order Unit', key: 'unit', sortable: true },
+  { label: 'Product Type 1', key: 'groupItem1', sortable: true, backendKey: 'productType1Name' },
+  { label: 'Product Type 2', key: 'groupItem2', sortable: true, backendKey: 'productType2Name' },
+  { label: 'Item Description (EN)', key: 'itemDescriptionEN', sortable: true, backendKey: 'itemDescriptionEN' },
+  { label: 'Item Description (VN)', key: 'itemDescriptionVN', sortable: true, backendKey: 'itemDescriptionVN' },
+  { label: 'Old SAP Code', key: 'oldSapCode', sortable: true, backendKey: 'oldSAPCode' },
+  { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true, backendKey: 'hanaSAPCode' },
+  { label: 'Unit', key: 'unit', sortable: true, backendKey: 'unit' },
   { label: 'Department', key: 'departmentRequests', sortable: false },
-  { label: 'Buying Qty', key: 'sumBuy', sortable: true },
-  { label: 'Total Not Issued Qty', key: 'totalNotIssuedQty', sortable: true },
-  { label: 'In Hand', key: 'inHand', sortable: true },
-  { label: 'Actual In Hand', key: 'actualInHand', sortable: true },
-  { label: 'Order Qty', key: 'orderQty', sortable: true },
-  { label: 'Full Description', key: 'fullDescription', sortable: true },
-  { label: 'Reason', key: 'reason', sortable: true },
-  { label: 'Remark', key: 'remark', sortable: true },
-  { label: 'Remark Comparison', key: 'remarkComparison', sortable: true },
+  { label: 'Request Qty', key: 'totalRequestQty', sortable: true, backendKey: 'totalRequestQty' },
+  { label: 'Order Qty', key: 'orderQty', sortable: true, backendKey: 'orderQty' },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
+  { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
+  { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
+  { label: 'Amount', key: 'amount', sortable: true, backendKey: 'amount' },
+  { label: 'Daily Med Inventory', key: 'dailyMedInventory', sortable: true, backendKey: 'dailyMedInventory' },
+  { label: 'Safe Stock', key: 'safeStock', sortable: true, backendKey: 'safeStock' },
+  { label: 'Use Stock Qty', key: 'useStockQty', sortable: true, backendKey: 'useStockQty' },
+  { label: 'Full Description', key: 'fullDescription', sortable: true, backendKey: 'fullDescription' },
+  { label: 'Reason', key: 'reason', sortable: true, backendKey: 'reason' },
+  { label: 'Remark', key: 'remark', sortable: true, backendKey: 'remark' },
+  { label: 'Good Type', key: 'goodType', sortable: true, backendKey: 'goodType' },
+  { label: 'Remark Comparison', key: 'remarkComparison', sortable: true, backendKey: 'remarkComparison' },
+  { label: 'Created Date', key: 'createdDate', sortable: true, backendKey: 'createdDate' },
+  { label: 'Updated Date', key: 'updatedDate', sortable: true, backendKey: 'updatedDate' },
   { label: 'Images', key: 'image', sortable: false },
   { label: 'Actions', key: 'actions', sortable: false },
 ];
@@ -163,9 +170,10 @@ export default function RequisitionMonthlyPage() {
   // State management
   const [data, setData] = useState([]);
   const [originalData, setOriginalData] = useState([]); // Store original data for resetting
-  const [groupStatus, setGroupStatus] = useState(null); // New state for group status
+  const [groupStatus, setGroupStatus] = useState(null); // State for group status
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [totalElements, setTotalElements] = useState(0); // Store total elements for pagination
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -178,14 +186,54 @@ export default function RequisitionMonthlyPage() {
     productType2Name: '',
     englishName: '',
     vietnameseName: '',
-    oldSAPCode: '',
-    sapCodeNewSAP: '',
-    unit: '',
+    oldSapCode: '',
+    hanaSapCode: '',
+    supplierName: '',
     departmentName: '',
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Format currency with dynamic symbols
+  const formatCurrency = (value, currency) => {
+    if (!value || isNaN(value)) return '0';
+    switch (currency) {
+      case 'VND':
+        // Use Vietnamese locale with no decimal places for VND
+        return `${new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)} đ`;
+      case 'USD':
+        // Format with 2 decimal places and $ prefix
+        return `$${Number(value).toFixed(2)}`;
+      case 'EUR':
+        // Format with 2 decimal places and € prefix
+        return `€${Number(value).toFixed(2)}`;
+      default:
+        return Number(value).toFixed(2);
+    }
+  };
+
+  // Format date for display
+  const formatDate = (date) => {
+    if (!date) return '';
+    if (Array.isArray(date)) {
+      // Extract year, month, day, hour, minute, second, nanosecond
+      const [year, month, day, hour, minute, second, nanosecond] = date;
+      // Convert to Date object (month - 1 for 0-based index, nanosecond to millisecond)
+      const dateObj = new Date(year, month - 1, day, hour, minute, second, nanosecond / 1000000);
+      return dateObj.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+    // Fallback for other formats
+    return new Date(date).toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
 
   // Fetch group status from API
   const fetchGroupStatus = useCallback(async () => {
@@ -216,19 +264,25 @@ export default function RequisitionMonthlyPage() {
     setError(null);
     try {
       console.log('Fetching data with groupId:', groupId);
-      const response = await axios.get(`${API_BASE_URL}/requisition-monthly/search-by-group-id`, {
-        params: { groupId },
+      const response = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
+        params: {
+          groupId,
+          hasFilter: false,
+          page,
+          size: rowsPerPage,
+          sort: 'updatedDate,desc',
+        },
         headers: { Accept: '*/*' },
       });
-      const mappedData = response.data.map((item) => ({
+      const mappedData = response.data.requisitions.content.map((item) => ({
         id: item.id,
         groupId: item.groupId,
         groupItem1: item.productType1Name || 'Unknown',
         groupItem2: item.productType2Name || 'Unknown',
         itemDescriptionEN: item.itemDescriptionEN || '',
         itemDescriptionVN: item.itemDescriptionVN || '',
-        oldSAPCode: item.oldSAPCode || '',
-        sapCodeNewSAP: item.sapCodeNewSAP || '',
+        oldSapCode: item.oldSAPCode || '',
+        hanaSapCode: item.hanaSAPCode || '',
         unit: item.unit || '',
         departmentRequests: item.departmentRequisitions.map((dept) => ({
           id: dept.id || '',
@@ -236,30 +290,35 @@ export default function RequisitionMonthlyPage() {
           qty: dept.qty || 0,
           buy: dept.buy || 0,
         })),
-        sumBuy: item.departmentRequisitions.reduce((sum, dept) => sum + (dept.buy || 0), 0),
-        totalNotIssuedQty: item.totalNotIssuedQty || 0,
-        inHand: item.inHand || 0,
-        actualInHand: item.actualInHand || 0,
+        totalRequestQty: item.totalRequestQty || 0,
         orderQty: item.orderQty || 0,
+        supplierName: item.supplierName || '',
+        price: item.price || 0,
+        currency: item.currency || 'VND',
+        goodType: item.goodType || '',
+        amount: item.amount || 0,
+        dailyMedInventory: item.dailyMedInventory || 0,
+        safeStock: item.safeStock || 0,
+        useStockQty: item.useStockQty || 0,
         fullDescription: item.fullDescription || '',
         reason: item.reason || '',
         remark: item.remark || '',
         remarkComparison: item.remarkComparison || '',
+        createdDate: item.createdDate || '',
+        updatedDate: item.updatedDate || '',
         imageUrls: item.imageUrls || [],
-        supplierName: item.supplierName || '',
-        price: item.price || 0,
-        amount: item.amount || 0,
       }));
       console.log('Fetched and mapped data:', mappedData); // Debug log
       setData(mappedData);
       setOriginalData(mappedData); // Store original data
+      setTotalElements(response.data.requisitions.totalElements); // Set total elements
     } catch (err) {
       console.error('Fetch data error:', err.response?.data || err.message);
       setError(`Failed to fetch data from API: ${err.message}. Showing previously loaded data.`);
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, page, rowsPerPage]);
 
   useEffect(() => {
     setData([]); // Clear previous data
@@ -272,37 +331,92 @@ export default function RequisitionMonthlyPage() {
     setSearchValues(newSearchValues);
   };
 
-  // Handle search action (client-side filtering)
-  const handleSearch = () => {
-    if (
-      !searchValues.productType1Name &&
-      !searchValues.productType2Name &&
-      !searchValues.englishName &&
-      !searchValues.vietnameseName &&
-      !searchValues.oldSAPCode &&
-      !searchValues.sapCodeNewSAP &&
-      !searchValues.unit &&
-      !searchValues.departmentName
-    ) {
-      fetchData();
+  // Handle search action (server-side filtering)
+  const handleSearch = useCallback(async () => {
+    if (!groupId) {
+      setError('Invalid Group ID');
       return;
     }
-
-    const filteredData = originalData.filter((item) => {
-      return (
-        (!searchValues.productType1Name || item.groupItem1.toLowerCase().includes(searchValues.productType1Name.toLowerCase())) &&
-        (!searchValues.productType2Name || item.groupItem2.toLowerCase().includes(searchValues.productType2Name.toLowerCase())) &&
-        (!searchValues.englishName || item.itemDescriptionEN.toLowerCase().includes(searchValues.englishName.toLowerCase())) &&
-        (!searchValues.vietnameseName || item.itemDescriptionVN.toLowerCase().includes(searchValues.vietnameseName.toLowerCase())) &&
-        (!searchValues.oldSAPCode || item.oldSAPCode.toLowerCase().includes(searchValues.oldSAPCode.toLowerCase())) &&
-        (!searchValues.sapCodeNewSAP || item.sapCodeNewSAP.toLowerCase().includes(searchValues.sapCodeNewSAP.toLowerCase())) &&
-        (!searchValues.unit || item.unit.toLowerCase().includes(searchValues.unit.toLowerCase())) &&
-        (!searchValues.departmentName ||
-          item.departmentRequests.some((dept) => dept.name.toLowerCase().includes(searchValues.departmentName.toLowerCase())))
+    setLoading(true);
+    setError(null);
+    try {
+      const hasFilter = !!(
+        searchValues.productType1Name ||
+        searchValues.productType2Name ||
+        searchValues.englishName ||
+        searchValues.vietnameseName ||
+        searchValues.oldSapCode ||
+        searchValues.hanaSapCode ||
+        searchValues.supplierName ||
+        searchValues.departmentName
       );
-    });
-    setData(filteredData);
-  };
+      const sortParam = sortConfig.key
+        ? `${headers.find(h => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
+        : 'updatedDate,desc';
+      const params = {
+        groupId,
+        productType1Name: searchValues.productType1Name || undefined,
+        productType2Name: searchValues.productType2Name || undefined,
+        englishName: searchValues.englishName || undefined,
+        vietnameseName: searchValues.vietnameseName || undefined,
+        oldSapCode: searchValues.oldSapCode || undefined,
+        hanaSapCode: searchValues.hanaSapCode || undefined,
+        supplierName: searchValues.supplierName || undefined,
+        departmentName: searchValues.departmentName || undefined,
+        hasFilter,
+        page,
+        size: rowsPerPage,
+        sort: sortParam,
+      };
+      console.log('Search params:', params); // Debug log
+      const response = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
+        params,
+        headers: { Accept: '*/*' },
+      });
+      const mappedData = response.data.requisitions.content.map((item) => ({
+        id: item.id,
+        groupId: item.groupId,
+        groupItem1: item.productType1Name || 'Unknown',
+        groupItem2: item.productType2Name || 'Unknown',
+        itemDescriptionEN: item.itemDescriptionEN || '',
+        itemDescriptionVN: item.itemDescriptionVN || '',
+        oldSapCode: item.oldSAPCode || '',
+        hanaSapCode: item.hanaSAPCode || '',
+        unit: item.unit || '',
+        departmentRequests: item.departmentRequisitions.map((dept) => ({
+          id: dept.id || '',
+          name: dept.name || '',
+          qty: dept.qty || 0,
+          buy: dept.buy || 0,
+        })),
+        totalRequestQty: item.totalRequestQty || 0,
+        orderQty: item.orderQty || 0,
+        supplierName: item.supplierName || '',
+        price: item.price || 0,
+        currency: item.currency || 'VND',
+        goodType: item.goodType || '',
+        amount: item.amount || 0,
+        dailyMedInventory: item.dailyMedInventory || 0,
+        safeStock: item.safeStock || 0,
+        useStockQty: item.useStockQty || 0,
+        fullDescription: item.fullDescription || '',
+        reason: item.reason || '',
+        remark: item.remark || '',
+        remarkComparison: item.remarkComparison || '',
+        createdDate: item.createdDate || '',
+        updatedDate: item.updatedDate || '',
+        imageUrls: item.imageUrls || [],
+      }));
+      console.log('Filtered and mapped data:', mappedData); // Debug log
+      setData(mappedData);
+      setTotalElements(response.data.requisitions.totalElements);
+    } catch (err) {
+      console.error('Search error:', err.response?.data || err.message);
+      setError(`Failed to search data: ${err.message}. Showing previously loaded data.`);
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId, searchValues, page, rowsPerPage, sortConfig]);
 
   // Handle reset search
   const handleReset = () => {
@@ -311,12 +425,13 @@ export default function RequisitionMonthlyPage() {
       productType2Name: '',
       englishName: '',
       vietnameseName: '',
-      oldSAPCode: '',
-      sapCodeNewSAP: '',
-      unit: '',
+      oldSapCode: '',
+      hanaSapCode: '',
+      supplierName: '',
       departmentName: '',
     });
     setSortConfig({ key: null, direction: null });
+    setPage(0);
     setData([]); // Clear data before refetching
     fetchData();
   };
@@ -331,16 +446,18 @@ export default function RequisitionMonthlyPage() {
       });
       if (response.status >= 200 && response.status < 300) {
         await fetchData();
-        const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
+        const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
         if (page > maxPage) setPage(maxPage);
         setError(null);
         setSnackbarMessage('Item deleted successfully!');
+        setSnackbarOpen(true);
       } else {
         throw new Error(`Delete failed with status ${response.status}`);
       }
     } catch (error) {
       console.error('Delete error:', error.response?.data || error.message);
       setError(`Failed to delete item: ${error.message}. Please try again.`);
+      setSnackbarOpen(true);
     } finally {
       setLoading(false);
       setOpenDeleteDialog(false);
@@ -377,7 +494,7 @@ export default function RequisitionMonthlyPage() {
 
   const handleGoToComparison = () => {
     if (groupId) {
-      navigate(`/dashboard/comparison/${groupId}`);
+      navigate(`/dashboard/request-monthly-comparison/${groupId}`);
     } else {
       setError('Invalid Group ID');
     }
@@ -399,8 +516,8 @@ export default function RequisitionMonthlyPage() {
   };
 
   const open = Boolean(anchorEl);
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   const isCompleted = groupStatus === 'Completed';
+  const displayData = data.slice(0, rowsPerPage); // Use API pagination, slice for safety
 
   // Delete dialog handlers
   const handleOpenDeleteDialog = (id) => {
@@ -427,6 +544,16 @@ export default function RequisitionMonthlyPage() {
   const handleSnackbarClose = () => {
     setSnackbarOpen(false);
     setSnackbarMessage('');
+  };
+
+  // Handle sorting
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+    handleSearch(); // Trigger search with new sort config
   };
 
   return (
@@ -537,12 +664,12 @@ export default function RequisitionMonthlyPage() {
                       : '0 3px 8px rgba(76, 184, 255, 0.4)',
                   },
                 }}
-              >
-                Add New
-              </Button>
-            </span>
-          </Tooltip>
-        </Stack>
+            >
+              Add New
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
       </Stack>
 
       <RequisitionMonthlySearch
@@ -581,14 +708,14 @@ export default function RequisitionMonthlyPage() {
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 2100 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 2300 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {headers.map(({ label, key, sortable }) => (
+                  {headers.map(({ label, key, sortable, backendKey }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Order Unit', 'Buying Qty', 'Total Not Issued Qty', 'In Hand', 'Actual In Hand', 'Order Qty', 'Images', 'Actions'].includes(label)
+                        ['No', 'Unit', 'Request Qty', 'Order Qty', 'Price', 'Currency', 'Amount', 'Daily Med Inventory', 'Safe Stock', 'Use Stock Qty', 'Images', 'Actions', 'Created Date', 'Updated Date'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -684,21 +811,34 @@ export default function RequisitionMonthlyPage() {
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.groupItem2 || ''}</TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.itemDescriptionEN || ''}</TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.itemDescriptionVN || ''}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.oldSAPCode || ''}</TableCell>
-                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.sapCodeNewSAP || ''}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.oldSapCode || ''}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.hanaSapCode || ''}</TableCell>
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.unit || ''}</TableCell>
                         <TableCell sx={{ minWidth: 160, textAlign: 'center', py: 0.5, px: 0.8 }}>
                           <DeptRequestTable departmentRequests={row.departmentRequests} />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.sumBuy || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.totalNotIssuedQty || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.inHand || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.actualInHand || 0}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.totalRequestQty || 0}</TableCell>
                         <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.orderQty || 0}</TableCell>
+                        <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.supplierName || ''}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
+                          {formatCurrency(row.price, row.currency)}
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
+                          {row.currency || 'VND'}
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
+                          {formatCurrency(row.amount, row.currency)}
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.dailyMedInventory || 0}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.safeStock || 0}</TableCell>
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.useStockQty || 0}</TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.fullDescription || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.reason || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.remark || ''}</TableCell>
+                        <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.goodType || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.remarkComparison || ''}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{formatDate(row.createdDate)}</TableCell>
+                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{formatDate(row.updatedDate)}</TableCell>
                         <TableCell align="center" sx={{ minWidth: 80, py: 0.5, px: 0.8 }}>
                           {row.imageUrls.length > 0 ? (
                             <IconButton
@@ -836,7 +976,7 @@ export default function RequisitionMonthlyPage() {
 
           <TablePagination
             component="div"
-            count={data.length}
+            count={totalElements}
             page={page}
             onPageChange={handleChangePage}
             rowsPerPage={rowsPerPage}

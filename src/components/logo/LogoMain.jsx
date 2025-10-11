@@ -11,7 +11,7 @@ export default function LogoMain() {
     <img
       src={logoYoungone}
       alt="icon logo"
-      width="220"
+      width="260"
     
       style={{ height: 'auto', marginLeft: '-15px' }}
     />
