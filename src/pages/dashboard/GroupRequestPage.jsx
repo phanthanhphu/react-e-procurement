@@ -14,6 +14,7 @@ import {
   Button,
   TablePagination,
   useTheme,
+  useMediaQuery,
   Tooltip,
   Snackbar,
   Alert,
@@ -21,6 +22,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Chip,
 } from '@mui/material';
 import { Add, Edit, Delete, Visibility, ArrowUpward, ArrowDownward } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -39,15 +41,15 @@ if (reactVersion >= 19) {
 const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
 
 const headers = [
-  { label: 'No', key: 'no', sortable: false },
-  { label: 'Name', key: 'name', sortable: true },
-  { label: 'Type', key: 'type', sortable: true },
-  { label: 'Status', key: 'status', sortable: true },
-  { label: 'Created By', key: 'createdBy', sortable: true },
-  { label: 'Created Date', key: 'createdDate', sortable: true },
-  { label: 'Stock Date', key: 'stockDate', sortable: true },
-  { label: 'Currency', key: 'currency', sortable: true },
-  { label: 'Actions', key: 'actions', sortable: false },
+  { label: 'No', key: 'no', sortable: false, hideOnSmall: false },
+  { label: 'Name', key: 'name', sortable: true, hideOnSmall: false },
+  { label: 'Type', key: 'type', sortable: true, hideOnSmall: false },
+  { label: 'Status', key: 'status', sortable: true, hideOnSmall: false },
+  { label: 'Created By', key: 'createdBy', sortable: true, hideOnSmall: true },
+  { label: 'Created Date', key: 'createdDate', sortable: true, hideOnSmall: false },
+  { label: 'Stock Date', key: 'stockDate', sortable: true, hideOnSmall: true },
+  { label: 'Currency', key: 'currency', sortable: true, hideOnSmall: true },
+  { label: 'Actions', key: 'actions', sortable: false, hideOnSmall: false },
 ];
 
 const fetchGroups = async (
@@ -162,6 +164,8 @@ const getCurrencyColor = (currency) => {
 export default function GroupRequestPage() {
   const theme = useTheme();
   const navigate = useNavigate();
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg')); // ≥1200px
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md')); // ≤900px
   const [data, setData] = useState([]);
   const [originalData, setOriginalData] = useState([]);
   const [nameFilter, setNameFilter] = useState('');
@@ -175,7 +179,7 @@ export default function GroupRequestPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(12);
+  const [rowsPerPage, setRowsPerPage] = useState(isLargeScreen ? 20 : 12); // 20 for 24", 12 for 15.6"
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
@@ -211,6 +215,12 @@ export default function GroupRequestPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    // Adjust rowsPerPage based on screen size
+    setRowsPerPage(isLargeScreen ? 20 : 12);
+    setPage(0); // Reset to first page when rowsPerPage changes
+  }, [isLargeScreen]);
 
   const handleAddOk = () => {
     console.log('handleAddOk called');
@@ -439,24 +449,30 @@ export default function GroupRequestPage() {
             component={Paper}
             elevation={4}
             sx={{
-              overflowX: 'auto',
-              maxHeight: 450,
+              overflowX: 'auto', // Allow horizontal scroll if needed
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+              '&::-webkit-scrollbar': {
+                height: '8px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: theme.palette.primary.main,
+                borderRadius: '4px',
+              },
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 900 }}>
+            <Table stickyHeader size="small" sx={{ width: '100%' }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {headers.map(({ label, key, sortable }) => (
+                  {headers.map(({ label, key, sortable, hideOnSmall }) => (
                     <TableCell
                       key={key}
                       align={['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'left'}
                       sx={{
                         fontWeight: 'bold',
-                        fontSize: '0.55rem',
+                        fontSize: '0.65rem',
                         color: '#ffffff',
-                        py: 0.2,
-                        px: 0.4,
+                        py: 0.5,
+                        px: 1,
                         whiteSpace: 'nowrap',
                         borderRight: '1px solid rgba(255,255,255,0.15)',
                         '&:last-child': { borderRight: 'none' },
@@ -464,13 +480,15 @@ export default function GroupRequestPage() {
                         top: 0,
                         zIndex: 20,
                         backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, zIndex: 21 }),
+                        ...(key === 'no' && { left: 0, zIndex: 21, width: '60px' }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                        ...(label === 'Name' && { width: '200px' }),
-                        ...(label === 'Created By' && { width: '150px' }),
-                        ...(label === 'Created Date' && { width: '120px' }),
-                        ...(label === 'Stock Date' && { width: '120px' }),
+                        ...(label === 'Name' && { width: '25%' }),
+                        ...(label === 'Created By' && { width: '15%', display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
+                        ...(label === 'Created Date' && { width: '15%' }),
+                        ...(label === 'Stock Date' && { width: '15%', display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
+                        ...(label === 'Currency' && { display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
+                        ...(label === 'Actions' && { width: '120px' }),
                       }}
                       onClick={() => sortable && handleSort(key)}
                     >
@@ -509,171 +527,178 @@ export default function GroupRequestPage() {
                         sx={{
                           backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
                           '&:hover': {
-                            backgroundColor: '#e1f0ff',
-                            transition: 'background-color 0.3s ease',
+                            backgroundColor: '#e3f2fd',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                            transition: 'all 0.3s ease',
                           },
-                          fontSize: '0.55rem',
-                          cursor: 'default',
-                          userSelect: 'none',
+                          fontSize: '0.65rem',
                         }}
                       >
                         <TableCell
                           align="center"
                           sx={{
-                            px: 0.4,
-                            py: 0.2,
+                            px: 1,
+                            py: 0.5,
                             position: 'sticky',
                             left: 0,
                             zIndex: 1,
                             backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            fontSize: '0.55rem',
+                            fontSize: '0.65rem',
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
                         <TableCell
                           sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
+                            px: 1,
+                            py: 0.5,
+                            fontSize: '0.65rem',
                             whiteSpace: 'normal',
                             wordBreak: 'break-word',
-                            width: '200px',
                           }}
                         >
                           {group.name || ''}
                         </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          <Box
+                        <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
+                          <Chip
+                            label={
+                              group.type === 'Requisition_monthly'
+                                ? 'Monthly Requisition'
+                                : group.type === 'Requisition_weekly'
+                                ? 'Weekly Requisition'
+                                : 'Unknown'
+                            }
+                            size="small"
                             sx={{
-                              padding: '2px 6px',
-                              borderRadius: '4px',
                               fontSize: '0.55rem',
                               fontWeight: 600,
+                              bgcolor: getTypeColor(group.type),
                               color: '#fff',
-                              backgroundColor: getTypeColor(group.type),
-                              display: 'inline-block',
                             }}
-                          >
-                            {group.type === 'Requisition_monthly'
-                              ? 'Monthly Requisition'
-                              : group.type === 'Requisition_weekly'
-                              ? 'Weekly Requisition'
-                              : 'Unknown'}
-                          </Box>
+                          />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          <Box
+                        <TableCell align="center" sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
+                          <Chip
+                            label={group.status || ''}
+                            size="small"
                             sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
+                              fontSize: '0.55rem',
+                              fontWeight: 600,
+                              bgcolor: getStatusColor(group.status),
+                              color: '#fff',
                             }}
-                          >
-                            <Box
-                              sx={{
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                backgroundColor: getStatusColor(group.status),
-                              }}
-                            />
-                            {group.status || ''}
-                          </Box>
+                          />
                         </TableCell>
                         <TableCell
                           sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
+                            px: 1,
+                            py: 0.5,
+                            fontSize: '0.65rem',
                             whiteSpace: 'normal',
                             wordBreak: 'break-word',
-                            width: '150px',
+                            display: { xs: headers.find(h => h.key === 'createdBy').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
                           }}
                         >
                           {group.createdBy || ''}
                         </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', width: '120px' }}>
+                        <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
                           {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
                         </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', width: '120px' }}>
+                        <TableCell
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            fontSize: '0.65rem',
+                            display: { xs: headers.find(h => h.key === 'stockDate').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                          }}
+                        >
                           {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          <Box
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            fontSize: '0.65rem',
+                            display: { xs: headers.find(h => h.key === 'currency').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                          }}
+                        >
+                          <Chip
+                            label={group.currency || 'N/A'}
+                            size="small"
                             sx={{
-                              padding: '2px 6px',
-                              borderRadius: '4px',
                               fontSize: '0.55rem',
                               fontWeight: 600,
+                              bgcolor: getCurrencyColor(group.currency),
                               color: '#fff',
-                              backgroundColor: getCurrencyColor(group.currency),
-                              display: 'inline-block',
                             }}
-                          >
-                            {group.currency || 'N/A'}
-                          </Box>
+                          />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
-                          <Stack direction="row" spacing={0.2} justifyContent="center">
-                            <IconButton
-                              aria-label="view"
-                              color="primary"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                                borderRadius: 1,
-                                p: 0.2,
-                              }}
-                              onClick={() => {
-                                console.log('Navigating to group:', group.id, 'type:', group.type);
-                                if (group.type === 'Requisition_monthly') {
-                                  navigate(`/dashboard/requisition-monthly/${group.id}`);
-                                } else if (group.type === 'Requisition_weekly') {
-                                  navigate(`/dashboard/summary/${group.id}`);
-                                } else {
-                                  navigate(`/dashboard/summary/${group.id}`);
-                                }
-                              }}
-                            >
-                              <Visibility fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              aria-label="edit"
-                              color="success"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(56, 142, 60, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(56, 142, 60, 0.25)' },
-                                borderRadius: 1,
-                                p: 0.2,
-                              }}
-                              onClick={() => {
-                                console.log('Opening EditGroupModal with group:', group);
-                                setCurrentItem(group);
-                                setIsEditModalOpen(true);
-                              }}
-                              disabled={isCompleted}
-                            >
-                              <Edit fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              aria-label="delete"
-                              color="error"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                                '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                                borderRadius: 1,
-                                p: 0.2,
-                              }}
-                              onClick={() => handleDelete(group)}
-                              disabled={loading || isCompleted}
-                            >
-                              <Delete fontSize="small" />
-                            </IconButton>
+                        <TableCell align="center" sx={{ px: 1, py: 0.5 }}>
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="View Details">
+                              <IconButton
+                                aria-label="view"
+                                color="primary"
+                                size="small"
+                                sx={{
+                                  backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                                  '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
+                                  borderRadius: 1,
+                                  p: 0.3,
+                                }}
+                                onClick={() => {
+                                  console.log('Navigating to group:', group.id, 'type:', group.type);
+                                  if (group.type === 'Requisition_monthly') {
+                                    navigate(`/dashboard/requisition-monthly/${group.id}`);
+                                  } else if (group.type === 'Requisition_weekly') {
+                                    navigate(`/dashboard/summary/${group.id}`);
+                                  } else {
+                                    navigate(`/dashboard/summary/${group.id}`);
+                                  }
+                                }}
+                              >
+                                <Visibility fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit Group">
+                              <IconButton
+                                aria-label="edit"
+                                color="success"
+                                size="small"
+                                sx={{
+                                  backgroundColor: 'rgba(56, 142, 60, 0.1)',
+                                  '&:hover': { backgroundColor: 'rgba(56, 142, 60, 0.25)' },
+                                  borderRadius: 1,
+                                  p: 0.3,
+                                }}
+                                onClick={() => {
+                                  console.log('Opening EditGroupModal with group:', group);
+                                  setCurrentItem(group);
+                                  setIsEditModalOpen(true);
+                                }}
+                                disabled={isCompleted}
+                              >
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete Group">
+                              <IconButton
+                                aria-label="delete"
+                                color="error"
+                                size="small"
+                                sx={{
+                                  backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                                  '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
+                                  borderRadius: 1,
+                                  p: 0.3,
+                                }}
+                                onClick={() => handleDelete(group)}
+                                disabled={loading || isCompleted}
+                              >
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -682,9 +707,7 @@ export default function GroupRequestPage() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={headers.length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
-                      <Stack direction="column" alignItems="center" spacing={0.5}>
-                        <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
-                      </Stack>
+                      <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
                     </TableCell>
                   </TableRow>
                 )}
@@ -693,7 +716,7 @@ export default function GroupRequestPage() {
           </TableContainer>
 
           <TablePagination
-            rowsPerPageOptions={[10, 12, 25, 50]}
+            rowsPerPageOptions={[10, 12, 20, 50]}
             component="div"
             count={data.length}
             rowsPerPage={rowsPerPage}
@@ -753,7 +776,7 @@ export default function GroupRequestPage() {
             sx={{ fontSize: '0.65rem' }}
             disabled={loading}
           >
-            Deletess
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

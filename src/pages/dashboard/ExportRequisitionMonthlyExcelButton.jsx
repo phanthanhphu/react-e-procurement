@@ -106,7 +106,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
     const wsData = [];
 
     // Title row
-    const titleRow = new Array(9 + allDeptKeys.length + 7).fill('');
+    const totalCols = 9 + allDeptKeys.length + 7;
+    const titleRow = new Array(totalCols).fill('');
     titleRow[0] = 'REQUEST MONTHLY';
     wsData.push(titleRow);
 
@@ -205,18 +206,17 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       maximumFractionDigits: 0,
     });
 
-    const totalRow = new Array(9 + allDeptKeys.length + 7).fill('');
+    const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'Total';
     totalRow[8 + allDeptKeys.length] = totals.totalSumRequestQty || 0;
     totalRow[9 + allDeptKeys.length] = totals.totalSumDailyMedInventory || 0;
-    totalRow[10 + allDeptKeys.length] = totals.totalSumUseStockQty || 0;
-    totalRow[11 + allDeptKeys.length] = totals.totalSumUseStockQty || 0; // Repeated for Actual In Hand
+    totalRow[10 + allDeptKeys.length] = totals.totalSumSafeStock || 0;
+    totalRow[11 + allDeptKeys.length] = totals.totalSumUseStockQty || 0;
     totalRow[12 + allDeptKeys.length] = totals.totalSumOrderQty || 0;
     totalRow[13 + allDeptKeys.length] = formattedTotalPrice;
     totalRow[14 + allDeptKeys.length] = formattedTotalAmount;
     wsData.push(totalRow);
 
-    const totalCols = 9 + allDeptKeys.length + 7;
     const dataEndRow = 3 + data.length - 1;
     const totalRowIndex = 3 + data.length;
 
@@ -288,7 +288,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
 
     const totalStyle = {
       font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center' },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
       border: commonBorder,
     };
 
@@ -321,6 +321,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
     // Merge cells
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+      { s: { r: totalRowIndex, c: 0 }, e: { r: totalRowIndex, c: 7 } }, // Merge Total to Unit column
       { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
       { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
       { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
@@ -356,7 +357,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
     ws['!cols'][16] = { wch: 12 };
 
     // Generate dynamic file name
-    const now = new Date('2025-10-01T16:01:00+07:00'); // Updated to match provided date/time
+    const now = new Date('2025-10-01T16:01:00+07:00');
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();

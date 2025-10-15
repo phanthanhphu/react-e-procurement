@@ -67,6 +67,7 @@ export default function SupplierSelector({
       productType1Id: opt.productType1Id || '',
       productType2Id: opt.productType2Id || '',
       itemDescriptionVN: opt.itemDescription || '',
+      supplierName: opt.supplierName || 'Unknown Supplier', // Thêm supplierName
     });
   };
 

@@ -1,70 +1,108 @@
 import { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
-import { API_BASE_URL } from '../../../../../config'; // Đã sửa đường dẫn dựa trên cấu trúc thư mục
+import { API_BASE_URL } from '../../../../../config.js'; // Adjusted for D:\Project\React\react\config.js
 
-export function useUser() {
-  const [username, setUsername] = useState('John Doe');
-  const [profileImageUrl, setProfileImageUrl] = useState(null);
+export const useUser = () => {
+  const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+  const [username, setUsername] = useState(storedUser.username || '');
+  const [email, setEmail] = useState(storedUser.email || '');
+  const [address, setAddress] = useState(storedUser.address || '');
+  const [phone, setPhone] = useState(storedUser.phone || '');
+  const [role, setRole] = useState(storedUser.role || '');
+  const [profileImage, setProfileImage] = useState(storedUser.profileImageUrl || null);
+  const [userId, setUserId] = useState(storedUser.id || '');
+  const [createdAt, setCreatedAt] = useState(storedUser.createdAt || null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedUsername, setEditedUsername] = useState('');
-  const [userId, setUserId] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      console.log('User data from localStorage:', user); // Thêm log để kiểm tra
-      if (user && user.username) {
-        setUsername(user.username);
-        setEditedUsername(user.username);
-      }
-      if (user && user.profileImageUrl) {
-        setProfileImageUrl(user.profileImageUrl);
-      }
-      if (user && user.id) {
-        setUserId(user.id);
-      }
-    } catch (error) {
-      console.error('Error parsing user data from localStorage:', error);
-    }
+    const user = JSON.parse(localStorage.getItem('user')) || {};
+    setUsername(user.username || '');
+    setEmail(user.email || '');
+    setAddress(user.address || '');
+    setPhone(user.phone || '');
+    setRole(user.role || '');
+    setProfileImage(user.profileImageUrl || null);
+    setUserId(user.id || '');
+    setCreatedAt(user.createdAt || null);
   }, []);
 
-  const handleSaveUsername = async () => {
-    if (editedUsername.trim()) {
-      setUsername(editedUsername);
-      try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        user.username = editedUsername;
-        localStorage.setItem('user', JSON.stringify(user));
+  const fetchUser = async (userId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: 'GET',
+        headers: {
+          accept: '*/*',
+        },
+      });
 
-        const token = localStorage.getItem('token');
-        if (token && userId) {
-          await fetch(`${API_BASE_URL}/users/${userId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ username: editedUsername }),
-          });
-        }
-
-        setIsEditing(false);
-        toast.success('Username updated successfully');
-      } catch (error) {
-        console.error('Error saving user data:', error);
-        toast.error('Error saving username');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user: ${response.statusText}`);
       }
+
+      const data = await response.json();
+      const user = data.data || {};
+      setUsername(user.username || '');
+      setEmail(user.email || '');
+      setAddress(user.address || '');
+      setPhone(user.phone || '');
+      setRole(user.role || '');
+      setProfileImage(user.profileImageUrl || null);
+      setUserId(user.id || '');
+      setCreatedAt(user.createdAt || null);
+      localStorage.setItem('user', JSON.stringify(user));
+      setSuccess('User data fetched successfully');
+      setError('');
+    } catch (err) {
+      setError(err.message);
+      setSuccess('');
     }
+  };
+
+  const handleUpdateUser = (data) => {
+    const updatedUser = data.user || {
+      id: userId,
+      username: data.username || username,
+      email: data.email || email,
+      address: data.address || address,
+      phone: data.phone || phone,
+      role: data.role || role,
+      profileImageUrl: data.profileImageUrl || profileImage,
+      createdAt: data.createdAt || createdAt,
+    };
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setUsername(updatedUser.username);
+    setEmail(updatedUser.email);
+    setAddress(updatedUser.address);
+    setPhone(updatedUser.phone);
+    setRole(updatedUser.role);
+    setProfileImage(updatedUser.profileImageUrl);
+    setCreatedAt(updatedUser.createdAt);
+    setIsEditing(false);
+    setSuccess('Profile updated successfully');
+    setError('');
+  };
+
+  const handleUpdatePassword = (data) => {
+    setSuccess(data.message || 'Password changed successfully');
+    setError('');
   };
 
   return {
     username,
-    profileImageUrl,
-    isEditing,
-    editedUsername,
-    setEditedUsername,
-    setIsEditing,
-    handleSaveUsername,
+    email,
+    address,
+    phone,
+    role,
+    profileImage,
     userId,
+    createdAt,
+    isEditing,
+    error,
+    success,
+    setIsEditing,
+    fetchUser,
+    handleUpdateUser,
+    handleUpdatePassword,
   };
-}
+};

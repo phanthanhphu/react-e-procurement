@@ -70,6 +70,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
   const [loadingCurrency, setLoadingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
 
   // Fetch currency from API
   const fetchGroupCurrency = useCallback(async () => {
@@ -130,6 +131,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       fetchProductType1List();
       fetchDepartmentList();
     }
+    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed when dialog opens/closes
   }, [open, item, fetchGroupCurrency]);
 
   const fetchData = async () => {
@@ -224,6 +226,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     setInitialVNDescription('');
     setGroupCurrency('VND'); // Reset currency
     setCurrencyError(null);
+    setOpenConfirmDialog(false); // Reset confirmation dialog
   };
 
   const translateText = async (text) => {
@@ -291,6 +294,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         setFiles([]);
         setPreviews([]);
         console.log('Cleanup: Files and previews cleared');
+        setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
       }
     };
   }, [open]);
@@ -530,6 +534,51 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     }
   };
 
+  const handleSaveClick = () => {
+    console.log('Save button clicked. Starting handleSaveClick...');
+    // Perform the same validations as in handleSave
+    if (!item || !item.requisition || !item.requisition.id) {
+      setSnackbarMessage('Cannot save: Missing item or requisition ID.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    if (!formData.itemDescriptionVN) {
+      setSnackbarMessage('Product Description (VN) is required.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
+      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const departmentIds = deptRows
+      .filter((row) => row.department)
+      .map((row) => row.department);
+    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
+    if (hasDuplicates) {
+      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setOpenConfirmDialog(true); // Show confirmation dialog
+  };
+
+  const handleConfirmSave = async () => {
+    console.log('Confirm save clicked');
+    setOpenConfirmDialog(false); // Close confirmation dialog
+    await handleSave(); // Execute the original save logic
+  };
+
+  const handleCancelSave = () => {
+    console.log('Cancel confirmation clicked');
+    setOpenConfirmDialog(false); // Close confirmation dialog
+  };
+
   const handleSave = async () => {
     if (!item || !item.requisition || !item.requisition.id) {
       setSnackbarMessage('Cannot save: Missing item or requisition ID.');
@@ -645,352 +694,382 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle
-        sx={{
-          bgcolor: (theme) => theme.palette.primary.main,
-          color: (theme) => theme.palette.primary.contrastText,
-          fontWeight: 'bold',
-          fontSize: '1.25rem',
-          textTransform: 'capitalize',
-          letterSpacing: 1,
-        }}
-      >
-        Edit Request
-      </DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2}>
-          {currencyError && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {currencyError}
-            </Alert>
-          )}
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Old SAP Code"
-              value={formData.oldSapCode}
-              onChange={handleChange('oldSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Hana SAP Code"
-              value={formData.hanaSapCode}
-              onChange={handleChange('hanaSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-            />
-          </Stack>
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle
+          sx={{
+            bgcolor: (theme) => theme.palette.primary.main,
+            color: (theme) => theme.palette.primary.contrastText,
+            fontWeight: 'bold',
+            fontSize: '1.25rem',
+            textTransform: 'capitalize',
+            letterSpacing: 1,
+          }}
+        >
+          Edit Request
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {currencyError && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {currencyError}
+              </Alert>
+            )}
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Old SAP Code"
+                value={formData.oldSapCode}
+                onChange={handleChange('oldSapCode')}
+                size="small"
+                fullWidth
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Hana SAP Code"
+                value={formData.hanaSapCode}
+                onChange={handleChange('hanaSapCode')}
+                size="small"
+                fullWidth
+                sx={{ flex: 1 }}
+              />
+            </Stack>
 
-          <Stack direction="row" spacing={2}>
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Item Description (VN)"
+                value={formData.itemDescriptionVN}
+                onChange={handleChange('itemDescriptionVN')}
+                fullWidth
+                size="small"
+                InputLabelProps={{
+                  style: { color: 'inherit' },
+                }}
+              />
+              <TextField
+                label="Item Description (EN)"
+                value={formData.itemDescriptionEN}
+                onChange={handleChange('itemDescriptionEN')}
+                fullWidth
+                size="small"
+                InputLabelProps={{
+                  style: { color: 'inherit' },
+                }}
+                disabled={translating}
+                InputProps={{
+                  endAdornment: translating ? (
+                    <CircularProgress size={16} />
+                  ) : null,
+                }}
+              />
+            </Stack>
+
             <TextField
-              label="Item Description (VN)"
-              value={formData.itemDescriptionVN}
-              onChange={handleChange('itemDescriptionVN')}
+              label="Full Description (VN)"
+              value={formData.fullItemDescriptionVN}
+              onChange={handleChange('fullItemDescriptionVN')}
               fullWidth
               size="small"
-              InputLabelProps={{
-                style: { color: 'inherit' },
-              }}
+              multiline
+              rows={2}
             />
-            <TextField
-              label="Item Description (EN)"
-              value={formData.itemDescriptionEN}
-              onChange={handleChange('itemDescriptionEN')}
-              fullWidth
-              size="small"
-              InputLabelProps={{
-                style: { color: 'inherit' },
-              }}
-              disabled={translating}
-              InputProps={{
-                endAdornment: translating ? (
-                  <CircularProgress size={16} />
-                ) : null,
-              }}
-            />
-          </Stack>
 
-          <TextField
-            label="Full Description (VN)"
-            value={formData.fullItemDescriptionVN}
-            onChange={handleChange('fullItemDescriptionVN')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
+            {showSupplierSelector ? (
+              <SupplierSelector
+                oldSapCode={formData.oldSapCode}
+                onSelectSupplier={handleSelectSupplier}
+                selectedSupplier={selectedSupplier}
+                productType1List={productType1List}
+                productType2List={productType2List}
+                currency={groupCurrency} // Use groupCurrency
+                disabled={loadingCurrency} // Disable while loading currency
+              />
+            ) : (
+              selectedSupplier && (
+                <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
+                  <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
+                  <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
+                  <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
+                  <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
+                    Change Supplier
+                  </Button>
+                </Box>
+              )
+            )}
 
-          {showSupplierSelector ? (
-            <SupplierSelector
-              oldSapCode={formData.oldSapCode}
-              onSelectSupplier={handleSelectSupplier}
-              selectedSupplier={selectedSupplier}
-              productType1List={productType1List}
-              productType2List={productType2List}
-              currency={groupCurrency} // Use groupCurrency
-              disabled={loadingCurrency} // Disable while loading currency
-            />
-          ) : (
-            selectedSupplier && (
-              <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
-                <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
-                <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
-                <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
-                  Change Supplier
-                </Button>
-              </Box>
-            )
-          )}
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                Requested Quantity by Department:
+              </Typography>
+              {deptRows.map((row, index) => (
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  key={index}
+                  sx={{ mb: 1 }}
+                >
+                  <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
+                    <InputLabel id={`department-label-${index}`}>Department</InputLabel>
+                    <Select
+                      labelId={`department-label-${index}`}
+                      value={row.department}
+                      label="Department"
+                      onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                    >
+                      <MenuItem value="">
+                        <em>None</em>
+                      </MenuItem>
+                      {departmentList.length > 0 ? (
+                        departmentList.map((dept) => (
+                          <MenuItem key={dept.id} value={dept.id}>
+                            {dept.departmentName}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>No departments available</MenuItem>
+                      )}
+                    </Select>
+                    {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
+                    {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                  </FormControl>
+                  <TextField
+                    label="Quantity"
+                    type="number"
+                    value={row.qty}
+                    onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
+                    size="small"
+                    fullWidth
+                  />
+                  <TextField
+                    label="Buy"
+                    type="number"
+                    value={row.buy}
+                    onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
+                    size="small"
+                    fullWidth
+                  />
+                  <IconButton
+                    aria-label="delete department"
+                    onClick={() => handleDeleteDeptRow(index)}
+                    size="small"
+                    color="error"
+                    sx={{ ml: 1 }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddDeptRow}
+                sx={{ mt: 1 }}
+              >
+                Add Department
+              </Button>
 
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Requested Quantity by Department:
-            </Typography>
-            {deptRows.map((row, index) => (
               <Stack
                 direction="row"
-                spacing={2}
-                alignItems="center"
-                key={index}
-                sx={{ mb: 1 }}
+                spacing={4}
+                sx={{
+                  mt: 2,
+                  bgcolor: '#f5f5f5',
+                  p: 2,
+                  borderRadius: 1,
+                  boxShadow: 1,
+                  justifyContent: 'space-between',
+                  textTransform: 'capitalize',
+                }}
               >
-                <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
-                  <InputLabel id={`department-label-${index}`}>Department</InputLabel>
-                  <Select
-                    labelId={`department-label-${index}`}
-                    value={row.department}
-                    label="Department"
-                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
-                  >
-                    <MenuItem value="">
-                      <em>None</em>
-                    </MenuItem>
-                    {departmentList.length > 0 ? (
-                      departmentList.map((dept) => (
-                        <MenuItem key={dept.id} value={dept.id}>
-                          {dept.departmentName}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>No departments available</MenuItem>
-                    )}
-                  </Select>
-                  {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                  {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
-                </FormControl>
-                <TextField
-                  label="Quantity"
-                  type="number"
-                  value={row.qty}
-                  onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
-                <TextField
-                  label="Buy"
-                  type="number"
-                  value={row.buy}
-                  onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
-                <IconButton
-                  aria-label="delete department"
-                  onClick={() => handleDeleteDeptRow(index)}
-                  size="small"
-                  color="error"
-                  sx={{ ml: 1 }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+                </Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
+                </Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
+                </Typography>
               </Stack>
-            ))}
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={handleAddDeptRow}
-              sx={{ mt: 1 }}
-            >
-              Add Department
-            </Button>
+            </Paper>
 
-            <Stack
-              direction="row"
-              spacing={4}
-              sx={{
-                mt: 2,
-                bgcolor: '#f5f5f5',
-                p: 2,
-                borderRadius: 1,
-                boxShadow: 1,
-                justifyContent: 'space-between',
-                textTransform: 'capitalize',
-              }}
-            >
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-              </Typography>
+            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+              <TextField
+                label="Stock"
+                value={formData.stock}
+                onChange={handleChange('stock')}
+                size="small"
+                fullWidth
+                type="number"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Order Q'ty"
+                value={formData.orderQty}
+                onChange={handleChange('orderQty')}
+                size="small"
+                fullWidth
+                type="number"
+                sx={{ flex: 1 }}
+              />
             </Stack>
-          </Paper>
 
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
-              label="Stock"
-              value={formData.stock}
-              onChange={handleChange('stock')}
-              size="small"
+              label="Reason"
+              value={formData.reason}
+              onChange={handleChange('reason')}
               fullWidth
-              type="number"
-              sx={{ flex: 1 }}
+              size="small"
+              multiline
+              rows={2}
             />
             <TextField
-              label="Order Q'ty"
-              value={formData.orderQty}
-              onChange={handleChange('orderQty')}
-              size="small"
+              label="Remark"
+              value={formData.remark}
+              onChange={handleChange('remark')}
               fullWidth
-              type="number"
-              sx={{ flex: 1 }}
+              size="small"
+              multiline
+              rows={2}
             />
-          </Stack>
+            <FormControl fullWidth size="small">
+              <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
+              <Select
+                labelId="remark-comparison-label"
+                value={formData.remarkComparison}
+                label="Remark Comparison"
+                onChange={handleChange('remarkComparison')}
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                <MenuItem value="Old price">Old price</MenuItem>
+                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
+                  The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
+                </MenuItem>
+              </Select>
+            </FormControl>
 
-          <TextField
-            label="Reason"
-            value={formData.reason}
-            onChange={handleChange('reason')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <TextField
-            label="Remark"
-            value={formData.remark}
-            onChange={handleChange('remark')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <FormControl fullWidth size="small">
-            <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
-            <Select
-              labelId="remark-comparison-label"
-              value={formData.remarkComparison}
-              label="Remark Comparison"
-              onChange={handleChange('remarkComparison')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              <MenuItem value="Old price">Old price</MenuItem>
-              <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
-                The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
-              </MenuItem>
-            </Select>
-          </FormControl>
-
-          <Box>
-            <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                Select Images
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </Button>
-              {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
+            <Box>
+              <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+                  Select Images
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileChange}
+                  />
+                </Button>
+                {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                    Selected {files.length + imageUrls.length - imagesToDelete.length} images
+                  </Typography>
+                )}
+              </Stack>
+              {(previews.length > 0 || imageUrls.length > 0) && (
+                <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  {imageUrls.map((url, index) => (
+                    <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
+                      <img
+                        src={`${API_BASE_URL}${url}`}
+                        alt={`Image ${index + 1}`}
+                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
+                        onError={(e) => {
+                          console.error(`Failed to load image for ${url}`, e);
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                      <IconButton
+                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
+                        onClick={() => handleRemoveImage(index)}
+                      >
+                        <CloseIcon color="error" />
+                      </IconButton>
+                    </Box>
+                  ))}
+                  {previews.map((preview, index) => (
+                    <Box key={`new-${index}`} sx={{ position: 'relative' }}>
+                      <img
+                        src={preview}
+                        alt={`New ${index + 1}`}
+                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
+                      />
+                      <IconButton
+                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
+                        onClick={() => handleRemoveImage(index + imageUrls.length)}
+                      >
+                        <CloseIcon color="error" />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              {files.length === 0 && imageUrls.length === imagesToDelete.length && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  Selected {files.length + imageUrls.length - imagesToDelete.length} images
+                  No images selected
                 </Typography>
               )}
-            </Stack>
-            {(previews.length > 0 || imageUrls.length > 0) && (
-              <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {imageUrls.map((url, index) => (
-                  <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
-                    <img
-                      src={`${API_BASE_URL}${url}`}
-                      alt={`Image ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      onError={(e) => {
-                        console.error(`Failed to load image for ${url}`, e);
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                    <IconButton
-                      sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveImage(index)}
-                    >
-                      <CloseIcon color="error" />
-                    </IconButton>
-                  </Box>
-                ))}
-                {previews.map((preview, index) => (
-                  <Box key={`new-${index}`} sx={{ position: 'relative' }}>
-                    <img
-                      src={preview}
-                      alt={`New ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                    />
-                    <IconButton
-                      sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveImage(index + imageUrls.length)}
-                    >
-                      <CloseIcon color="error" />
-                    </IconButton>
-                  </Box>
-                ))}
-              </Box>
-            )}
-            {files.length === 0 && imageUrls.length === imagesToDelete.length && (
-              <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                No images selected
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
-        >
-          {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
-        </Button>
-      </DialogActions>
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 1.5 }}>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveClick} // Updated to trigger confirmation
+            disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+          </Button>
+        </DialogActions>
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={3000}
           onClose={() => setSnackbarOpen(false)}
-          severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'}
-          sx={{ width: '100%' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Dialog>
+          <Alert
+            onClose={() => setSnackbarOpen(false)}
+            severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'}
+            sx={{ width: '100%' }}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </Dialog>
+      <Dialog open={openConfirmDialog} onClose={handleCancelSave}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Request</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to save changes to the request with Item Description (VN) &quot;{formData.itemDescriptionVN || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelSave} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSave}
+            variant="contained"
+            sx={{
+              fontSize: '0.875rem',
+              textTransform: 'none',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
+              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            }}
+            disabled={saving}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

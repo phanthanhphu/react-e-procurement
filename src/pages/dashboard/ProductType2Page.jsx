@@ -23,7 +23,7 @@ import {
   Alert,
 } from '@mui/material';
 import { Add, Edit, Delete, ArrowUpward, ArrowDownward, ArrowBack } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ProductType2Search from './ProductType2Search';
 import { API_BASE_URL } from '../../config';
 
@@ -99,7 +99,6 @@ function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsP
     );
   }
 
-  // Hàm chuyển đổi mảng createdDate sang định dạng DD/MM/YYYY
   const formatCreatedDate = (createdDateArray) => {
     if (!createdDateArray || createdDateArray.length < 3) return '';
     const [year, month, day] = createdDateArray;
@@ -210,15 +209,17 @@ function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsP
             </TableRow>
           ))}
         </TableBody>
-      </Table>
-    </TableContainer>
-  );
+        </Table>
+      </TableContainer>
+    );
 }
 
 export default function ProductType2Page() {
   const theme = useTheme();
   const { productType1Id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const type1Name = location.state?.type1Name || 'Unknown';
   const [data, setData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
@@ -232,6 +233,8 @@ export default function ProductType2Page() {
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openAddConfirmDialog, setOpenAddConfirmDialog] = useState(false);
+  const [openEditConfirmDialog, setOpenEditConfirmDialog] = useState(false); // New state for edit confirmation
   const [productTypeToDelete, setProductTypeToDelete] = useState(null);
   const [productTypeToEdit, setProductTypeToEdit] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
@@ -277,7 +280,7 @@ export default function ProductType2Page() {
     fetchData();
   }, [fetchData]);
 
-  const handleAdd = async () => {
+  const handleAdd = () => {
     if (!newProductTypeName.trim()) {
       setNotification({
         open: true,
@@ -286,6 +289,10 @@ export default function ProductType2Page() {
       });
       return;
     }
+    setOpenAddConfirmDialog(true);
+  };
+
+  const handleConfirmAdd = async () => {
     try {
       setLoading(true);
       const url = new URL(`${API_BASE_URL}/api/product-type-2`);
@@ -309,6 +316,7 @@ export default function ProductType2Page() {
       });
       setNewProductTypeName('');
       setOpenAddDialog(false);
+      setOpenAddConfirmDialog(false);
     } catch (err) {
       setNotification({
         open: true,
@@ -320,13 +328,70 @@ export default function ProductType2Page() {
     }
   };
 
+  const handleCancelAdd = () => {
+    setOpenAddConfirmDialog(false);
+  };
+
   const handleEdit = (productType) => {
     setProductTypeToEdit(productType);
     setEditProductTypeName(productType.name);
     setOpenEditDialog(true);
   };
 
+  const handleUpdateClick = () => {
+    if (!editProductTypeName.trim()) {
+      setNotification({
+        open: true,
+        message: 'Please enter a product type name',
+        severity: 'warning',
+      });
+      return;
+    }
+    setOpenEditConfirmDialog(true); // Show confirmation dialog
+  };
+
+  const handleConfirmUpdate = async () => {
+    try {
+      setLoading(true);
+      const url = new URL(`${API_BASE_URL}/api/product-type-2/${productTypeToEdit.id}`);
+      url.search = new URLSearchParams({ name: editProductTypeName }).toString();
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { accept: '*/*' },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      setPage(0);
+      await fetchData();
+      setNotification({
+        open: true,
+        message: `Name '${editProductTypeName}' has been updated`,
+        severity: 'success',
+        autoHideDuration: 6000,
+      });
+      setOpenEditDialog(false);
+      setOpenEditConfirmDialog(false); // Close confirmation dialog
+      setProductTypeToEdit(null);
+      setEditProductTypeName('');
+    } catch (err) {
+      setNotification({
+        open: true,
+        message: `Failed to update product type: ${err.message}`,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelUpdate = () => {
+    setOpenEditConfirmDialog(false); // Close confirmation dialog
+  };
+
   const handleUpdate = async () => {
+    // This function is retained for compatibility but is not directly called
     if (!editProductTypeName.trim()) {
       setNotification({
         open: true,
@@ -535,8 +600,20 @@ export default function ProductType2Page() {
       >
         <ArrowBack />
       </IconButton>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1.25rem' }}>
-        Product Type 2
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
+          textAlign: 'left',
+          fontSize: '1rem',
+          fontWeight: 600,
+          marginBottom: '8px',
+          color: '#1976d2',
+          lineHeight: 1.5,
+          fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        Product Type 2 - {type1Name}
       </Typography>
       <Stack direction="row" spacing={1} mb={1} justifyContent="space-between" alignItems="center">
         <ProductType2Search
@@ -573,14 +650,14 @@ export default function ProductType2Page() {
         open={notification.open}
         autoHideDuration={notification.autoHideDuration || 6000}
         onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // Position at top center
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         sx={{
           '& .MuiSnackbarContent-root': {
-            width: { xs: '90%', sm: '400px' }, // Responsive width
+            width: { xs: '90%', sm: '400px' },
             maxWidth: '500px',
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-            zIndex: 1500, // Ensure Snackbar is above other content
+            zIndex: 1500,
           },
         }}
       >
@@ -652,6 +729,34 @@ export default function ProductType2Page() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog open={openAddConfirmDialog} onClose={handleCancelAdd}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Product Type</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to add Product Type 2 with name &quot;{newProductTypeName || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelAdd} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmAdd}
+            variant="contained"
+            sx={{
+              fontSize: '0.85rem',
+              textTransform: 'none',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
+              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            }}
+            disabled={loading}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
         <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type 2</DialogTitle>
         <DialogContent>
@@ -666,20 +771,51 @@ export default function ProductType2Page() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenEditDialog(false)} sx={{ fontSize: '0.85rem' }}>
+          <Button onClick={() => setOpenEditDialog(false)} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
-            onClick={handleUpdate}
+            onClick={handleUpdateClick}
             variant="contained"
             sx={{
               fontSize: '0.85rem',
+              textTransform: 'none',
               background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
               '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
             }}
             disabled={loading}
           >
             Update
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={openEditConfirmDialog} onClose={handleCancelUpdate}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Product Type</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to update Product Type 2 to &quot;{editProductTypeName || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelUpdate} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmUpdate}
+            variant="contained"
+            sx={{
+              fontSize: '0.85rem',
+              textTransform: 'none',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
+              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            }}
+            disabled={loading}
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>
@@ -691,14 +827,14 @@ export default function ProductType2Page() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} sx={{ fontSize: '0.85rem' }}>
+          <Button onClick={handleCancelDelete} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
             onClick={handleConfirmDelete}
             variant="contained"
             color="error"
-            sx={{ fontSize: '0.85rem' }}
+            sx={{ fontSize: '0.85rem', textTransform: 'none' }}
             disabled={loading}
           >
             Delete

@@ -14,6 +14,8 @@ import {
   Alert,
   CircularProgress,
   InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
@@ -26,7 +28,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
     password: '',
     address: '',
     phone: '',
-    role: '',
+    role: 'User',
   });
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -35,18 +37,17 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [emailError, setEmailError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Email validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  // Clean up image preview when dialog closes
+  // Clean up image preview when dialog closes or image changes
   useEffect(() => {
     return () => {
-      if (imagePreview && profileImage) {
+      if (imagePreview) {
         URL.revokeObjectURL(imagePreview);
       }
-      setImagePreview(null);
-      setProfileImage(null);
     };
   }, [imagePreview, open]);
 
@@ -73,7 +74,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
       return;
     }
     if (!file.type.startsWith('image/')) {
-      setSnackbarMessage('Only image files are accepted.');
+      setSnackbarMessage('Please select an image file (e.g., .jpg, .png).');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
       e.target.value = null;
@@ -88,7 +89,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
     }
 
     // Clean up previous preview
-    if (imagePreview && profileImage) {
+    if (imagePreview) {
       URL.revokeObjectURL(imagePreview);
     }
 
@@ -99,15 +100,15 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
 
   // Remove profile image
   const handleRemoveImage = () => {
-    if (imagePreview && profileImage) {
+    if (imagePreview) {
       URL.revokeObjectURL(imagePreview);
     }
     setProfileImage(null);
     setImagePreview(null);
   };
 
-  // Submit form
-  const handleSubmit = async () => {
+  // Trigger confirmation
+  const handleSubmit = () => {
     if (!formData.username) {
       setSnackbarMessage('Username is required.');
       setSnackbarSeverity('error');
@@ -132,7 +133,12 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
       setSnackbarOpen(true);
       return;
     }
+    setConfirmOpen(true);
+  };
 
+  // Confirm and proceed with API call
+  const handleConfirmSubmit = async () => {
+    setConfirmOpen(false);
     const formDataToSend = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
       if (value !== undefined && value !== '') {
@@ -141,6 +147,12 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
     });
     if (profileImage) {
       formDataToSend.append('profileImage', profileImage);
+    }
+
+    // Debug: Log FormData entries
+    console.log('FormData entries:');
+    for (let pair of formDataToSend.entries()) {
+      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
     }
 
     setSaving(true);
@@ -154,30 +166,53 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || `Add user failed with status ${res.status}`);
+        const errorText = await res.text();
+        let message = `Add user failed with status ${res.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          message = errorData.message || message;
+        } catch (parseError) {
+          message = errorText || message;
+        }
+        throw new Error(message);
       }
 
-      const data = await res.json();
-      setSnackbarMessage(data.message || 'User added successfully');
+      const text = await res.text();
+      let message = 'User added successfully';
+      try {
+        const data = JSON.parse(text);
+        message = data.message || message;
+        onAdd(data);
+      } catch (parseError) {
+        console.warn('Response is not JSON:', text);
+        onAdd({ message });
+      }
+
+      setSnackbarMessage(message);
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
-      setProfileImage(null);
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-        setImagePreview(null);
-      }
-      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: '' });
+      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: 'User' });
       setEmailError('');
-      onAdd(data);
+      handleRemoveImage(); // Clean up image and preview
       onClose();
     } catch (err) {
+      console.error('Add user error:', err);
       setSnackbarMessage(err.message);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
     }
+  };
+
+  // Cancel confirmation
+  const handleCancelConfirm = () => {
+    setConfirmOpen(false);
+  };
+
+  // Close snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   return (
@@ -205,6 +240,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
             required
             error={formData.username === '' && snackbarOpen}
             helperText={formData.username === '' && snackbarOpen ? 'Username is required' : ''}
+            disabled={saving}
           />
           <TextField
             label="Email"
@@ -215,6 +251,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
             required
             error={!!emailError || (formData.email === '' && snackbarOpen)}
             helperText={emailError || (formData.email === '' && snackbarOpen ? 'Email is required' : '')}
+            disabled={saving}
           />
           <TextField
             label="Password"
@@ -225,7 +262,8 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
             size="small"
             required
             error={formData.password === '' && snackbarOpen}
-            helperText={formData.password === '' && snackbarOpen ? 'Password is required' : 'Password is required'}
+            helperText={formData.password === '' && snackbarOpen ? 'Password is required' : ''}
+            disabled={saving}
           />
           <TextField
             label="Address"
@@ -233,6 +271,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
             onChange={handleChange('address')}
             fullWidth
             size="small"
+            disabled={saving}
           />
           <TextField
             label="Phone"
@@ -240,18 +279,33 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
             onChange={handleChange('phone')}
             fullWidth
             size="small"
+            disabled={saving}
           />
-          <TextField
-            label="Role"
-            value={formData.role}
-            onChange={handleChange('role')}
-            fullWidth
-            size="small"
-          />
+          <Box>
+            <InputLabel sx={{ mb: 1 }}>Role</InputLabel>
+            <Select
+              value={formData.role}
+              onChange={handleChange('role')}
+              fullWidth
+              size="small"
+              displayEmpty
+              renderValue={(selected) => selected || 'User'}
+              disabled={saving}
+            >
+              <MenuItem value="User">User</MenuItem>
+              <MenuItem value="Leader">Leader</MenuItem>
+              <MenuItem value="Admin">Admin</MenuItem>
+            </Select>
+          </Box>
           <Box>
             <InputLabel sx={{ mb: 1 }}>Profile Image</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<PhotoCamera />}
+                disabled={saving}
+              >
                 Select Image
                 <input
                   hidden
@@ -260,7 +314,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
                   onChange={handleFileChange}
                 />
               </Button>
-              {imagePreview && (
+              {profileImage && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
                   1 image selected
                 </Typography>
@@ -281,11 +335,15 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
                   }}
                 />
                 <IconButton
-                  sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
+                  sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
                   onClick={handleRemoveImage}
+                  disabled={saving}
                 >
                   <CloseIcon color="error" />
                 </IconButton>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
+                  {profileImage.name}
+                </Typography>
               </Box>
             )}
             {!imagePreview && (
@@ -311,18 +369,44 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
       </DialogActions>
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
-          onClose={() => setSnackbarOpen(false)}
+          onClose={handleCloseSnackbar}
           severity={snackbarSeverity}
           sx={{ width: '100%' }}
         >
           {snackbarMessage}
         </Alert>
       </Snackbar>
+      <Dialog
+        open={confirmOpen}
+        onClose={handleCancelConfirm}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to add user &quot;{formData.username || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 1.5 }}>
+          <Button onClick={handleCancelConfirm} disabled={saving} variant="outlined" color="secondary">
+            No
+          </Button>
+          <Button
+            onClick={handleConfirmSubmit}
+            disabled={saving}
+            variant="contained"
+            color="primary"
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

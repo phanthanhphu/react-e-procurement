@@ -17,7 +17,7 @@ import {
   Button,
 } from '@mui/material';
 import InboxIcon from '@mui/icons-material/Inbox';
-import ExportRequestMonthlyExcelButton from './ExportRequestMonthlyExcelButton.jsx';
+import ExportComparisonMonthlyExcelButton from './ExportComparisonMonthlyExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
 import AddDialog from './AddDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
@@ -509,7 +509,7 @@ export default function RequestMonthlyComparisonPage() {
         mb={1}
         sx={{ userSelect: 'none' }}
       >
-        <ExportRequestMonthlyExcelButton
+        <ExportComparisonMonthlyExcelButton
           data={mappedDataForExport}
           disabled={loading}
           groupId={groupId}
@@ -580,6 +580,7 @@ export default function RequestMonthlyComparisonPage() {
               overflowX: 'auto',
               maxHeight: 450,
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+              backgroundColor: '#fff',
             }}
           >
             <Table stickyHeader size="small" sx={{ minWidth: 1700 }}>
@@ -600,12 +601,18 @@ export default function RequestMonthlyComparisonPage() {
                         py: 0.2,
                         px: 0.4,
                         whiteSpace: 'nowrap',
-                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        borderRight: '1px solid rgba(255,255,255,0.1)',
                         '&:last-child': { borderRight: 'none' },
-                        position: label === 'No' ? 'sticky' : 'static',
-                        left: label === 'No' ? 0 : undefined,
-                        zIndex: label === 'No' ? 2 : 1,
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: key === 'no' || key === 'type1Name' || key === 'type2Name' || key === 'vietnameseName' || key === 'englishName' || key === 'oldSapCode' ? 21 : 20,
                         backgroundColor: '#027aff',
+                        ...(key === 'no' && { left: 0, boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }),
+                        ...(key === 'type1Name' && { left: 50, minWidth: 100 }),
+                        ...(key === 'type2Name' && { left: 150, minWidth: 100 }),
+                        ...(key === 'vietnameseName' && { left: 250, minWidth: 150 }),
+                        ...(key === 'englishName' && { left: 400, minWidth: 150 }),
+                        ...(key === 'oldSapCode' && { left: 550, minWidth: 100 }),
                       }}
                     >
                       <Tooltip title={label} arrow>
@@ -627,18 +634,19 @@ export default function RequestMonthlyComparisonPage() {
                           '&:hover': {
                             backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
-                            '& .sticky-no-column': {
+                            '& .sticky-cell': {
                               backgroundColor: '#e1f0ff',
                             },
                           },
                           fontSize: '0.55rem',
                           cursor: 'default',
                           userSelect: 'none',
+                          '& > *': { borderBottom: 'none' },
                         }}
                       >
                         <TableCell
                           align="center"
-                          className="sticky-no-column"
+                          className="sticky-cell"
                           sx={{
                             px: 0.4,
                             py: 0.2,
@@ -647,24 +655,91 @@ export default function RequestMonthlyComparisonPage() {
                             zIndex: 1,
                             backgroundColor: rowBackgroundColor,
                             fontSize: '0.55rem',
-                            borderRight: '1px solid rgba(224, 224, 224, 1)',
+                            boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+                            minWidth: 50,
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          className="sticky-cell"
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 50,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            minWidth: 100,
+                          }}
+                        >
                           {item.type1Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          className="sticky-cell"
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 150,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            minWidth: 100,
+                          }}
+                        >
                           {item.type2Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
+                        <TableCell
+                          className="sticky-cell"
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontWeight: 600,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 250,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            minWidth: 150,
+                          }}
+                        >
                           {item.vietnameseName || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          className="sticky-cell"
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 400,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            minWidth: 150,
+                          }}
+                        >
                           {item.englishName || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          className="sticky-cell"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 550,
+                            zIndex: 1,
+                            backgroundColor: rowBackgroundColor,
+                            minWidth: 100,
+                            textAlign: 'center',
+                          }}
+                        >
                           {item.oldSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>

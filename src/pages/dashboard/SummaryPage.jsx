@@ -29,7 +29,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import InboxIcon from '@mui/icons-material/Inbox';
 import ArrowUpward from '@mui/icons-material/ArrowUpward';
 import ArrowDownward from '@mui/icons-material/ArrowDownward';
-import ExportExcelButton from './ExportExcelButton';
+import ExportRequisitionWeeklyExcelButton from './ExportRequisitionWeeklyExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
 import RequisitionSearch from './RequisitionSearch';
@@ -56,7 +56,7 @@ const headers = [
   { label: 'Stock', key: 'stock', sortable: true },
   { label: 'Reason', key: 'reason', sortable: true },
   { label: 'Remark', key: 'remark', sortable: true },
-  { label: 'Good Type', key: 'goodType', sortable: true }, // Added Good Type
+  { label: 'Good Type', key: 'goodType', sortable: true },
   { label: 'Created Date', key: 'createdDate', sortable: true },
   { label: 'Updated Date', key: 'updatedDate', sortable: true },
   { label: 'Images', key: 'image', sortable: false },
@@ -150,13 +150,10 @@ const formatCurrency = (value, currency) => {
   if (!value || isNaN(value)) return '0';
   switch (currency) {
     case 'VND':
-      // Use Vietnamese locale with no decimal places for VND
       return `${new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)} đ`;
     case 'USD':
-      // Format with 2 decimal places and $ prefix
       return `$${Number(value).toFixed(2)}`;
     case 'EUR':
-      // Format with 2 decimal places and € prefix
       return `€${Number(value).toFixed(2)}`;
     default:
       return Number(value).toFixed(2);
@@ -509,8 +506,8 @@ export default function SummaryPage() {
   };
 
   const open = Boolean(anchorEl);
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   const isCompleted = groupStatus === 'Completed';
+  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <Box
@@ -551,7 +548,7 @@ export default function SummaryPage() {
         <Stack direction="row" spacing={0.5}>
           <Tooltip title={isCompleted ? 'Export Urgent Excel is disabled for Completed groups' : 'Export data to Excel'}>
             <span>
-              <ExportExcelButton
+              <ExportRequisitionWeeklyExcelButton
                 data={data}
                 groupId={groupId}
                 disabled={isCompleted}
@@ -693,6 +690,7 @@ export default function SummaryPage() {
               overflowX: 'auto',
               maxHeight: 450,
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
+              backgroundColor: '#fff',
             }}
           >
             <Table stickyHeader size="small" sx={{ minWidth: 1900 }}>
@@ -713,13 +711,18 @@ export default function SummaryPage() {
                         py: 0.2,
                         px: 0.4,
                         whiteSpace: 'nowrap',
-                        borderRight: '1px solid rgba(255,255,255,0.15)',
+                        borderRight: '1px solid rgba(255,255,255,0.1)',
                         '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
                         zIndex: 20,
                         backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, zIndex: 21 }),
+                        ...(key === 'no' && { left: 0, zIndex: 21, boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }),
+                        ...(key === 'productType1Name' && { left: 50, zIndex: 21, minWidth: 100 }),
+                        ...(key === 'productType2Name' && { left: 150, zIndex: 21, minWidth: 100 }),
+                        ...(key === 'englishName' && { left: 250, zIndex: 21, minWidth: 150 }),
+                        ...(key === 'vietnameseName' && { left: 400, zIndex: 21, minWidth: 150 }),
+                        ...(key === 'oldSapCode' && { left: 550, zIndex: 21, minWidth: 100 }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                       }}
@@ -766,6 +769,7 @@ export default function SummaryPage() {
                           fontSize: '0.55rem',
                           cursor: 'default',
                           userSelect: 'none',
+                          '& > *': { borderBottom: 'none' },
                         }}
                       >
                         <TableCell
@@ -778,29 +782,106 @@ export default function SummaryPage() {
                             zIndex: 1,
                             backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
                             fontSize: '0.55rem',
+                            boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
+                            minWidth: 50,
                           }}
                         >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 50,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            minWidth: 100,
+                          }}
+                        >
                           {productType1Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 150,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            minWidth: 100,
+                          }}
+                        >
                           {productType2Name || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontWeight: 600,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 250,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            minWidth: 150,
+                          }}
+                        >
                           {requisition.englishName || ''}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 400,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            minWidth: 150,
+                          }}
+                        >
                           {requisition.vietnameseName || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            position: 'sticky',
+                            left: 550,
+                            zIndex: 1,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                            minWidth: 100,
+                          }}
+                        >
                           {requisition.oldSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                          }}
+                        >
                           {requisition.hanaSapCode || ''}
                         </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
+                        <TableCell
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                          }}
+                        >
                           <DeptRequestTable departmentRequests={departmentRequests} />
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>

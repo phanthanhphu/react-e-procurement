@@ -6,8 +6,8 @@ import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 import dayjs from 'dayjs';
 
-export default function ExportExcelButton({ data, groupId }) {
-  const [stockDate, setStockDate] = useState('01/08/2025');
+export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
+  const [stockDate, setStockDate] = useState('');
   const [groupName, setGroupName] = useState('');
   const [stockDateArray, setStockDateArray] = useState(null);
 
@@ -24,17 +24,24 @@ export default function ExportExcelButton({ data, groupId }) {
         return response.json();
       })
       .then((result) => {
+        console.log('API stockDate:', result.stockDate); // Debug log
         const dateArray = result.stockDate;
         if (dateArray && dateArray.length >= 3) {
           const [year, month, day] = dateArray;
           const formattedDate = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
           setStockDate(formattedDate);
           setStockDateArray(dateArray);
+        } else {
+          console.warn('Invalid stockDate array, using fallback date');
+          const fallbackDate = dayjs().format('DD/MM/YYYY');
+          setStockDate(fallbackDate);
         }
         setGroupName(result.name || '');
       })
       .catch((error) => {
         console.error('Error fetching group data:', error);
+        const fallbackDate = dayjs().format('DD/MM/YYYY');
+        setStockDate(fallbackDate);
       });
   }, [groupId]);
 
@@ -57,6 +64,7 @@ export default function ExportExcelButton({ data, groupId }) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const result = await response.json();
+      console.log('Summary requisitions data:', result.content); // Debug log
       return result.content || [];
     } catch (error) {
       console.error('Error fetching group data for export:', error);
@@ -71,6 +79,12 @@ export default function ExportExcelButton({ data, groupId }) {
       alert('No data to export');
       return;
     }
+
+    // Debug stock values and stockDate
+    console.log('stockDate before export:', stockDate);
+    exportData.forEach((item, index) => {
+      console.log(`Stock value for item ${index + 1}:`, item.requisition?.stock);
+    });
 
     // Generate department keys from departmentRequests array
     const allDeptKeysSet = new Set();
@@ -100,7 +114,7 @@ export default function ExportExcelButton({ data, groupId }) {
       'Unit',
       ...Array(allDeptKeys.length).fill("Department"),
       'Request Qty',
-      `Stock (${stockDate})`,
+      `Stock (${stockDate || dayjs().format('DD/MM/YYYY')})`,
       'Order Qty',
       'Reason',
       'Remark',
@@ -135,17 +149,17 @@ export default function ExportExcelButton({ data, groupId }) {
         index + 1,
         productType1Name || '',
         productType2Name || '',
-        requisition.englishName || '',
-        requisition.vietnameseName || '',
-        requisition.oldSapCode || '',
-        requisition.hanaSapCode || '',
+        requisition?.englishName || '',
+        requisition?.vietnameseName || '',
+        requisition?.oldSapCode || '',
+        requisition?.hanaSapCode || '',
         supplierProduct?.unit || '',
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
         sumBuy || 0,
-        requisition.stock || 0,
-        requisition.orderQty || '', // Use requisition.orderQty for Order Qty
-        requisition.reason || '',
-        requisition.remark || '',
+        requisition?.stock || 0,
+        requisition?.orderQty || '',
+        requisition?.reason || '',
+        requisition?.remark || '',
       ];
 
       wsData.push(row);

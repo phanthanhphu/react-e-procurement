@@ -20,6 +20,11 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
     message: '',
     severity: 'info',
   });
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+
+  // Get username from localStorage
+  const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+  const username = storedUser.username || '';
 
   // Log component mount and props
   useEffect(() => {
@@ -31,18 +36,18 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
           name: currentItem.name || '',
           type: currentItem.type || 'Requisition_weekly',
           status: currentItem.status || 'Not Started',
-          createdBy: currentItem.createdBy || '',
           stockDate: currentItem.stockDate ? dayjs(formatDate(currentItem.stockDate)) : null,
-          currency: currentItem.currency || 'VND', // Set default currency for editing
+          currency: currentItem.currency || 'VND',
         });
       } else {
         console.log('Resetting form for new group');
-        form.setFieldsValue({ currency: 'VND' }); // Set default currency for new group
-        form.resetFields(['name', 'type', 'status', 'createdBy', 'stockDate']);
+        form.setFieldsValue({ currency: 'VND' });
+        form.resetFields(['name', 'type', 'status', 'stockDate']);
       }
     } else {
       console.log('Modal closed, resetting form');
       form.resetFields();
+      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
     }
   }, [currentItem, form, open]);
 
@@ -78,9 +83,40 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
     setNotification((prev) => ({ ...prev, open: false }));
   };
 
+  // Handle save click to show confirmation dialog
+  const handleSaveClick = async () => {
+    console.log('Save button clicked. Starting handleSaveClick...');
+    try {
+      // Validate form fields
+      console.log('Validating form fields...');
+      await form.validateFields();
+      console.log('Form validation passed.');
+      setOpenConfirmDialog(true); // Show confirmation dialog
+    } catch (error) {
+      console.error('Form validation failed:', error);
+      setNotification({
+        open: true,
+        message: 'Please fill in all required fields correctly',
+        severity: 'error',
+      });
+    }
+  };
+
+  // Handle confirm save
+  const handleConfirmSave = async () => {
+    setOpenConfirmDialog(false); // Close confirmation dialog
+    await handleOk(); // Execute the original save logic
+  };
+
+  // Handle cancel save
+  const handleCancelSave = () => {
+    console.log('Confirmation dialog canceled');
+    setOpenConfirmDialog(false); // Close confirmation dialog without saving
+  };
+
   // Handle save (add or update)
   const handleOk = async () => {
-    console.log('Save button clicked. Starting handleOk...');
+    console.log('Starting handleOk...');
     setLoading(true);
     setNotification({ open: false, message: '', severity: 'info' });
     try {
@@ -92,6 +128,7 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
       // Prepare data for API
       const formattedValues = {
         ...values,
+        createdBy: username || currentItem?.createdBy || 'Unknown', // Use username from localStorage, fallback to currentItem.createdBy or 'Unknown'
         createdDate: currentItem ? currentItem.createdDate : toDateArray(new Date().toISOString()),
         stockDate: values.stockDate ? toDateArray(values.stockDate.toISOString()) : null,
         currency: values.currency.toUpperCase(), // Ensure currency is uppercase
@@ -183,6 +220,7 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
   const handleCancel = () => {
     console.log('Cancel button or icon X clicked');
     form.resetFields();
+    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
     if (typeof onCancel === 'function') {
       onCancel();
     } else {
@@ -209,10 +247,7 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
       <Modal
         title={currentItem ? 'Edit Request Group' : 'Add Request Group'}
         open={open}
-        onOk={() => {
-          console.log('Modal onOk triggered');
-          handleOk();
-        }}
+        onOk={handleSaveClick} // Updated to trigger confirmation dialog
         onCancel={handleCancel}
         width={600}
         okText="Save"
@@ -220,7 +255,7 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
         okButtonProps={{ loading, disabled: loading }}
         cancelButtonProps={{ disabled: loading }}
         style={{ borderRadius: '8px' }}
-        zIndex={1000} // Ensure modal is not hidden behind other elements
+        zIndex={1000}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -254,14 +289,6 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
           </Form.Item>
 
           <Form.Item
-            label="Created By (Your Name)"
-            name="createdBy"
-            rules={[{ required: true, message: 'Please input your name!' }]}
-          >
-            <Input placeholder="Enter your name" />
-          </Form.Item>
-
-          <Form.Item
             label="Stock Date"
             name="stockDate"
             rules={[{ required: true, message: 'Please select the stock date!' }]}
@@ -286,6 +313,22 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
             </Radio.Group>
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title="Confirm Save Request Group"
+        open={openConfirmDialog}
+        onOk={handleConfirmSave}
+        onCancel={handleCancelSave}
+        okText="Confirm"
+        cancelText="Cancel"
+        okButtonProps={{ disabled: loading }}
+        cancelButtonProps={{ disabled: loading }}
+        style={{ borderRadius: '8px' }}
+        zIndex={1100} // Higher than main modal to ensure it appears on top
+      >
+        <p style={{ color: '#374151', fontSize: '0.9rem' }}>
+          Are you sure you want to {currentItem ? 'update' : 'add'} the request group &quot;{form.getFieldValue('name') || 'Unknown'}&quot;?
+        </p>
       </Modal>
     </>
   );

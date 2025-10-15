@@ -23,62 +23,54 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
   const [formData, setFormData] = useState({
     username: '',
     email: '',
-    password: '',
     address: '',
     phone: '',
     role: '',
   });
-  const [profileImage, setProfileImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageLoading, setImageLoading] = useState(false);
+  const [newImage, setNewImage] = useState(null);
+  const [newImagePreview, setNewImagePreview] = useState(null);
+  const [keptImageUrl, setKeptImageUrl] = useState('');
+  const [removedImageUrl, setRemovedImageUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Initialize form with user data and preload profile image
   useEffect(() => {
-    if (user) {
+    if (user && open) {
       setFormData({
         username: user.username || '',
         email: user.email || '',
-        password: '', // Password is not pre-filled for security
         address: user.address || '',
         phone: user.phone || '',
         role: user.role || '',
       });
-      setProfileImage(null);
-      setImagePreview(null);
-
+      setNewImage(null);
+      setNewImagePreview(null);
+      setRemovedImageUrl('');
       if (user.profileImageUrl) {
-        setImageLoading(true);
-        const img = new Image();
-        img.src = `${API_BASE_URL}${user.profileImageUrl}`;
-        img.onload = () => {
-          setImagePreview(img.src);
-          setImageLoading(false);
-        };
-        img.onerror = () => {
-          setSnackbarMessage('Failed to load profile image.');
-          setSnackbarSeverity('error');
-          setSnackbarOpen(true);
-          setImagePreview(null);
-          setImageLoading(false);
-        };
+        const imageUrl = user.profileImageUrl.startsWith('http')
+          ? `${user.profileImageUrl}?t=${new Date().getTime()}`
+          : `${API_BASE_URL}${user.profileImageUrl.startsWith('/') ? '' : '/'}${user.profileImageUrl}?t=${new Date().getTime()}`;
+        setKeptImageUrl(imageUrl);
+        setNewImagePreview(imageUrl);
+      } else {
+        setKeptImageUrl('');
+        setNewImagePreview(null);
       }
     }
-  }, [user]);
+  }, [user, open]);
 
-  // Clean up image preview when dialog closes
+  // Clean up preview URL when dialog closes or new image changes
   useEffect(() => {
     return () => {
-      if (imagePreview && profileImage) {
-        URL.revokeObjectURL(imagePreview);
+      if (newImagePreview && newImage) {
+        URL.revokeObjectURL(newImagePreview);
       }
-      setImagePreview(null);
-      setProfileImage(null);
     };
-  }, [imagePreview, open]);
+  }, [newImagePreview, newImage, open]);
 
   // Handle input changes
   const handleChange = (field) => (e) => {
@@ -95,7 +87,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
       return;
     }
     if (!file.type.startsWith('image/')) {
-      setSnackbarMessage('Only image files are accepted.');
+      setSnackbarMessage('Please select an image file (e.g., .jpg, .png).');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
       e.target.value = null;
@@ -110,26 +102,38 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
     }
 
     // Clean up previous preview
-    if (imagePreview && profileImage) {
-      URL.revokeObjectURL(imagePreview);
+    if (newImagePreview && newImage) {
+      URL.revokeObjectURL(newImagePreview);
     }
 
-    setProfileImage(file);
-    setImagePreview(URL.createObjectURL(file));
+    // If there's an existing image, mark it for removal
+    if (keptImageUrl) {
+      const cleanUrl = keptImageUrl.split('?')[0].replace(`${API_BASE_URL}/`, '/').replace(API_BASE_URL, '');
+      setRemovedImageUrl(cleanUrl);
+      setKeptImageUrl('');
+    }
+
+    setNewImage(file);
+    setNewImagePreview(URL.createObjectURL(file));
     e.target.value = null;
   };
 
   // Remove profile image
   const handleRemoveImage = () => {
-    if (imagePreview && profileImage) {
-      URL.revokeObjectURL(imagePreview);
+    if (newImagePreview && newImage) {
+      URL.revokeObjectURL(newImagePreview);
+      setNewImage(null);
+      setNewImagePreview(null);
+    } else if (keptImageUrl) {
+      const cleanUrl = keptImageUrl.split('?')[0].replace(`${API_BASE_URL}/`, '/').replace(API_BASE_URL, '');
+      setRemovedImageUrl(cleanUrl);
+      setKeptImageUrl('');
+      setNewImagePreview(null);
     }
-    setProfileImage(null);
-    setImagePreview(null);
   };
 
-  // Submit form
-  const handleSubmit = async () => {
+  // Submit form (trigger confirmation)
+  const handleSubmit = () => {
     if (!formData.username) {
       setSnackbarMessage('Username is required.');
       setSnackbarSeverity('error');
@@ -142,6 +146,13 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
       setSnackbarOpen(true);
       return;
     }
+    setConfirmOpen(true);
+  };
+
+  // Confirm and proceed with API call
+  const handleConfirmSubmit = async () => {
+    setConfirmOpen(false);
+    setSaving(true);
 
     const formDataToSend = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
@@ -149,11 +160,19 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
         formDataToSend.append(key, value);
       }
     });
-    if (profileImage) {
-      formDataToSend.append('profileImage', profileImage);
+    if (newImage) {
+      formDataToSend.append('profileImage', newImage);
+    }
+    if (removedImageUrl) {
+      formDataToSend.append('imageToDelete', removedImageUrl);
     }
 
-    setSaving(true);
+    // Debug: Log FormData entries
+    console.log('FormData entries:');
+    for (let pair of formDataToSend.entries()) {
+      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/users/${user.id}`, {
         method: 'PUT',
@@ -164,28 +183,56 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || `Update failed with status ${res.status}`);
+        const errorText = await res.text();
+        let message = `Update failed with status ${res.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          message = errorData.message || message;
+        } catch (parseError) {
+          message = errorText || message;
+        }
+        throw new Error(message);
       }
 
-      const data = await res.json();
-      setSnackbarMessage(data.message || 'User updated successfully');
+      const text = await res.text();
+      let message = 'User updated successfully';
+      let data;
+      try {
+        data = JSON.parse(text);
+        message = data.message || message;
+      } catch (parseError) {
+        console.warn('Response is not JSON:', text);
+      }
+
+      setSnackbarMessage(message);
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
-      setProfileImage(null);
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-        setImagePreview(null);
-      }
-      onUpdate(data);
+      setNewImage(null);
+      setNewImagePreview(null);
+      setKeptImageUrl(data.profileImageUrl
+        ? `${data.profileImageUrl.startsWith('http') ? '' : API_BASE_URL}${data.profileImageUrl}?t=${new Date().getTime()}`
+        : '');
+      setRemovedImageUrl('');
+      onUpdate(data || { message });
       onClose();
     } catch (err) {
+      console.error('Update user error:', err);
       setSnackbarMessage(err.message);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
     }
+  };
+
+  // Cancel confirmation
+  const handleCancelConfirm = () => {
+    setConfirmOpen(false);
+  };
+
+  // Close snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   return (
@@ -211,6 +258,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             fullWidth
             size="small"
             required
+            disabled={saving}
           />
           <TextField
             label="Email"
@@ -219,15 +267,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             fullWidth
             size="small"
             required
-          />
-          <TextField
-            label="Password"
-            type="password"
-            value={formData.password}
-            onChange={handleChange('password')}
-            fullWidth
-            size="small"
-            helperText="Leave blank to keep current password"
+            disabled={saving}
           />
           <TextField
             label="Address"
@@ -235,6 +275,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             onChange={handleChange('address')}
             fullWidth
             size="small"
+            disabled={saving}
           />
           <TextField
             label="Phone"
@@ -242,6 +283,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             onChange={handleChange('phone')}
             fullWidth
             size="small"
+            disabled={saving}
           />
           <TextField
             label="Role"
@@ -249,11 +291,17 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             onChange={handleChange('role')}
             fullWidth
             size="small"
+            disabled={saving}
           />
           <Box>
-            <InputLabel sx={{ mb: 1 }}>Profile Image</InputLabel>
+            <InputLabel sx={{ mb: 1 }}>Profile Image (Leave empty to keep current)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<PhotoCamera />}
+                disabled={saving}
+              >
                 Select Image
                 <input
                   hidden
@@ -262,42 +310,40 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
                   onChange={handleFileChange}
                 />
               </Button>
-              {imagePreview && (
+              {(newImage || keptImageUrl) && (
                 <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  {profileImage ? '1 image selected' : 'Current profile image'}
+                  {newImage ? '1 image selected' : 'Current profile image'}
                 </Typography>
               )}
             </Stack>
-            {imageLoading && (
-              <Box mt={2} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <CircularProgress size={24} />
-              </Box>
-            )}
-            {!imageLoading && imagePreview && (
+            {newImagePreview && (
               <Box mt={2} sx={{ position: 'relative', display: 'inline-block' }}>
                 <img
-                  src={imagePreview}
+                  src={newImagePreview}
                   alt="Profile Preview"
                   style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
                   onError={(e) => {
-                    console.error(`Failed to load image: ${imagePreview}`);
+                    console.error(`Failed to load image: ${newImagePreview}`);
                     setSnackbarMessage('Failed to load profile image.');
                     setSnackbarSeverity('error');
                     setSnackbarOpen(true);
-                    e.target.style.display = 'none';
+                    e.target.src = '/images/fallback.jpg';
+                    e.target.alt = 'Failed to load';
                   }}
                 />
-                {profileImage && (
-                  <IconButton
-                    sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                    onClick={handleRemoveImage}
-                  >
-                    <CloseIcon color="error" />
-                  </IconButton>
-                )}
+                <IconButton
+                  sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
+                  onClick={handleRemoveImage}
+                  disabled={saving}
+                >
+                  <CloseIcon color="error" />
+                </IconButton>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
+                  {newImage ? newImage.name : 'Current Image'}
+                </Typography>
               </Box>
             )}
-            {!imageLoading && !imagePreview && (
+            {!newImagePreview && (
               <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
                 No image available
               </Typography>
@@ -320,18 +366,44 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
       </DialogActions>
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
-          onClose={() => setSnackbarOpen(false)}
+          onClose={handleCloseSnackbar}
           severity={snackbarSeverity}
           sx={{ width: '100%' }}
         >
           {snackbarMessage}
         </Alert>
       </Snackbar>
+      <Dialog
+        open={confirmOpen}
+        onClose={handleCancelConfirm}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Update</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to update user &quot;{formData.username || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 1.5 }}>
+          <Button onClick={handleCancelConfirm} disabled={saving} variant="outlined" color="secondary">
+            No
+          </Button>
+          <Button
+            onClick={handleConfirmSubmit}
+            disabled={saving}
+            variant="contained"
+            color="primary"
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

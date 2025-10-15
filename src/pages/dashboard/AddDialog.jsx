@@ -29,6 +29,15 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
+// Utility function to normalize currency codes
+const normalizeCurrencyCode = (code) => {
+  const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
+  const currencyMap = { EURO: 'EUR' };
+  if (!code) return 'VND';
+  const normalizedCode = currencyMap[code.toUpperCase()] || code.toUpperCase();
+  return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
+};
+
 export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const defaultFormData = {
     itemDescriptionEN: '',
@@ -64,15 +73,20 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [previews, setPreviews] = useState([]);
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [showSupplierSelector, setShowSupplierSelector] = useState(true);
+  const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
+  const [initialVNDescription, setInitialVNDescription] = useState('');
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
 
   // Fetch currency from API
   const fetchGroupCurrency = useCallback(async () => {
     if (!groupId) {
       setCurrencyError('Invalid Group ID');
-      setGroupCurrency('VND'); // Fallback to default
+      setGroupCurrency('VND');
       return;
     }
     setLoadingCurrency(true);
@@ -86,11 +100,12 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const result = await response.json();
-      setGroupCurrency(result.currency || 'VND'); // Use API currency or fallback to 'VND'
+      const validatedCurrency = normalizeCurrencyCode(result.currency);
+      setGroupCurrency(validatedCurrency);
     } catch (err) {
       console.error('Fetch group currency error:', err);
       setCurrencyError('Failed to fetch group currency. Using default (VND).');
-      setGroupCurrency('VND'); // Fallback to default
+      setGroupCurrency('VND');
     } finally {
       setLoadingCurrency(false);
     }
@@ -98,7 +113,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   useEffect(() => {
     if (open) {
-      fetchGroupCurrency(); // Fetch currency when dialog opens
+      fetchGroupCurrency();
       fetchProductType1List();
       fetchDepartmentList();
       setFormData({
@@ -114,12 +129,20 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setDeptErrors(['']);
       setErrorOpen(false);
       setErrorMessage('');
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
+      setIsEnManuallyEdited(false);
+      setInitialVNDescription('');
+      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
     }
   }, [open, groupId, fetchGroupCurrency]);
 
   const translateText = async (text) => {
     if (!text) {
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
+      setErrorMessage('Vietnamese description has been cleared.');
+      setErrorOpen(true);
+      setIsEnManuallyEdited(false);
       return;
     }
 
@@ -136,27 +159,39 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         }),
       });
 
-      if (!response.ok) throw new Error('Translation failed');
+      if (!response.ok) throw new Error(`Translation failed with status ${response.status}`);
       const data = await response.json();
-      const translatedText = data.translatedText || data.text || '';
+      if (!data.translatedText && !data.text) {
+        throw new Error('Invalid translation response: missing translated text');
+      }
+      const translatedText = data.translatedText || data.text;
       setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
+      setIsEnManuallyEdited(false);
     } catch (error) {
-      console.error('Translation error:', error);
+      console.error('Translation error:', error.message);
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
+      setErrorMessage('Unable to translate text. Please try again or enter manually.');
+      setErrorOpen(true);
     } finally {
       setTranslating(false);
     }
   };
 
   const debouncedTranslate = useCallback(
-    debounce((text) => translateText(text), 500),
-    []
+    debounce((text) => {
+      if (text !== initialVNDescription && !isEnManuallyEdited) {
+        translateText(text);
+      }
+    }, 500),
+    [initialVNDescription, isEnManuallyEdited]
   );
 
   useEffect(() => {
-    debouncedTranslate(formData.itemDescriptionVN);
+    if (formData.itemDescriptionVN !== initialVNDescription) {
+      debouncedTranslate(formData.itemDescriptionVN);
+    }
     return () => debouncedTranslate.cancel();
-  }, [formData.itemDescriptionVN, debouncedTranslate]);
+  }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
 
   const fetchProductType1List = async () => {
     setLoadingType1(true);
@@ -216,26 +251,37 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     }
   };
 
-  const handleSelectSupplier = async (supplierData) => {
+  const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: supplierData.fullItemDescriptionVN,
-        oldSapCode: supplierData.oldSapCode,
-        supplierId: supplierData.supplierId,
+        oldSapCode: supplierData.oldSapCode || '',
+        supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
+        itemDescriptionVN: supplierData.itemDescriptionVN || prev.itemDescriptionVN,
       }));
-
+      setSelectedSupplier({
+        id: supplierData.supplierId || '',
+        sapCode: supplierData.oldSapCode || '',
+        price: parseFloat(supplierData.supplierPrice) || 0,
+        unit: supplierData.unit || '',
+        supplierName: supplierData.supplierName || '',
+        fullDescription: supplierData.fullItemDescriptionVN || '',
+      });
+      setShowSupplierSelector(false);
+      if (supplierData.itemDescriptionVN && supplierData.itemDescriptionVN !== initialVNDescription && !isEnManuallyEdited) {
+        setInitialVNDescription(supplierData.itemDescriptionVN);
+        translateText(supplierData.itemDescriptionVN);
+      }
       if (supplierData.productType1Id) {
-        await fetchProductType2List(supplierData.productType1Id);
+        fetchProductType2List(supplierData.productType1Id);
       }
     } else {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: '',
         oldSapCode: '',
         supplierId: '',
         unit: '',
@@ -243,6 +289,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         productType1Id: '',
         productType2Id: '',
       }));
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
       setProductType2List([]);
     }
   };
@@ -252,6 +300,29 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       ? parseFloat(e.target.value) || ''
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'itemDescriptionEN') {
+      setIsEnManuallyEdited(true);
+    } else if (field === 'itemDescriptionVN') {
+      setIsEnManuallyEdited(false);
+      setInitialVNDescription(value);
+    } else if (field === 'oldSapCode') {
+      if (!value) {
+        setSelectedSupplier(null);
+        setShowSupplierSelector(true);
+        setFormData((prev) => ({
+          ...prev,
+          fullItemDescriptionVN: '',
+          supplierId: '',
+          unit: '',
+          supplierPrice: 0,
+          productType1Id: '',
+          productType2Id: '',
+        }));
+        setProductType2List([]);
+      } else if (value !== formData.oldSapCode) {
+        setShowSupplierSelector(true);
+      }
+    }
     setErrorOpen(false);
     setErrorMessage('');
   };
@@ -357,7 +428,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setErrorMessage('');
   };
 
-  const handleAdd = async () => {
+  const handleAddClick = () => {
+    // Perform validation from handleAdd
     if (!groupId) {
       setErrorMessage('Group ID is missing.');
       setErrorOpen(true);
@@ -384,6 +456,19 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return;
     }
 
+    setOpenConfirmDialog(true); // Show confirmation dialog
+  };
+
+  const handleConfirmAdd = async () => {
+    setOpenConfirmDialog(false); // Close confirmation dialog
+    await handleAdd(); // Execute the original add logic
+  };
+
+  const handleCancelAdd = () => {
+    setOpenConfirmDialog(false); // Close confirmation dialog without adding
+  };
+
+  const handleAdd = async () => {
     const deptQtyMap = { quantities: {} };
     deptRows.forEach((row) => {
       if (row.department && row.qty && row.buy) {
@@ -446,6 +531,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setDeptErrors(['']);
       setProductType1List([]);
       setProductType2List([]);
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
       previews.forEach((preview) => URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
@@ -465,331 +552,377 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle
-        sx={{
-          bgcolor: (theme) => theme.palette.primary.main,
-          color: (theme) => theme.palette.primary.contrastText,
-          fontWeight: 'bold',
-          fontSize: '1.25rem',
-          textTransform: 'capitalize',
-          letterSpacing: 1,
-        }}
-      >
-        Add request
-      </DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2}>
-          {currencyError && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {currencyError}
-            </Alert>
-          )}
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Old SAP Code"
-              value={formData.oldSapCode}
-              onChange={handleChange('oldSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-              InputLabelProps={{
-                style: { color: 'inherit' },
-              }}
-            />
-            <TextField
-              label="Hana SAP Code"
-              value={formData.hanaSapCode}
-              onChange={handleChange('hanaSapCode')}
-              size="small"
-              fullWidth
-              sx={{ flex: 1 }}
-            />
-          </Stack>
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle
+          sx={{
+            bgcolor: (theme) => theme.palette.primary.main,
+            color: (theme) => theme.palette.primary.contrastText,
+            fontWeight: 'bold',
+            fontSize: '1.25rem',
+            textTransform: 'capitalize',
+            letterSpacing: 1,
+          }}
+        >
+          Add request
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {currencyError && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {currencyError}
+              </Alert>
+            )}
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Old SAP Code"
+                value={formData.oldSapCode}
+                onChange={handleChange('oldSapCode')}
+                size="small"
+                fullWidth
+                sx={{ flex: 1 }}
+                InputLabelProps={{
+                  style: { color: 'inherit' },
+                }}
+              />
+              <TextField
+                label="Hana SAP Code"
+                value={formData.hanaSapCode}
+                onChange={handleChange('hanaSapCode')}
+                size="small"
+                fullWidth
+                sx={{ flex: 1 }}
+              />
+            </Stack>
 
-          <Stack direction="row" spacing={2}>
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Item Description (VN)"
+                value={formData.itemDescriptionVN}
+                onChange={handleChange('itemDescriptionVN')}
+                fullWidth
+                size="small"
+                InputLabelProps={{
+                  style: { color: 'inherit' },
+                }}
+              />
+              <TextField
+                label="Item Description (EN)"
+                value={formData.itemDescriptionEN}
+                onChange={handleChange('itemDescriptionEN')}
+                fullWidth
+                size="small"
+                InputLabelProps={{
+                  style: { color: 'inherit' },
+                }}
+                disabled={translating}
+                InputProps={{
+                  endAdornment: translating ? (
+                    <CircularProgress size={16} />
+                  ) : null,
+                }}
+              />
+            </Stack>
+
             <TextField
-              label="Item Description (VN)"
-              value={formData.itemDescriptionVN}
-              onChange={handleChange('itemDescriptionVN')}
+              label="Full Item Description (VN)"
+              value={formData.fullItemDescriptionVN}
+              onChange={handleChange('fullItemDescriptionVN')}
               fullWidth
               size="small"
-              InputLabelProps={{
-                style: { color: 'inherit' },
-              }}
+              multiline
+              rows={2}
             />
-            <TextField
-              label="Item Description (EN)"
-              value={formData.itemDescriptionEN}
-              onChange={handleChange('itemDescriptionEN')}
-              fullWidth
-              size="small"
-              InputLabelProps={{
-                style: { color: 'inherit' },
-              }}
-              disabled={translating}
-              InputProps={{
-                endAdornment: translating ? (
-                  <CircularProgress size={16} />
-                ) : null,
-              }}
-            />
-          </Stack>
 
-          <TextField
-            label="Full Item Description (VN)"
-            value={formData.fullItemDescriptionVN}
-            onChange={handleChange('fullItemDescriptionVN')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
+            {showSupplierSelector ? (
+              <SupplierSelector
+                oldSapCode={formData.oldSapCode}
+                onSelectSupplier={handleSelectSupplier}
+                productType1List={productType1List}
+                productType2List={productType2List}
+                currency={groupCurrency}
+                disabled={loadingCurrency}
+              />
+            ) : (
+              selectedSupplier && (
+                <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
+                  <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
+                  <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
+                  <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
+                  <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
+                    Change Supplier
+                  </Button>
+                </Box>
+              )
+            )}
 
-          <SupplierSelector
-            oldSapCode={formData.oldSapCode}
-            onSelectSupplier={handleSelectSupplier}
-            productType1List={productType1List}
-            productType2List={productType2List}
-            currency={groupCurrency} // Use groupCurrency instead of prop currency
-            disabled={loadingCurrency} // Disable while loading currency
-          />
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                Department Request Qty:
+              </Typography>
+              {deptRows.map((row, index) => (
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  key={index}
+                  sx={{ mb: 1 }}
+                >
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    disabled={loadingDepartments}
+                    error={!!deptErrors[index]}
+                  >
+                    <InputLabel id={`department-label-${index}`}>Department</InputLabel>
+                    <Select
+                      labelId={`department-label-${index}`}
+                      value={row.department}
+                      label="Department"
+                      onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                    >
+                      <MenuItem value="">
+                        <em>None</em>
+                      </MenuItem>
+                      {departmentList.length > 0 ? (
+                        departmentList.map((dept) => (
+                          <MenuItem key={dept.id} value={dept.id}>
+                            {dept.departmentName}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>No departments available</MenuItem>
+                      )}
+                    </Select>
+                    {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
+                    {loadingDepartments && (
+                      <FormHelperText>Loading departments...</FormHelperText>
+                    )}
+                  </FormControl>
+                  <TextField
+                    label="Qty"
+                    type="number"
+                    value={row.qty}
+                    onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
+                    size="small"
+                    fullWidth
+                  />
+                  <TextField
+                    label="Buy"
+                    type="number"
+                    value={row.buy}
+                    onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
+                    size="small"
+                    fullWidth
+                  />
+                  <IconButton
+                    aria-label="delete department"
+                    onClick={() => handleDeleteDeptRow(index)}
+                    size="small"
+                    color="error"
+                    sx={{ ml: 1 }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddDeptRow}
+                sx={{ mt: 1 }}
+              >
+                Add Department
+              </Button>
 
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Department Request Qty:
-            </Typography>
-            {deptRows.map((row, index) => (
               <Stack
                 direction="row"
-                spacing={2}
-                alignItems="center"
-                key={index}
-                sx={{ mb: 1 }}
+                spacing={4}
+                sx={{
+                  mt: 2,
+                  bgcolor: '#f5f5f5',
+                  p: 2,
+                  borderRadius: 1,
+                  boxShadow: 1,
+                  justifyContent: 'space-between',
+                  textTransform: 'capitalize',
+                }}
               >
-                <FormControl
-                  fullWidth
-                  size="small"
-                  disabled={loadingDepartments}
-                  error={!!deptErrors[index]}
-                >
-                  <InputLabel id={`department-label-${index}`}>Department</InputLabel>
-                  <Select
-                    labelId={`department-label-${index}`}
-                    value={row.department}
-                    label="Department"
-                    onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
-                  >
-                    <MenuItem value="">
-                      <em>None</em>
-                    </MenuItem>
-                    {departmentList.length > 0 ? (
-                      departmentList.map((dept) => (
-                        <MenuItem key={dept.id} value={dept.id}>
-                          {dept.departmentName}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>No departments available</MenuItem>
-                    )}
-                  </Select>
-                  {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                  {loadingDepartments && (
-                    <FormHelperText>Loading departments...</FormHelperText>
-                  )}
-                </FormControl>
-                <TextField
-                  label="Qty"
-                  type="number"
-                  value={row.qty}
-                  onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
-                <TextField
-                  label="Buy"
-                  type="number"
-                  value={row.buy}
-                  onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
-                  size="small"
-                  fullWidth
-                />
-                <IconButton
-                  aria-label="delete department"
-                  onClick={() => handleDeleteDeptRow(index)}
-                  size="small"
-                  color="error"
-                  sx={{ ml: 1 }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+                </Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
+                </Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
+                </Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                  Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</span>
+                </Typography>
               </Stack>
-            ))}
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={handleAddDeptRow}
-              sx={{ mt: 1 }}
-            >
-              Add Department
-            </Button>
+            </Paper>
 
-            <Stack
-              direction="row"
-              spacing={4}
-              sx={{
-                mt: 2,
-                bgcolor: '#f5f5f5',
-                p: 2,
-                borderRadius: 1,
-                boxShadow: 1,
-                justifyContent: 'space-between',
-                textTransform: 'capitalize',
-              }}
-            >
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
-              </Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-              </Typography>
+            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+              <TextField
+                label="Stock"
+                value={formData.stock}
+                onChange={handleChange('stock')}
+                size="small"
+                fullWidth
+                type="number"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Order Q'ty"
+                value={formData.orderQty}
+                onChange={handleChange('orderQty')}
+                size="small"
+                fullWidth
+                type="number"
+                sx={{ flex: 1 }}
+              />
             </Stack>
-          </Paper>
 
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <TextField
-              label="Stock"
-              value={formData.stock}
-              onChange={handleChange('stock')}
-              size="small"
+              label="Reason"
+              value={formData.reason}
+              onChange={handleChange('reason')}
               fullWidth
-              type="number"
-              sx={{ flex: 1 }}
+              size="small"
+              multiline
+              rows={2}
             />
             <TextField
-              label="Order Q'ty"
-              value={formData.orderQty}
-              onChange={handleChange('orderQty')}
-              size="small"
+              label="Remark"
+              value={formData.remark}
+              onChange={handleChange('remark')}
               fullWidth
-              type="number"
-              sx={{ flex: 1 }}
+              size="small"
+              multiline
+              rows={2}
             />
-          </Stack>
+            <FormControl fullWidth size="small">
+              <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
+              <Select
+                labelId="remark-comparison-label"
+                value={formData.remarkComparison}
+                label="Remark Comparison"
+                onChange={handleChange('remarkComparison')}
+              >
+                <MenuItem value="">
+                  <em>None</em>
+                </MenuItem>
+                <MenuItem value="Old price">Old price</MenuItem>
+                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
+                  The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
+                </MenuItem>
+              </Select>
+            </FormControl>
 
-          <TextField
-            label="Reason"
-            value={formData.reason}
-            onChange={handleChange('reason')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <TextField
-            label="Remark"
-            value={formData.remark}
-            onChange={handleChange('remark')}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <FormControl fullWidth size="small">
-            <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
-            <Select
-              labelId="remark-comparison-label"
-              value={formData.remarkComparison}
-              label="Remark Comparison"
-              onChange={handleChange('remarkComparison')}
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              <MenuItem value="Old price">Old price</MenuItem>
-              <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
-                The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
-              </MenuItem>
-            </Select>
-          </FormControl>
-
-          <Box>
-            <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                Choose Image
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </Button>
+            <Box>
+              <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+                  Choose Image
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileChange}
+                  />
+                </Button>
+                {files.length > 0 && (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                    {files.length} image(s) selected
+                  </Typography>
+                )}
+              </Stack>
+              {previews.length > 0 && (
+                <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  {previews.map((preview, index) => (
+                    <Box key={`new-${index}`} sx={{ position: 'relative' }}>
+                      <img
+                        src={preview}
+                        alt={`New ${index + 1}`}
+                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
+                      />
+                      <IconButton
+                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
+                        onClick={() => handleRemoveFile(index)}
+                      >
+                        <CloseIcon color="error" />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
               {files.length > 0 && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
                   {files.length} image(s) selected
                 </Typography>
               )}
-            </Stack>
-            {previews.length > 0 && (
-              <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                {previews.map((preview, index) => (
-                  <Box key={`new-${index}`} sx={{ position: 'relative' }}>
-                    <img
-                      src={preview}
-                      alt={`New ${index + 1}`}
-                      style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                    />
-                    <IconButton
-                      sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                      onClick={() => handleRemoveFile(index)}
-                    >
-                      <CloseIcon color="error" />
-                    </IconButton>
-                  </Box>
-                ))}
-              </Box>
-            )}
-            {files.length > 0 && (
-              <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
-                {files.length} image(s) selected
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleAdd}
-          disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
-        >
-          {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
-        </Button>
-      </DialogActions>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 1.5 }}>
+          <Button onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddClick}
+            disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
+          </Button>
+        </DialogActions>
 
-      <Snackbar
-        open={errorOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseErrorDialog}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert
+        <Snackbar
+          open={errorOpen}
+          autoHideDuration={6000}
           onClose={handleCloseErrorDialog}
-          severity="error"
-          icon={<ErrorOutlineIcon />}
-          sx={{ width: '100%', bgcolor: '#fff3f3', color: '#d32f2f' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          {errorMessage}
-        </Alert>
-      </Snackbar>
-    </Dialog>
+          <Alert
+            onClose={handleCloseErrorDialog}
+            severity="error"
+            icon={<ErrorOutlineIcon />}
+            sx={{ width: '100%', bgcolor: '#fff3f3', color: '#d32f2f' }}
+          >
+            {errorMessage}
+          </Alert>
+        </Snackbar>
+      </Dialog>
+      <Dialog open={openConfirmDialog} onClose={handleCancelAdd}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Request</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to add the request for item &quot;{formData.itemDescriptionVN || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelAdd} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmAdd}
+            variant="contained"
+            sx={{
+              fontSize: '0.875rem',
+              textTransform: 'none',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
+              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            }}
+            disabled={saving}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

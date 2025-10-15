@@ -27,11 +27,12 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ArrowUpward from '@mui/icons-material/ArrowUpward';
 import ArrowDownward from '@mui/icons-material/ArrowDownward';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import AddUserDialog from './AddUserDialog';
 import EditUserDialog from './EditUserDialog';
+import ChangePasswordDialog from './ChangePasswordDialog';
 import { API_BASE_URL } from '../../config';
 
 const headers = [
@@ -54,6 +55,7 @@ const UserManagementPage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -64,15 +66,18 @@ const UserManagementPage = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  const DEFAULT_IMAGE_URL = '/default-user.png';
+  const DEFAULT_IMAGE_URL = '/uploads/users/default-user.png';
 
   const normalizeImageUrl = (url) => {
     if (!url) return null;
-    let normalized = url.replace(/\\/g, '/').replace(/^[Uu]ploads/, 'uploads/users');
-    if (!normalized.startsWith('/')) {
-      normalized = `/${normalized}`;
+    let normalized = url.replace(/\\/g, '/');
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return `${normalized}?t=${Date.now()}`;
     }
-    return normalized;
+    if (!normalized.startsWith('/uploads/users/')) {
+      normalized = `/uploads/users/${normalized.replace(/^\/?[Uu]ploads\/users\//, '')}`;
+    }
+    return `${API_BASE_URL}${normalized}?t=${Date.now()}`;
   };
 
   const fetchUsers = async (pageNumber = 0, sortKey = null, sortDirection = null, fetchAll = false) => {
@@ -85,7 +90,9 @@ const UserManagementPage = () => {
       let totalPages = 1;
 
       do {
-        const url = new URL(`${API_BASE_URL}/users?page=${currentPage}&size=${rowsPerPage}`);
+        const url = new URL(`${API_BASE_URL}/users`);
+        url.searchParams.append('page', currentPage);
+        url.searchParams.append('size', rowsPerPage);
         if (sortKey && sortDirection) {
           url.searchParams.append('sort', `${sortKey},${sortDirection}`);
         }
@@ -104,7 +111,8 @@ const UserManagementPage = () => {
 
         const mapped = userList.map((user) => {
           const imageUrl = normalizeImageUrl(user.profileImageUrl);
-          console.log(`Image URL for ${user.username}: ${API_BASE_URL}${imageUrl}`);
+          console.log(`Raw profileImageUrl for ${user.username}: ${user.profileImageUrl}`);
+          console.log(`Normalized image URL for ${user.username}: ${imageUrl}`);
           return {
             id: user.id,
             username: user.username || '',
@@ -145,11 +153,11 @@ const UserManagementPage = () => {
   };
 
   useEffect(() => {
-    fetchUsers(0, null, null, true); // Initial fetch of all users to check for 'dungds'
+    fetchUsers(0, null, null, true);
   }, []);
 
   useEffect(() => {
-    fetchUsers(page, sortConfig.key, sortConfig.direction, false); // Fetch current page on pagination/sort change
+    fetchUsers(page, sortConfig.key, sortConfig.direction, false);
   }, [page, rowsPerPage, sortConfig]);
 
   const handleAdd = async (data) => {
@@ -226,6 +234,11 @@ const UserManagementPage = () => {
     setDeleteDialogOpen(true);
   };
 
+  const handleChangePassword = (user) => {
+    setSelectedUser(user);
+    setChangePasswordDialogOpen(true);
+  };
+
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
@@ -264,6 +277,15 @@ const UserManagementPage = () => {
     setImageLoading((prev) => ({ ...prev, [userId]: true }));
     setImageErrors((prev) => ({ ...prev, [userId]: false }));
     setSnackbarOpen(false);
+  };
+
+  const handlePasswordUpdate = (data) => {
+    setChangePasswordDialogOpen(false);
+    setSelectedUser(null);
+    fetchUsers(page, sortConfig.key, sortConfig.direction, false);
+    setSnackbarMessage(data.message || 'Password updated successfully');
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
   };
 
   return (
@@ -328,12 +350,12 @@ const UserManagementPage = () => {
               sx={{
                 borderRadius: 2,
                 overflowX: 'auto',
-                maxHeight: 640,
+                height: 'calc(100vh - 320px)',
                 boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
                 width: '100%',
               }}
             >
-              <Table stickyHeader size="medium" sx={{ minWidth: 1400, width: '100%' }}>
+              <Table stickyHeader size="small" sx={{ minWidth: 1400, width: '100%' }}>
                 <TableHead>
                   <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                     {headers.map(({ label, key, sortable }) => (
@@ -342,10 +364,10 @@ const UserManagementPage = () => {
                         align={['No', 'Profile Image', 'Actions'].includes(label) ? 'center' : 'left'}
                         sx={{
                           fontWeight: 'bold',
-                          fontSize: '0.8rem',
+                          fontSize: '0.7rem',
                           color: '#ffffff',
-                          py: 1.5,
-                          px: 2,
+                          py: 0.25,
+                          px: 0.4,
                           whiteSpace: 'nowrap',
                           borderRight: '1px solid rgba(255,255,255,0.15)',
                           '&:last-child': { borderRight: 'none' },
@@ -353,8 +375,16 @@ const UserManagementPage = () => {
                           top: 0,
                           zIndex: 20,
                           backgroundColor: '#027aff',
+                          ...(key === 'no' && { left: 0, zIndex: 21, width: '50px' }),
                           cursor: sortable ? 'pointer' : 'default',
                           '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
+                          ...(label === 'Username' && { width: '15%' }),
+                          ...(label === 'Email' && { width: '20%' }),
+                          ...(label === 'Address' && { width: '20%' }),
+                          ...(label === 'Phone' && { width: '10%' }),
+                          ...(label === 'Role' && { width: '10%' }),
+                          ...(label === 'Profile Image' && { width: '80px' }),
+                          ...(label === 'Actions' && { width: '120px' }),
                         }}
                         onClick={() => sortable && handleSort(key)}
                       >
@@ -364,13 +394,13 @@ const UserManagementPage = () => {
                             {sortable && (
                               <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
                                 {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                                  <ArrowUpward sx={{ fontSize: '1rem', color: '#fff' }} />
+                                  <ArrowUpward sx={{ fontSize: '0.9rem', color: '#fff' }} />
                                 ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                                  <ArrowDownward sx={{ fontSize: '1rem', color: '#fff' }} />
+                                  <ArrowDownward sx={{ fontSize: '0.9rem', color: '#fff' }} />
                                 ) : (
                                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    <ArrowUpward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
-                                    <ArrowDownward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
+                                    <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                                    <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
                                   </Box>
                                 )}
                               </Box>
@@ -386,12 +416,12 @@ const UserManagementPage = () => {
                     <TableRow
                       key={user.id}
                       sx={{
-                        backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                        backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
                         '&:hover': {
-                          backgroundColor: '#e1f0ff',
+                          backgroundColor: '#e3f2fd',
                           transition: 'background-color 0.3s ease',
                         },
-                        fontSize: '0.85rem',
+                        fontSize: '0.7rem',
                         cursor: 'default',
                         userSelect: 'none',
                       }}
@@ -399,32 +429,32 @@ const UserManagementPage = () => {
                       <TableCell
                         align="center"
                         sx={{
-                          px: 2,
-                          py: 1.5,
+                          px: 0.4,
+                          py: 0.25,
                           position: 'sticky',
                           left: 0,
                           zIndex: 1,
-                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
+                          backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
                         }}
                       >
                         {page * rowsPerPage + idx + 1}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5, fontWeight: 600 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.25 }}>
                         {user.username || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.25 }}>
                         {user.email || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.25 }}>
                         {user.address || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.25 }}>
                         {user.phone || ''}
                       </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', px: 2, py: 1.5 }}>
+                      <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.25 }}>
                         {user.role || ''}
                       </TableCell>
-                      <TableCell align="center" sx={{ px: 2, py: 1.5 }}>
+                      <TableCell align="center" sx={{ px: 0.4, py: 0.25 }}>
                         <Box
                           sx={{
                             width: 48,
@@ -437,14 +467,14 @@ const UserManagementPage = () => {
                           }}
                         >
                           {imageLoading[user.id] ? (
-                            <CircularProgress size={24} />
+                            <CircularProgress size={20} />
                           ) : user.profileImageUrl && !imageErrors[user.id] ? (
                             <img
-                              src={`${API_BASE_URL}${user.profileImageUrl}`}
+                              src={user.profileImageUrl}
                               alt={user.username}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onLoad={() => handleImageLoad(user.id)}
-                              onError={() => handleImageError(user.id, user.username, `${API_BASE_URL}${user.profileImageUrl}`)}
+                              onError={() => handleImageError(user.id, user.username, user.profileImageUrl)}
                             />
                           ) : (
                             <img
@@ -457,8 +487,8 @@ const UserManagementPage = () => {
                           )}
                         </Box>
                       </TableCell>
-                      <TableCell align="center" sx={{ px: 2, py: 1.5 }}>
-                        <Stack direction="row" spacing={1} justifyContent="center">
+                      <TableCell align="center" sx={{ px: 0.4, py: 0.25 }}>
+                        <Stack direction="row" spacing={0.2} justifyContent="center">
                           <IconButton
                             aria-label="edit"
                             color="primary"
@@ -467,6 +497,7 @@ const UserManagementPage = () => {
                               backgroundColor: 'rgba(25, 118, 210, 0.1)',
                               '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
                               borderRadius: 1,
+                              p: 0.2,
                             }}
                             onClick={() => handleEdit(user)}
                           >
@@ -480,10 +511,25 @@ const UserManagementPage = () => {
                               backgroundColor: 'rgba(211, 47, 47, 0.1)',
                               '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
                               borderRadius: 1,
+                              p: 0.2,
                             }}
                             onClick={() => handleDelete(user)}
                           >
                             <DeleteIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            aria-label="change-password"
+                            color="warning"
+                            size="small"
+                            sx={{
+                              backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                              '&:hover': { backgroundColor: 'rgba(255, 152, 0, 0.25)' },
+                              borderRadius: 1,
+                              p: 0.2,
+                            }}
+                            onClick={() => handleChangePassword(user)}
+                          >
+                            <LockResetIcon fontSize="small" />
                           </IconButton>
                         </Stack>
                       </TableCell>
@@ -504,10 +550,10 @@ const UserManagementPage = () => {
               sx={{
                 mt: 1,
                 '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                  fontSize: '0.85rem',
+                  fontSize: '0.7rem',
                   color: theme.palette.text.secondary,
                 },
-                '.MuiTablePagination-select': { fontSize: '0.85rem' },
+                '.MuiTablePagination-select': { fontSize: '0.7rem' },
                 '.MuiTablePagination-actions > button': {
                   color: theme.palette.primary.main,
                 },
@@ -551,6 +597,13 @@ const UserManagementPage = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        <ChangePasswordDialog
+          open={changePasswordDialogOpen}
+          onClose={() => setChangePasswordDialogOpen(false)}
+          onUpdate={handlePasswordUpdate}
+          user={selectedUser}
+        />
 
         <Snackbar
           open={snackbarOpen}

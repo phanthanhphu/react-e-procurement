@@ -84,6 +84,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     message: '',
     severity: 'info',
   });
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
 
   const handleCloseNotification = () => {
     setNotification((prev) => ({ ...prev, open: false }));
@@ -207,6 +208,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setIsUsedInRequests(false);
       setNotification({ open: false, message: '', severity: 'info' });
       setFormattedPrice('');
+      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
     }
   }, [open]);
 
@@ -419,9 +421,21 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     return true;
   };
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
     if (!validateForm()) return;
+    setOpenConfirmDialog(true); // Show confirmation dialog
+  };
 
+  const handleConfirmSave = async () => {
+    setOpenConfirmDialog(false); // Close confirmation dialog
+    await handleSave(); // Execute the original save logic
+  };
+
+  const handleCancelSave = () => {
+    setOpenConfirmDialog(false); // Close confirmation dialog without saving
+  };
+
+  const handleSave = async () => {
     const multipartForm = new FormData();
     if (formData.productType1Id) multipartForm.append('productType1Id', formData.productType1Id);
     if (formData.productType2Id) multipartForm.append('productType2Id', formData.productType2Id);
@@ -523,259 +537,293 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ backgroundColor: '#4680FF', color: 'white' }}>
-        Edit Product
-      </DialogTitle>
-      <DialogContent dividers>
-        {loadingProduct ? (
-          <Box display="flex" justifyContent="center" my={4}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Stack spacing={2}>
-            <FormControl fullWidth size="small">
-              <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-              <Select
-                labelId="product-type-1-label"
-                value={formData.productType1Id}
-                label="Product Type 1"
-                onChange={handleChange('productType1Id')}
-                disabled={saving || loadingType1 || isUsedInRequests}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {productType1List.map((type1) => (
-                  <MenuItem key={type1.id} value={type1.id}>
-                    {type1.name}
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ backgroundColor: '#4680FF', color: 'white' }}>
+          Edit Product
+        </DialogTitle>
+        <DialogContent dividers>
+          {loadingProduct ? (
+            <Box display="flex" justifyContent="center" my={4}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Stack spacing={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+                <Select
+                  labelId="product-type-1-label"
+                  value={formData.productType1Id}
+                  label="Product Type 1"
+                  onChange={handleChange('productType1Id')}
+                  disabled={saving || loadingType1 || isUsedInRequests}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
                   </MenuItem>
-                ))}
-              </Select>
-              {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-            </FormControl>
-            <FormControl
-              fullWidth
-              size="small"
-              disabled={!formData.productType1Id || loadingType2 || saving || isUsedInRequests}
-            >
-              <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-              <Select
-                labelId="product-type-2-label"
-                value={formData.productType2Id}
-                label="Product Type 2"
-                onChange={handleChange('productType2Id')}
-                disabled={saving || loadingType2 || isUsedInRequests}
+                  {productType1List.map((type1) => (
+                    <MenuItem key={type1.id} value={type1.id}>
+                      {type1.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
+              </FormControl>
+              <FormControl
+                fullWidth
+                size="small"
+                disabled={!formData.productType1Id || loadingType2 || saving || isUsedInRequests}
               >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {productType2List.map((type2) => (
-                  <MenuItem key={type2.id} value={type2.id}>
-                    {type2.name}
+                <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+                <Select
+                  labelId="product-type-2-label"
+                  value={formData.productType2Id}
+                  label="Product Type 2"
+                  onChange={handleChange('productType2Id')}
+                  disabled={saving || loadingType2 || isUsedInRequests}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
                   </MenuItem>
-                ))}
-              </Select>
-              {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-            </FormControl>
-            <TextField
-              label="Supplier Code"
-              value={formData.supplierCode}
-              onChange={handleChange('supplierCode')}
-              size="small"
-              fullWidth
-              required
-              disabled={saving || isUsedInRequests}
-            />
-            <TextField
-              label="Supplier Description"
-              value={formData.supplierName}
-              onChange={handleChange('supplierName')}
-              size="small"
-              fullWidth
-              required
-              disabled={saving || isUsedInRequests}
-            />
-            <TextField
-              label="SAP Code"
-              value={formData.sapCode}
-              onChange={handleChange('sapCode')}
-              size="small"
-              fullWidth
-              required
-              disabled={saving || isUsedInRequests}
-            />
-            <TextField
-              label="Item No"
-              value={formData.itemNo}
-              onChange={handleChange('itemNo')}
-              size="small"
-              fullWidth
-              disabled={saving || isUsedInRequests}
-            />
-            <TextField
-              label="Item Description"
-              value={formData.itemDescription}
-              onChange={handleChange('itemDescription')}
-              size="small"
-              fullWidth
-              disabled={saving || isUsedInRequests}
-            />
-            <TextField
-              label="Full Description"
-              value={formData.fullDescription}
-              onChange={handleChange('fullDescription')}
-              size="small"
-              fullWidth
-              multiline
-              rows={4}
-              disabled={saving || isUsedInRequests}
-            />
-            <FormControl fullWidth size="small" disabled={saving || isUsedInRequests}>
-              <InputLabel id="good-type-label">Good Type</InputLabel>
-              <Select
-                labelId="good-type-label"
-                value={formData.goodType}
-                label="Good Type"
-                onChange={handleChange('goodType')}
+                  {productType2List.map((type2) => (
+                    <MenuItem key={type2.id} value={type2.id}>
+                      {type2.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
+              </FormControl>
+              <TextField
+                label="Supplier Code"
+                value={formData.supplierCode}
+                onChange={handleChange('supplierCode')}
+                size="small"
+                fullWidth
                 required
                 disabled={saving || isUsedInRequests}
-              >
-                <MenuItem value="">
-                  <em>Select Good Type</em>
-                </MenuItem>
-                <MenuItem value="Common">Common</MenuItem>
-                <MenuItem value="Special">Special</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl component="fieldset" disabled={saving || isUsedInRequests} required>
-              <Typography variant="subtitle2" gutterBottom>
-                Currency
-              </Typography>
-              <RadioGroup
-                row
-                name="currency"
-                value={formData.currency}
-                onChange={handleChange('currency')}
-                disabled={saving || isUsedInRequests}
-              >
-                <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={saving || isUsedInRequests} />
-                <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={saving || isUsedInRequests} />
-                <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={saving || isUsedInRequests} />
-              </RadioGroup>
-              {!formData.currency && (
-                <FormHelperText error>Please select a currency</FormHelperText>
-              )}
-            </FormControl>
-            <Stack direction="row" spacing={2}>
+              />
               <TextField
-                label="Size"
-                value={formData.size}
-                onChange={handleChange('size')}
+                label="Supplier Description"
+                value={formData.supplierName}
+                onChange={handleChange('supplierName')}
+                size="small"
+                fullWidth
+                required
+                disabled={saving || isUsedInRequests}
+              />
+              <TextField
+                label="SAP Code"
+                value={formData.sapCode}
+                onChange={handleChange('sapCode')}
+                size="small"
+                fullWidth
+                required
+                disabled={saving || isUsedInRequests}
+              />
+              <TextField
+                label="Item No"
+                value={formData.itemNo}
+                onChange={handleChange('itemNo')}
                 size="small"
                 fullWidth
                 disabled={saving || isUsedInRequests}
               />
               <TextField
-                label="Unit"
-                value={formData.unit}
-                onChange={handleChange('unit')}
+                label="Item Description"
+                value={formData.itemDescription}
+                onChange={handleChange('itemDescription')}
                 size="small"
                 fullWidth
                 disabled={saving || isUsedInRequests}
               />
               <TextField
-                label="Price"
-                value={formattedPrice}
-                onChange={handleChange('price')}
+                label="Full Description"
+                value={formData.fullDescription}
+                onChange={handleChange('fullDescription')}
                 size="small"
                 fullWidth
-                type="text"
-                disabled={!formData.currency || saving || isUsedInRequests}
-                inputProps={{ inputMode: 'numeric', pattern: formData.currency === 'VND' ? '[0-9]*' : '[0-9.]*' }}
-                helperText={!formData.currency ? 'Please select a currency first' : ''}
+                multiline
+                rows={4}
+                disabled={saving || isUsedInRequests}
               />
-            </Stack>
-            <Box>
-              <InputLabel sx={{ mb: 1 }}>
-                Product Images (Max 10, leave empty to keep current)
-              </InputLabel>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<PhotoCamera />}
+              <FormControl fullWidth size="small" disabled={saving || isUsedInRequests}>
+                <InputLabel id="good-type-label">Good Type</InputLabel>
+                <Select
+                  labelId="good-type-label"
+                  value={formData.goodType}
+                  label="Good Type"
+                  onChange={handleChange('goodType')}
+                  required
                   disabled={saving || isUsedInRequests}
                 >
-                  Choose Image
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                    disabled={saving || isUsedInRequests}
-                  />
-                </Button>
-                {(files.length > 0 || keptImageUrls.length > 0) && (
-                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    {files.length + keptImageUrls.length} image(s) selected
-                  </Typography>
+                  <MenuItem value="">
+                    <em>Select Good Type</em>
+                  </MenuItem>
+                  <MenuItem value="Common">Common</MenuItem>
+                  <MenuItem value="Special">Special</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl component="fieldset" disabled={saving || isUsedInRequests} required>
+                <Typography variant="subtitle2" gutterBottom>
+                  Currency
+                </Typography>
+                <RadioGroup
+                  row
+                  name="currency"
+                  value={formData.currency}
+                  onChange={handleChange('currency')}
+                  disabled={saving || isUsedInRequests}
+                >
+                  <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={saving || isUsedInRequests} />
+                  <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={saving || isUsedInRequests} />
+                  <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={saving || isUsedInRequests} />
+                </RadioGroup>
+                {!formData.currency && (
+                  <FormHelperText error>Please select a currency</FormHelperText>
                 )}
+              </FormControl>
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  label="Size"
+                  value={formData.size}
+                  onChange={handleChange('size')}
+                  size="small"
+                  fullWidth
+                  disabled={saving || isUsedInRequests}
+                />
+                <TextField
+                  label="Unit"
+                  value={formData.unit}
+                  onChange={handleChange('unit')}
+                  size="small"
+                  fullWidth
+                  disabled={saving || isUsedInRequests}
+                />
+                <TextField
+                  label="Price"
+                  value={formattedPrice}
+                  onChange={handleChange('price')}
+                  size="small"
+                  fullWidth
+                  type="text"
+                  disabled={!formData.currency || saving || isUsedInRequests}
+                  inputProps={{ inputMode: 'numeric', pattern: formData.currency === 'VND' ? '[0-9]*' : '[0-9.]*' }}
+                  helperText={!formData.currency ? 'Please select a currency first' : ''}
+                />
               </Stack>
-              {previews.length > 0 && (
-                <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  {previews.map((preview, index) => (
-                    <Box key={index} sx={{ position: 'relative' }}>
-                      <img
-                        src={preview}
-                        alt={`Preview ${index + 1}`}
-                        style={{
-                          maxHeight: '150px',
-                          borderRadius: 4,
-                          border: '1px solid #ddd',
-                        }}
-                        onError={(e) => {
-                          console.error(`Failed to load preview image: ${preview}`);
-                          e.target.src = '/images/fallback.jpg';
-                          e.target.alt = 'Failed to load';
-                        }}
-                      />
-                      <IconButton
-                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
-                        onClick={() => handleRemoveFile(index)}
-                        disabled={saving || isUsedInRequests}
-                      >
-                        <CloseIcon color="error" />
-                      </IconButton>
-                      <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
-                        {index < keptImageUrls.length
-                          ? 'Current Image'
-                          : files[index - keptImageUrls.length]?.name || 'New Image'}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          </Stack>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={saving || loadingProduct}>
-          Cancel
-        </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || loadingProduct || isUsedInRequests}>
-          {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
-        </Button>
-      </DialogActions>
-      <Notification
-        open={notification.open}
-        message={notification.message}
-        severity={notification.severity}
-        onClose={handleCloseNotification}
-      />
-    </Dialog>
+              <Box>
+                <InputLabel sx={{ mb: 1 }}>
+                  Product Images (Max 10, leave empty to keep current)
+                </InputLabel>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<PhotoCamera />}
+                    disabled={saving || isUsedInRequests}
+                  >
+                    Choose Image
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleFileChange}
+                      disabled={saving || isUsedInRequests}
+                    />
+                  </Button>
+                  {(files.length > 0 || keptImageUrls.length > 0) && (
+                    <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                      {files.length + keptImageUrls.length} image(s) selected
+                    </Typography>
+                  )}
+                </Stack>
+                {previews.length > 0 && (
+                  <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                    {previews.map((preview, index) => (
+                      <Box key={index} sx={{ position: 'relative' }}>
+                        <img
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
+                          style={{
+                            maxHeight: '150px',
+                            borderRadius: 4,
+                            border: '1px solid #ddd',
+                          }}
+                          onError={(e) => {
+                            console.error(`Failed to load preview image: ${preview}`);
+                            e.target.src = '/images/fallback.jpg';
+                            e.target.alt = 'Failed to load';
+                          }}
+                        />
+                        <IconButton
+                          sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
+                          onClick={() => handleRemoveFile(index)}
+                          disabled={saving || isUsedInRequests}
+                        >
+                          <CloseIcon color="error" />
+                        </IconButton>
+                        <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
+                          {index < keptImageUrls.length
+                            ? 'Current Image'
+                            : files[index - keptImageUrls.length]?.name || 'New Image'}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving || loadingProduct}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveClick}
+            disabled={saving || loadingProduct || isUsedInRequests}
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+          </Button>
+        </DialogActions>
+        <Notification
+          open={notification.open}
+          message={notification.message}
+          severity={notification.severity}
+          onClose={handleCloseNotification}
+        />
+      </Dialog>
+      <Dialog open={openConfirmDialog} onClose={handleCancelSave}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Product</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
+            Are you sure you want to save changes to the product with Supplier Code &quot;{formData.supplierCode || 'Unknown'}&quot;?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelSave} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSave}
+            variant="contained"
+            sx={{
+              fontSize: '0.875rem',
+              textTransform: 'none',
+              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
+              color: '#fff',
+              borderRadius: '8px',
+              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            }}
+            disabled={saving}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
