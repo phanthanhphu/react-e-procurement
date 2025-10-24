@@ -29,6 +29,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import InboxIcon from '@mui/icons-material/Inbox';
 import ArrowUpward from '@mui/icons-material/ArrowUpward';
 import ArrowDownward from '@mui/icons-material/ArrowDownward';
+import axios from 'axios';
 import ExportRequisitionWeeklyExcelButton from './ExportRequisitionWeeklyExcelButton';
 import EditDialog from './EditDialog';
 import AddDialog from './AddDialog';
@@ -37,30 +38,53 @@ import { API_BASE_URL } from '../../config';
 import ImportExcelButton from './ImportExcelButton';
 import Notification from './Notification';
 
+// Cấu hình axios interceptor để tự động thêm token và xử lý lỗi 401
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login'; // Chuyển hướng đến trang đăng nhập
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Updated table headers with Currency and Good Type
 const headers = [
-  { label: 'No', key: 'no', sortable: false },
-  { label: 'Product Type 1', key: 'productType1Name', sortable: true },
-  { label: 'Product Type 2', key: 'productType2Name', sortable: true },
-  { label: 'Item Description (EN)', key: 'englishName', sortable: true },
-  { label: 'Item Description (VN)', key: 'vietnameseName', sortable: true },
-  { label: 'Old SAP Code', key: 'oldSapCode', sortable: true },
-  { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true },
-  { label: 'Department', key: 'departmentRequests', sortable: false },
-  { label: 'Request Qty', key: 'requestQty', sortable: true },
-  { label: 'Order Qty', key: 'orderQty', sortable: true },
-  { label: 'Supplier Description', key: 'supplierName', sortable: true },
-  { label: 'Price', key: 'price', sortable: true },
-  { label: 'Currency', key: 'currency', sortable: true },
-  { label: 'Amount', key: 'amount', sortable: true },
-  { label: 'Stock', key: 'stock', sortable: true },
-  { label: 'Reason', key: 'reason', sortable: true },
-  { label: 'Remark', key: 'remark', sortable: true },
-  { label: 'Good Type', key: 'goodType', sortable: true },
-  { label: 'Created Date', key: 'createdDate', sortable: true },
-  { label: 'Updated Date', key: 'updatedDate', sortable: true },
-  { label: 'Images', key: 'image', sortable: false },
-  { label: 'Actions', key: 'actions', sortable: false },
+  { label: 'No', key: 'no', sortable: false, backendKey: 'no' },
+  { label: 'Product Type 1', key: 'productType1Name', sortable: true, backendKey: 'productType1Name' },
+  { label: 'Product Type 2', key: 'productType2Name', sortable: true, backendKey: 'productType2Name' },
+  { label: 'Item Description (EN)', key: 'englishName', sortable: true, backendKey: 'englishName' },
+  { label: 'Item Description (VN)', key: 'vietnameseName', sortable: true, backendKey: 'vietnameseName' },
+  { label: 'Old SAP Code', key: 'oldSapCode', sortable: true, backendKey: 'oldSapCode' },
+  { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true, backendKey: 'hanaSapCode' },
+  { label: 'Department', key: 'departmentRequests', sortable: false, backendKey: 'departmentRequests' },
+  { label: 'Request Qty', key: 'requestQty', sortable: true, backendKey: 'sumBuy' },
+  { label: 'Order Qty', key: 'orderQty', sortable: true, backendKey: 'orderQty' },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
+  { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
+  { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
+  { label: 'Amount', key: 'amount', sortable: true, backendKey: 'totalPrice' },
+  { label: 'Stock', key: 'stock', sortable: true, backendKey: 'stock' },
+  { label: 'Reason', key: 'reason', sortable: true, backendKey: 'reason' },
+  { label: 'Remark', key: 'remark', sortable: true, backendKey: 'remark' },
+  { label: 'Good Type', key: 'goodType', sortable: true, backendKey: 'goodType' },
+  { label: 'Created Date', key: 'createdDate', sortable: true, backendKey: 'createdDate' },
+  { label: 'Updated Date', key: 'updatedDate', sortable: true, backendKey: 'updatedDate' },
+  { label: 'Images', key: 'image', sortable: false, backendKey: 'image' },
+  { label: 'Actions', key: 'actions', sortable: false, backendKey: 'actions' },
 ];
 
 // DeptRequestTable component remains unchanged
@@ -187,6 +211,7 @@ export default function SummaryPage() {
   const [data, setData] = useState([]);
   const [originalData, setOriginalData] = useState([]);
   const [groupStatus, setGroupStatus] = useState(null);
+  const [totalElements, setTotalElements] = useState(0); // Thêm state cho totalElements
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
     productType2Name: '',
@@ -222,30 +247,26 @@ export default function SummaryPage() {
 
   const fetchGroupStatus = useCallback(async () => {
     if (!groupId) {
-      console.warn('No groupId, skipping fetchGroupStatus');
       setError('Invalid Group ID');
       return;
     }
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
-        method: 'GET',
+      const response = await axios.get(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const result = await response.json();
-      setGroupStatus(result.status || null);
-      console.log('Group Status:', result.status);
+      setGroupStatus(response.data.status || null);
+      console.log('Group Status:', response.data.status);
     } catch (err) {
-      console.error('Fetch group status error:', err);
+      console.error('Fetch group status error:', err.response?.data || err.message);
       setError('Failed to fetch group status.');
+    } finally {
+      setLoading(false);
     }
   }, [groupId]);
 
   const fetchData = useCallback(async () => {
     if (!groupId) {
-      console.warn('No groupId, skipping fetchData');
       setError('Invalid Group ID');
       return;
     }
@@ -255,55 +276,57 @@ export default function SummaryPage() {
       const hasSearch = Object.values(searchValues).some(
         (value) => value && value.trim() !== ''
       );
-      
-      const queryParams = new URLSearchParams({
+      const sortParam = sortConfig.key
+        ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
+        : 'updatedDate,desc';
+
+      const params = {
         groupId,
-        hasFilter: hasSearch ? 'true' : 'false',
-        disablePagination: 'false',
-        page: page.toString(),
-        size: rowsPerPage.toString(),
-        ...(sortConfig.key && sortConfig.direction && {
-          sort: `${sortConfig.key},${sortConfig.direction}`,
-        }),
+        hasFilter: hasSearch,
+        disablePagination: false,
+        page,
+        size: rowsPerPage,
+        sort: sortParam,
         ...searchValues,
+      };
+
+      const response = await axios.get(`${API_BASE_URL}/api/summary-requisitions/search`, {
+        params,
+        headers: { Accept: '*/*' },
       });
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search?${queryParams.toString()}`,
-        {
-          method: 'GET',
-          headers: { Accept: '*/*' },
-        }
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const result = await response.json();
-      
-      const mappedData = result.content.map((item) => ({
+      const mappedData = response.data.content.map((item) => ({
         ...item,
         requestQty: item.sumBuy,
         amount: item.totalPrice,
         currency: item.supplierProduct?.currency || 'VND',
         goodType: item.supplierProduct?.goodType || '',
       }));
-      
+
       setData(mappedData);
       setOriginalData(mappedData);
+      setTotalElements(response.data.totalElements || mappedData.length); // Cập nhật totalElements
     } catch (err) {
-      console.error('Fetch error:', err);
-      setError('Failed to fetch data from API. Showing previously loaded data.');
+      console.error('Fetch data error:', err.response?.data || err.message);
+      setError(`Failed to fetch data from API: ${err.message}. Showing previously loaded data.`);
     } finally {
       setLoading(false);
     }
   }, [groupId, searchValues, page, rowsPerPage, sortConfig]);
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Please login to access this page.');
+      navigate('/login');
+      return;
+    }
+    setData([]); // Clear previous data
     fetchGroupStatus();
     fetchData();
-  }, [fetchData, fetchGroupStatus]);
+  }, [fetchData, fetchGroupStatus, navigate]);
 
-  const handleDelete = async (item, event) => {
+  const handleDelete = async (item) => {
     setSelectedItemForDelete(item);
     setDeleteDialogOpen(true);
   };
@@ -320,34 +343,26 @@ export default function SummaryPage() {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${selectedItemForDelete.requisition.id}`, {
-        method: 'DELETE',
+      const response = await axios.delete(`${API_BASE_URL}/api/summary-requisitions/${selectedItemForDelete.requisition.id}`, {
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) {
-        let errorMessage = 'Could not delete item';
-        try {
-          const errorData = await response.json();
-          console.log('Raw error response:', errorData);
-          errorMessage = errorData.message || errorMessage;
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
-        }
-        throw new Error(errorMessage);
+      if (response.status >= 200 && response.status < 300) {
+        await fetchData();
+        const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
+        if (page > maxPage) setPage(maxPage);
+        setNotification({
+          open: true,
+          message: 'Item deleted successfully',
+          severity: 'success',
+        });
+      } else {
+        throw new Error('Could not delete item');
       }
-      await fetchData();
-      const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
-      if (page > maxPage) setPage(maxPage);
-      setNotification({
-        open: true,
-        message: 'Item deleted successfully',
-        severity: 'success',
-      });
     } catch (error) {
-      console.error('Delete error:', error);
+      console.error('Delete error:', error.response?.data || error.message);
       setNotification({
         open: true,
-        message: error.message,
+        message: error.response?.data?.message || 'Could not delete item',
         severity: 'error',
       });
     } finally {
@@ -423,12 +438,12 @@ export default function SummaryPage() {
       departmentName: '',
     });
     setSortConfig({ key: null, direction: null });
+    setPage(0);
     fetchData();
   };
 
   const handleNavigateToComparison = () => {
-    console.log('Navigating to:', `/dashboard/comparison/${groupId}`);
-    navigate(`/dashboard/comparison/${groupId}`);
+    navigate(`/comparison/${groupId}`);
   };
 
   const handleSort = (key) => {
@@ -440,44 +455,12 @@ export default function SummaryPage() {
     }
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
-
+    // Sử dụng server-side sorting bằng cách gọi fetchData
     if (!direction) {
-      setData([...originalData]);
+      fetchData();
       return;
     }
-
-    const sortedData = [...data].sort((a, b) => {
-      let aValue, bValue;
-
-      if (['englishName', 'vietnameseName', 'oldSapCode', 'hanaSapCode', 'reason', 'remark', 'stock', 'orderQty'].includes(key)) {
-        aValue = a.requisition[key] || '';
-        bValue = b.requisition[key] || '';
-      } else if (['supplierName', 'price', 'currency', 'goodType'].includes(key)) {
-        aValue = a.supplierProduct ? a.supplierProduct[key] : '';
-        bValue = b.supplierProduct ? b.supplierProduct[key] : '';
-      } else if (['createdDate', 'updatedDate'].includes(key)) {
-        aValue = a[key] || '';
-        bValue = b[key] || '';
-      } else {
-        aValue = a[key] || '';
-        bValue = b[key] || '';
-      }
-
-      if (aValue === null || aValue === undefined) aValue = '';
-      if (bValue === null || bValue === undefined) bValue = '';
-
-      if (['requestQty', 'price', 'amount', 'stock', 'orderQty'].includes(key)) {
-        aValue = Number(aValue) || 0;
-        bValue = Number(bValue) || 0;
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
-      }
-
-      return direction === 'asc'
-        ? String(aValue).localeCompare(String(bValue))
-        : String(bValue).localeCompare(String(aValue));
-    });
-
-    setData(sortedData);
+    fetchData();
   };
 
   const handleCurrencyClick = (currency) => {
@@ -491,7 +474,6 @@ export default function SummaryPage() {
     const fullSrcs = imageUrls?.map((imgSrc) =>
       imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
     ) || [];
-    console.log('Image URLs:', fullSrcs);
     setPopoverImgSrcs(fullSrcs);
   };
 
@@ -505,9 +487,8 @@ export default function SummaryPage() {
     handlePopoverClose();
   };
 
-  const open = Boolean(anchorEl);
   const isCompleted = groupStatus === 'Completed';
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const displayData = data.slice(0, rowsPerPage);
 
   return (
     <Box
@@ -572,7 +553,6 @@ export default function SummaryPage() {
             <span>
               <ImportExcelButton
                 onImport={(importedData) => {
-                  console.log('Imported data:', importedData);
                   fetchData();
                 }}
                 groupId={groupId}
@@ -696,7 +676,7 @@ export default function SummaryPage() {
             <Table stickyHeader size="small" sx={{ minWidth: 1900 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {headers.map(({ label, key, sortable }) => (
+                  {headers.map(({ label, key, sortable, backendKey }) => (
                     <TableCell
                       key={key}
                       align={
@@ -715,14 +695,14 @@ export default function SummaryPage() {
                         '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
-                        zIndex: 20,
+                        zIndex: key === 'no' || key === 'productType1Name' || key === 'productType2Name' || key === 'englishName' || key === 'vietnameseName' || key === 'oldSapCode' ? 21 : 20,
                         backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, zIndex: 21, boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }),
-                        ...(key === 'productType1Name' && { left: 50, zIndex: 21, minWidth: 100 }),
-                        ...(key === 'productType2Name' && { left: 150, zIndex: 21, minWidth: 100 }),
-                        ...(key === 'englishName' && { left: 250, zIndex: 21, minWidth: 150 }),
-                        ...(key === 'vietnameseName' && { left: 400, zIndex: 21, minWidth: 150 }),
-                        ...(key === 'oldSapCode' && { left: 550, zIndex: 21, minWidth: 100 }),
+                        ...(key === 'no' && { left: 0, boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }),
+                        ...(key === 'productType1Name' && { left: 50, minWidth: 100 }),
+                        ...(key === 'productType2Name' && { left: 150, minWidth: 100 }),
+                        ...(key === 'englishName' && { left: 250, minWidth: 150 }),
+                        ...(key === 'vietnameseName' && { left: 400, minWidth: 150 }),
+                        ...(key === 'oldSapCode' && { left: 550, minWidth: 100 }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                       }}
@@ -765,6 +745,9 @@ export default function SummaryPage() {
                           '&:hover': {
                             backgroundColor: '#e1f0ff',
                             transition: 'background-color 0.3s ease',
+                            '& .sticky-cell': {
+                              backgroundColor: '#e1f0ff',
+                            },
                           },
                           fontSize: '0.55rem',
                           cursor: 'default',
@@ -774,6 +757,7 @@ export default function SummaryPage() {
                       >
                         <TableCell
                           align="center"
+                          className="sticky-cell"
                           sx={{
                             px: 0.4,
                             py: 0.2,
@@ -789,6 +773,7 @@ export default function SummaryPage() {
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
                         <TableCell
+                          className="sticky-cell"
                           sx={{
                             whiteSpace: 'nowrap',
                             px: 0.4,
@@ -804,6 +789,7 @@ export default function SummaryPage() {
                           {productType1Name || ''}
                         </TableCell>
                         <TableCell
+                          className="sticky-cell"
                           sx={{
                             whiteSpace: 'nowrap',
                             px: 0.4,
@@ -819,6 +805,7 @@ export default function SummaryPage() {
                           {productType2Name || ''}
                         </TableCell>
                         <TableCell
+                          className="sticky-cell"
                           sx={{
                             whiteSpace: 'nowrap',
                             px: 0.4,
@@ -835,6 +822,7 @@ export default function SummaryPage() {
                           {requisition.englishName || ''}
                         </TableCell>
                         <TableCell
+                          className="sticky-cell"
                           sx={{
                             whiteSpace: 'nowrap',
                             px: 0.4,
@@ -850,6 +838,7 @@ export default function SummaryPage() {
                           {requisition.vietnameseName || ''}
                         </TableCell>
                         <TableCell
+                          className="sticky-cell"
                           align="center"
                           sx={{
                             px: 0.4,
@@ -984,7 +973,7 @@ export default function SummaryPage() {
                                     borderRadius: 1,
                                     p: 0.2,
                                   }}
-                                  onClick={(e) => handleDelete(item, e)}
+                                  onClick={() => handleDelete(item)}
                                   disabled={isCompleted}
                                 >
                                   <DeleteIcon fontSize="small" />
@@ -1036,7 +1025,7 @@ export default function SummaryPage() {
           <Popover
             id="mouse-over-popover"
             sx={{ pointerEvents: 'auto' }}
-            open={open}
+            open={Boolean(anchorEl)}
             anchorEl={anchorEl}
             anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
             transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
@@ -1088,7 +1077,7 @@ export default function SummaryPage() {
           <TablePagination
             rowsPerPageOptions={[10, 25, 50, 100]}
             component="div"
-            count={data.length}
+            count={totalElements}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}

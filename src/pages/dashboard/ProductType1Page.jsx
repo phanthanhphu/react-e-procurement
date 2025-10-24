@@ -34,7 +34,7 @@ const headers = [
   { label: 'Action', key: 'action', sortable: false },
 ];
 
-function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView, page, rowsPerPage, sortConfig, handleSort }) {
+function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView, page, rowsPerPage, sortConfig, handleSort, setNotification }) {
   if (!productTypes || productTypes.length === 0) {
     return <Typography sx={{ fontStyle: 'italic', fontSize: '0.9rem', color: '#666' }}>No Data</Typography>;
   }
@@ -100,7 +100,7 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
         <TableBody>
           {productTypes.map((productType, idx) => (
             <TableRow
-              key={productType.id}
+              key={productType.id || idx}
               sx={{
                 backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
                 '&:hover': { backgroundColor: '#e3f2fd', transition: 'background-color 0.3s ease' },
@@ -125,8 +125,21 @@ function ProductType1Table({ productTypes, handleDelete, handleEdit, handleView,
                       '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
                       borderRadius: 1,
                       p: 0.2,
+                      pointerEvents: 'auto',
                     }}
-                    onClick={() => handleView(productType)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!productType.id) {
+                        setNotification({
+                          open: true,
+                          message: 'Invalid Product Type ID',
+                          severity: 'error',
+                        });
+                        return;
+                      }
+                      console.log('View clicked for productType:', productType);
+                      handleView(productType);
+                    }}
                   >
                     <Visibility fontSize="small" />
                   </IconButton>
@@ -185,7 +198,7 @@ export default function ProductType1Page() {
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [openAddConfirmDialog, setOpenAddConfirmDialog] = useState(false);
-  const [openEditConfirmDialog, setOpenEditConfirmDialog] = useState(false); // New state for edit confirmation
+  const [openEditConfirmDialog, setOpenEditConfirmDialog] = useState(false);
   const [productTypeToDelete, setProductTypeToDelete] = useState(null);
   const [productTypeToEdit, setProductTypeToEdit] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
@@ -205,18 +218,22 @@ export default function ProductType1Page() {
       const params = { page, size: rowsPerPage };
       if (name) params.name = name;
       url.search = new URLSearchParams(params).toString();
+      console.log('Fetching ProductType1 with URL:', url.toString());
       const response = await fetch(url, {
         method: 'GET',
         headers: { accept: '*/*' },
       });
+      console.log('API response status:', response.status);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
       const result = await response.json();
+      console.log('ProductType1 data:', result);
       setData(result.content || []);
       setTotalElements(result.totalElements || 0);
     } catch (err) {
+      console.log('API error:', err.message);
       setNotification({
         open: true,
         message: `Failed to load data: ${err.message}`,
@@ -231,7 +248,6 @@ export default function ProductType1Page() {
 
   useEffect(() => {
     fetchData({ name: type1Name });
-    setOpenEditConfirmDialog(false); // Ensure edit confirmation dialog is closed when data is fetched
   }, [fetchData, type1Name]);
 
   const handleAdd = () => {
@@ -293,7 +309,6 @@ export default function ProductType1Page() {
   };
 
   const handleUpdateClick = () => {
-    // Perform validation from handleUpdate
     if (!editProductTypeName.trim()) {
       setNotification({
         open: true,
@@ -302,19 +317,10 @@ export default function ProductType1Page() {
       });
       return;
     }
-    setOpenEditConfirmDialog(true); // Show confirmation dialog
+    setOpenEditConfirmDialog(true);
   };
 
   const handleConfirmUpdate = async () => {
-    setOpenEditConfirmDialog(false); // Close confirmation dialog
-    await handleUpdate(); // Execute the original update logic
-  };
-
-  const handleCancelUpdate = () => {
-    setOpenEditConfirmDialog(false); // Close confirmation dialog without updating
-  };
-
-  const handleUpdate = async () => {
     try {
       setLoading(true);
       const url = new URL(`${API_BASE_URL}/api/product-type-1/${productTypeToEdit.id}`);
@@ -336,6 +342,7 @@ export default function ProductType1Page() {
         autoHideDuration: 6000,
       });
       setOpenEditDialog(false);
+      setOpenEditConfirmDialog(false);
       setProductTypeToEdit(null);
       setEditProductTypeName('');
     } catch (err) {
@@ -347,6 +354,10 @@ export default function ProductType1Page() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelUpdate = () => {
+    setOpenEditConfirmDialog(false);
   };
 
   const handleDelete = (productType) => {
@@ -400,6 +411,15 @@ export default function ProductType1Page() {
   };
 
   const handleView = (productType) => {
+    if (!productType.id) {
+      setNotification({
+        open: true,
+        message: 'Invalid Product Type ID',
+        severity: 'error',
+      });
+      return;
+    }
+    console.log('Navigating to:', `/product-type-2/${productType.id}`);
     navigate(`/product-type-2/${productType.id}`, { state: { type1Name: productType.name } });
   };
 
@@ -548,6 +568,7 @@ export default function ProductType1Page() {
         rowsPerPage={rowsPerPage}
         sortConfig={sortConfig}
         handleSort={handleSort}
+        setNotification={setNotification}
       />
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}

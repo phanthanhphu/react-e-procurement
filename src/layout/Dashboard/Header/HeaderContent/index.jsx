@@ -4,7 +4,6 @@ import Box from '@mui/material/Box';
 
 // project-imports
 import MobileSection from './MobileSection';
-import Notification from './Notification';
 import Profile from './Profile';
 import Search from './Search';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -18,7 +17,6 @@ export default function HeaderContent() {
     <>
       {!downLG && <Search />}
       {downLG && <Box sx={{ width: 1, ml: 1 }} />}
-      <Notification />
       <LanguageSwitcher />
       {!downLG && <Profile />}
       {downLG && <MobileSection />}

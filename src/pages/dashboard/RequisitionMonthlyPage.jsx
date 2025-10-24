@@ -39,6 +39,29 @@ import AddRequisitionMonthly from './AddRequisitionMonthly';
 import RequisitionMonthlySearch from './RequisitionMonthlySearch';
 import { API_BASE_URL } from '../../config';
 
+// Cấu hình axios interceptor để tự động thêm token và xử lý lỗi 401
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login'; // Chuyển hướng đến trang đăng nhập
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Define table headers for the requisition table
 const headers = [
   { label: 'No', key: 'no', sortable: false },
@@ -194,19 +217,18 @@ export default function RequisitionMonthlyPage() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   // Format currency with dynamic symbols
   const formatCurrency = (value, currency) => {
     if (!value || isNaN(value)) return '0';
     switch (currency) {
       case 'VND':
-        // Use Vietnamese locale with no decimal places for VND
         return `${new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value)} đ`;
       case 'USD':
-        // Format with 2 decimal places and $ prefix
         return `$${Number(value).toFixed(2)}`;
       case 'EUR':
-        // Format with 2 decimal places and € prefix
         return `€${Number(value).toFixed(2)}`;
       default:
         return Number(value).toFixed(2);
@@ -217,40 +239,39 @@ export default function RequisitionMonthlyPage() {
   const formatDate = (date) => {
     if (!date) return '';
     if (Array.isArray(date)) {
-      // Extract year, month, day, hour, minute, second, nanosecond
       const [year, month, day, hour, minute, second, nanosecond] = date;
-      // Convert to Date object (month - 1 for 0-based index, nanosecond to millisecond)
       const dateObj = new Date(year, month - 1, day, hour, minute, second, nanosecond / 1000000);
       return dateObj.toLocaleString('vi-VN', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
+        year: 'numeric',
       });
     }
-    // Fallback for other formats
     return new Date(date).toLocaleString('vi-VN', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
   };
 
   // Fetch group status from API
   const fetchGroupStatus = useCallback(async () => {
     if (!groupId) {
-      console.warn('No groupId, skipping fetchGroupStatus');
       setError('Invalid Group ID');
       return;
     }
+    setLoading(true);
     try {
       const response = await axios.get(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
         headers: { Accept: '*/*' },
       });
       setGroupStatus(response.data.status || null);
-      console.log('Group Status:', response.data.status); // Debug log
+      console.log('Group Status:', response.data.status);
     } catch (err) {
       console.error('Fetch group status error:', err.response?.data || err.message);
       setError('Failed to fetch group status.');
+    } finally {
+      setLoading(false);
     }
   }, [groupId]);
 
@@ -263,7 +284,6 @@ export default function RequisitionMonthlyPage() {
     setLoading(true);
     setError(null);
     try {
-      console.log('Fetching data with groupId:', groupId);
       const response = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
         params: {
           groupId,
@@ -308,10 +328,9 @@ export default function RequisitionMonthlyPage() {
         updatedDate: item.updatedDate || '',
         imageUrls: item.imageUrls || [],
       }));
-      console.log('Fetched and mapped data:', mappedData); // Debug log
       setData(mappedData);
-      setOriginalData(mappedData); // Store original data
-      setTotalElements(response.data.requisitions.totalElements); // Set total elements
+      setOriginalData(mappedData);
+      setTotalElements(response.data.requisitions.totalElements);
     } catch (err) {
       console.error('Fetch data error:', err.response?.data || err.message);
       setError(`Failed to fetch data from API: ${err.message}. Showing previously loaded data.`);
@@ -320,11 +339,18 @@ export default function RequisitionMonthlyPage() {
     }
   }, [groupId, page, rowsPerPage]);
 
+  // Check authentication status on component mount
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Please login to access this page.');
+      navigate('/login');
+      return;
+    }
     setData([]); // Clear previous data
-    fetchGroupStatus(); // Fetch group status
+    fetchGroupStatus();
     fetchData();
-  }, [fetchData, fetchGroupStatus]);
+  }, [fetchData, fetchGroupStatus, navigate]);
 
   // Handle search parameters change
   const handleSearchChange = (newSearchValues) => {
@@ -351,7 +377,7 @@ export default function RequisitionMonthlyPage() {
         searchValues.departmentName
       );
       const sortParam = sortConfig.key
-        ? `${headers.find(h => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
+        ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
         : 'updatedDate,desc';
       const params = {
         groupId,
@@ -368,7 +394,6 @@ export default function RequisitionMonthlyPage() {
         size: rowsPerPage,
         sort: sortParam,
       };
-      console.log('Search params:', params); // Debug log
       const response = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
         params,
         headers: { Accept: '*/*' },
@@ -407,7 +432,6 @@ export default function RequisitionMonthlyPage() {
         updatedDate: item.updatedDate || '',
         imageUrls: item.imageUrls || [],
       }));
-      console.log('Filtered and mapped data:', mappedData); // Debug log
       setData(mappedData);
       setTotalElements(response.data.requisitions.totalElements);
     } catch (err) {
@@ -432,13 +456,13 @@ export default function RequisitionMonthlyPage() {
     });
     setSortConfig({ key: null, direction: null });
     setPage(0);
-    setData([]); // Clear data before refetching
+    setData([]);
     fetchData();
   };
 
   // Handle item deletion with DELETE API call
   const handleDelete = async (id) => {
-    if (isCompleted) return; // Prevent deletion if group is completed
+    if (isCompleted) return;
     setLoading(true);
     try {
       const response = await axios.delete(`${API_BASE_URL}/requisition-monthly/${id}`, {
@@ -467,13 +491,13 @@ export default function RequisitionMonthlyPage() {
 
   // Dialog and navigation handlers
   const handleOpenEditDialog = (item) => {
-    if (isCompleted) return; // Prevent editing if group is completed
+    if (isCompleted) return;
     setSelectedItem(item);
     setOpenEditDialog(true);
   };
 
   const handleOpenAddDialog = () => {
-    if (isCompleted) return; // Prevent adding if group is completed
+    if (isCompleted) return;
     setOpenAddDialog(true);
   };
 
@@ -494,7 +518,7 @@ export default function RequisitionMonthlyPage() {
 
   const handleGoToComparison = () => {
     if (groupId) {
-      navigate(`/dashboard/request-monthly-comparison/${groupId}`);
+      navigate(`/request-monthly-comparison/${groupId}`);
     } else {
       setError('Invalid Group ID');
     }
@@ -506,7 +530,6 @@ export default function RequisitionMonthlyPage() {
     const fullSrcs = imageUrls.map((imgSrc) =>
       imgSrc.startsWith('http') ? imgSrc : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`
     );
-    console.log('Image URLs:', fullSrcs);
     setPopoverImgSrcs(fullSrcs);
   };
 
@@ -517,7 +540,7 @@ export default function RequisitionMonthlyPage() {
 
   const open = Boolean(anchorEl);
   const isCompleted = groupStatus === 'Completed';
-  const displayData = data.slice(0, rowsPerPage); // Use API pagination, slice for safety
+  const displayData = data.slice(0, rowsPerPage);
 
   // Delete dialog handlers
   const handleOpenDeleteDialog = (id) => {
@@ -537,10 +560,6 @@ export default function RequisitionMonthlyPage() {
     }
   };
 
-  // Snackbar state and message
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-
   const handleSnackbarClose = () => {
     setSnackbarOpen(false);
     setSnackbarMessage('');
@@ -553,7 +572,7 @@ export default function RequisitionMonthlyPage() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
-    handleSearch(); // Trigger search with new sort config
+    handleSearch();
   };
 
   return (
@@ -648,28 +667,20 @@ export default function RequisitionMonthlyPage() {
                   py: 0.6,
                   fontWeight: 600,
                   fontSize: '0.75rem',
-                  background: isCompleted
-                    ? 'grey.300'
-                    : 'linear-gradient(to right, #4cb8ff, #027aff)',
+                  background: isCompleted ? 'grey.300' : 'linear-gradient(to right, #4cb8ff, #027aff)',
                   color: isCompleted ? 'grey.700' : '#fff',
-                  boxShadow: isCompleted
-                    ? 'none'
-                    : '0 2px 6px rgba(76, 184, 255, 0.3)',
+                  boxShadow: isCompleted ? 'none' : '0 2px 6px rgba(76, 184, 255, 0.3)',
                   '&:hover': {
-                    background: isCompleted
-                      ? 'grey.300'
-                      : 'linear-gradient(to right, #3aa4f8, #016ae3)',
-                    boxShadow: isCompleted
-                      ? 'none'
-                      : '0 3px 8px rgba(76, 184, 255, 0.4)',
+                    background: isCompleted ? 'grey.300' : 'linear-gradient(to right, #3aa4f8, #016ae3)',
+                    boxShadow: isCompleted ? 'none' : '0 3px 8px rgba(76, 184, 255, 0.4)',
                   },
                 }}
-            >
-              Add New
-            </Button>
-          </span>
-        </Tooltip>
-      </Stack>
+              >
+                Add New
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
       </Stack>
 
       <RequisitionMonthlySearch
@@ -686,7 +697,11 @@ export default function RequisitionMonthlyPage() {
       </Snackbar>
 
       <Snackbar open={snackbarOpen} autoHideDuration={3000} onClose={handleSnackbarClose}>
-        <Alert onClose={handleSnackbarClose} severity={snackbarMessage.includes('Failed') ? 'error' : 'success'} sx={{ width: '100%', fontSize: '0.65rem' }}>
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarMessage.includes('Failed') ? 'error' : 'success'}
+          sx={{ width: '100%', fontSize: '0.65rem' }}
+        >
           {snackbarMessage}
         </Alert>
       </Snackbar>

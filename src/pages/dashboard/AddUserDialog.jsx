@@ -16,6 +16,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormControl,
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
@@ -29,6 +30,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
     address: '',
     phone: '',
     role: 'User',
+    isEnabled: true, // THÊM: bật/tắt user khi tạo mới
   });
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -191,7 +193,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
       setSnackbarMessage(message);
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
-      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: 'User' });
+      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: 'User dex', isEnabled: true });
       setEmailError('');
       handleRemoveImage(); // Clean up image and preview
       onClose();
@@ -297,6 +299,22 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
               <MenuItem value="Admin">Admin</MenuItem>
             </Select>
           </Box>
+
+          {/* THÊM: BẬT/TẮT USER KHI TẠO MỚI */}
+          <FormControl component="fieldset" sx={{ mt: 1 }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <input
+                type="checkbox"
+                checked={formData.isEnabled}
+                onChange={(e) => setFormData(prev => ({ ...prev, isEnabled: e.target.checked }))}
+                disabled={saving}
+              />
+              <Typography variant="body2">
+                {formData.isEnabled ? 'Enabled' : 'Disabled'}
+              </Typography>
+            </Stack>
+          </FormControl>
+
           <Box>
             <InputLabel sx={{ mb: 1 }}>Profile Image</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">

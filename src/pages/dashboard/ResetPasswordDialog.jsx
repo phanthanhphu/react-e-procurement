@@ -14,10 +14,9 @@ import {
 } from '@mui/material';
 import { API_BASE_URL } from '../../config';
 
-export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) {
+export default function ResetPasswordDialog({ open, onClose, onUpdate, user }) {
   const [formData, setFormData] = useState({
     email: '',
-    oldPassword: '',
     newPassword: '',
     confirmNewPassword: '',
   });
@@ -32,7 +31,6 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
     if (user) {
       setFormData({
         email: user.email || '',
-        oldPassword: '',
         newPassword: '',
         confirmNewPassword: '',
       });
@@ -48,12 +46,6 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
   const handleSubmit = () => {
     if (!formData.email) {
       setSnackbarMessage('Email is required.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (!formData.oldPassword) {
-      setSnackbarMessage('Old password is required.');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
@@ -76,27 +68,17 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
   // Confirm and proceed with API call
   const handleConfirmSubmit = async () => {
     setConfirmOpen(false);
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setSnackbarMessage('Authentication token is missing.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-
     setSaving(true);
     try {
-      // Change password API call
-      const res = await fetch(`${API_BASE_URL}/users/change-password`, {
+      // Reset password API call
+      const res = await fetch(`${API_BASE_URL}/users/reset-password`, {
         method: 'POST',
         headers: {
           accept: '*/*',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           email: formData.email,
-          oldPassword: formData.oldPassword,
           newPassword: formData.newPassword,
           confirmNewPassword: formData.confirmNewPassword,
         }),
@@ -104,33 +86,16 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || `Password change failed with status ${res.status}`);
+        throw new Error(errorData.message || `Password reset failed with status ${res.status}`);
       }
 
       const data = await res.json();
-      setSnackbarMessage(data.message || 'Password changed successfully');
+      setSnackbarMessage(data.message || 'Password reset successfully');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
 
-      // Perform logout API call
-      await fetch(`${API_BASE_URL}/users/logout`, {
-        method: 'DELETE',
-        headers: {
-          accept: '*/*',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      // Clear local storage and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setTimeout(() => {
-        window.location.href = '/react/login';
-      }, 1000);
-
       setFormData({
         email: user.email || '',
-        oldPassword: '',
         newPassword: '',
         confirmNewPassword: '',
       });
@@ -162,7 +127,7 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
           letterSpacing: 1,
         }}
       >
-        Change Password
+        Reset Password
       </DialogTitle>
       <DialogContent dividers sx={{ pt: 3 }}>
         <Stack spacing={3}>
@@ -174,15 +139,6 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
             size="small"
             required
             type="email"
-          />
-          <TextField
-            label="Old Password"
-            value={formData.oldPassword}
-            onChange={handleChange('oldPassword')}
-            fullWidth
-            size="small"
-            required
-            type="password"
           />
           <TextField
             label="New Password"
@@ -214,7 +170,7 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
           variant="contained"
           color="primary"
         >
-          {saving ? <CircularProgress size={20} color="inherit" /> : 'Update'}
+          {saving ? <CircularProgress size={20} color="inherit" /> : 'Reset'}
         </Button>
       </DialogActions>
       <Snackbar
@@ -237,10 +193,10 @@ export default function ChangePasswordDialog({ open, onClose, onUpdate, user }) 
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Change</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Password Reset</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to change the password?
+            Are you sure you want to reset the password?
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 1.5 }}>

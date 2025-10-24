@@ -25,31 +25,55 @@ import {
   Chip,
 } from '@mui/material';
 import { Add, Edit, Delete, Visibility, ArrowUpward, ArrowDownward } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
+import axios from 'axios';
 import AddGroupModal from './AddGroupModal';
 import EditGroupModal from './EditGroupModal';
 import GroupSearchBar from './GroupSearchBar';
 import { API_BASE_URL } from '../../config';
 
-// Check React version
-const reactVersion = React.version.split('.')[0];
-if (reactVersion >= 19) {
-  console.warn('React 19 detected. Ant Design v5.x may have compatibility issues. See https://u.ant.design/v5-for-19 for details.');
-}
+// Cấu hình axios interceptor
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    Accept: '*/*',
+    'Content-Type': 'application/json',
+  },
+});
 
-const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 const headers = [
-  { label: 'No', key: 'no', sortable: false, hideOnSmall: false },
-  { label: 'Name', key: 'name', sortable: true, hideOnSmall: false },
-  { label: 'Type', key: 'type', sortable: true, hideOnSmall: false },
-  { label: 'Status', key: 'status', sortable: true, hideOnSmall: false },
-  { label: 'Created By', key: 'createdBy', sortable: true, hideOnSmall: true },
-  { label: 'Created Date', key: 'createdDate', sortable: true, hideOnSmall: false },
-  { label: 'Stock Date', key: 'stockDate', sortable: true, hideOnSmall: true },
-  { label: 'Currency', key: 'currency', sortable: true, hideOnSmall: true },
-  { label: 'Actions', key: 'actions', sortable: false, hideOnSmall: false },
+  { label: 'No', key: 'no', sortable: false, hideOnSmall: false, backendKey: 'no' },
+  { label: 'Name', key: 'name', sortable: true, hideOnSmall: false, backendKey: 'name' },
+  { label: 'Type', key: 'type', sortable: true, hideOnSmall: false, backendKey: 'type' },
+  { label: 'Status', key: 'status', sortable: true, hideOnSmall: false, backendKey: 'status' },
+  { label: 'Created By', key: 'createdBy', sortable: true, hideOnSmall: true, backendKey: 'createdBy' },
+  { label: 'Created Date', key: 'createdDate', sortable: true, hideOnSmall: false, backendKey: 'createdDate' },
+  { label: 'Stock Date', key: 'stockDate', sortable: true, hideOnSmall: true, backendKey: 'stockDate' },
+  { label: 'Currency', key: 'currency', sortable: true, hideOnSmall: true, backendKey: 'currency' },
+  { label: 'Actions', key: 'actions', sortable: false, hideOnSmall: false, backendKey: 'actions' },
 ];
 
 const fetchGroups = async (
@@ -63,7 +87,8 @@ const fetchGroups = async (
   startDate = null,
   endDate = null,
   stockStartDate = null,
-  stockEndDate = null
+  stockEndDate = null,
+  sort = 'createdDate,desc'
 ) => {
   try {
     const params = new URLSearchParams({
@@ -74,100 +99,101 @@ const fetchGroups = async (
       createdBy: createdBy || '',
       type: type || '',
       currency: currency || '',
+      sort,
     });
     if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DD'));
     if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DD'));
     if (stockStartDate && stockStartDate.isValid()) params.append('stockStartDate', stockStartDate.format('YYYY-MM-DD'));
     if (stockEndDate && stockEndDate.isValid()) params.append('stockEndDate', stockEndDate.format('YYYY-MM-DD'));
 
-    const response = await fetch(`${apiUrl}/filter?${params.toString()}`, {
-      method: 'GET',
-      headers: { Accept: '*/*', 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    console.log('Fetched groups:', data.content);
+    const response = await apiClient.get(`${API_BASE_URL}/api/group-summary-requisitions/filter`, { params });
+    console.log('Raw fetched groups:', response.data.content.map(item => ({
+      id: item.id,
+      createdDate: item.createdDate,
+      stockDate: item.stockDate
+    })));
     return {
-      content: data.content || [],
-      totalPages: data.totalPages || 1,
+      content: response.data.content || [],
+      totalElements: response.data.totalElements || 0,
+      totalPages: response.data.totalPages || 1,
     };
   } catch (error) {
-    console.error('Error fetching groups:', error);
-    return { content: [], totalPages: 1 };
+    console.error('Error fetching groups:', error.response?.data || error.message);
+    return { content: [], totalElements: 0, totalPages: 1 };
   }
 };
 
 const deleteGroup = async (id) => {
   try {
-    const response = await fetch(`${apiUrl}/${id}`, {
-      method: 'DELETE',
-      headers: { Accept: '*/*', 'Content-Type': 'application/json' },
-    });
-    let responseBody;
-    try {
-      responseBody = await response.json();
-    } catch (jsonError) {
-      console.error('Failed to parse JSON:', jsonError);
-      throw new Error('Failed to delete group');
-    }
-    if (!response.ok) throw new Error(responseBody.message || `Delete failed with status ${response.status}`);
-    return { success: true, message: responseBody.message || 'Group deleted successfully' };
+    const response = await apiClient.delete(`${API_BASE_URL}/api/group-summary-requisitions/${id}`);
+    return { success: true, message: response.data?.message || 'Group deleted successfully' };
   } catch (error) {
-    console.error('Error deleting group:', error);
-    return { success: false, message: error.message || 'Failed to delete group' };
+    console.error('Error deleting group:', error.response?.data || error.message);
+    return { success: false, message: error.response?.data?.message || 'Failed to delete group' };
   }
 };
 
-const formatDate = (dateArray) => {
-  if (!Array.isArray(dateArray) || dateArray.length < 3) return null;
-  const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
-  return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+const formatDate = (dateInput) => {
+  if (!dateInput) return null;
+
+  let date;
+  if (Array.isArray(dateInput)) {
+    const [year, month, day, hour = 0, minute = 0, second = 0] = dateInput;
+    date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+  } else if (typeof dateInput === 'string' && dayjs(dateInput).isValid()) {
+    date = dayjs(dateInput);
+  } else {
+    return null;
+  }
+
+  return date.isValid() ? date.format('YYYY-MM-DD') : null;
 };
 
 const getStatusColor = (status) => {
   switch (status) {
     case 'Completed':
-      return '#4caf50'; // Green
+      return '#4caf50';
     case 'Not Started':
-      return '#f44336'; // Red
+      return '#f44336';
     case 'In Progress':
-      return '#2196f3'; // Blue
+      return '#2196f3';
     default:
-      return '#9e9e9e'; // Gray
+      return '#9e9e9e';
   }
 };
 
 const getTypeColor = (type) => {
   switch (type) {
     case 'Requisition_monthly':
-      return '#64b5f6'; // Blue
+      return '#64b5f6';
     case 'Requisition_weekly':
-      return '#e57373'; // Red
+      return '#e57373';
     default:
-      return '#9e9e9e'; // Gray
+      return '#9e9e9e';
   }
 };
 
 const getCurrencyColor = (currency) => {
   switch (currency) {
     case 'VND':
-      return '#4caf50'; // Green
+      return '#4caf50';
     case 'EURO':
-      return '#2196f3'; // Blue
+      return '#2196f3';
     case 'USD':
-      return '#e57373'; // Red
+      return '#e57373';
     default:
-      return '#9e9e9e'; // Gray
+      return '#9e9e9e';
   }
 };
 
 export default function GroupRequestPage() {
   const theme = useTheme();
   const navigate = useNavigate();
-  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg')); // ≥1200px
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md')); // ≤900px
+  const location = useLocation();
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
   const [data, setData] = useState([]);
-  const [originalData, setOriginalData] = useState([]);
+  const [totalElements, setTotalElements] = useState(0);
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
@@ -179,7 +205,7 @@ export default function GroupRequestPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(isLargeScreen ? 20 : 12); // 20 for 24", 12 for 15.6"
+  const [rowsPerPage, setRowsPerPage] = useState(isLargeScreen ? 20 : 12);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
@@ -192,7 +218,10 @@ export default function GroupRequestPage() {
     setNotification({ open: false, message: '', severity: 'info' });
     const [startDate, endDate] = dateRange || [];
     const [stockStartDate, stockEndDate] = stockDateRange || [];
-    const { content, totalPages } = await fetchGroups(
+    const sortParam = sortConfig.key
+      ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
+      : 'createdDate,desc';
+    const { content, totalElements, totalPages } = await fetchGroups(
       page,
       rowsPerPage,
       nameFilter,
@@ -203,33 +232,40 @@ export default function GroupRequestPage() {
       startDate,
       endDate,
       stockStartDate,
-      stockEndDate
+      stockEndDate,
+      sortParam
     );
-    console.log('Fetched groups:', content);
-    setData(content || []);
-    setOriginalData(content || []);
-    setTotalPages(totalPages || 1);
+    setData(content);
+    setTotalElements(totalElements);
+    setTotalPages(totalPages);
     setLoading(false);
-  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter, dateRange, stockDateRange]);
+  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter, dateRange, stockDateRange, sortConfig]);
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setNotification({
+        open: true,
+        message: 'Please login to access this page.',
+        severity: 'error',
+      });
+      navigate('/login');
+      return;
+    }
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, navigate, location]);
 
   useEffect(() => {
-    // Adjust rowsPerPage based on screen size
     setRowsPerPage(isLargeScreen ? 20 : 12);
-    setPage(0); // Reset to first page when rowsPerPage changes
+    setPage(0);
   }, [isLargeScreen]);
 
   const handleAddOk = () => {
-    console.log('handleAddOk called');
     setIsAddModalOpen(false);
     fetchData();
   };
 
   const handleEditOk = () => {
-    console.log('handleEditOk called with currentItem:', currentItem);
     setIsEditModalOpen(false);
     setCurrentItem(null);
     fetchData();
@@ -255,7 +291,7 @@ export default function GroupRequestPage() {
       const { success, message } = await deleteGroup(selectedGroup.id);
       if (success) {
         await fetchData();
-        const maxPage = Math.max(0, Math.ceil((data.length - 1) / rowsPerPage) - 1);
+        const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
         if (page > maxPage) setPage(maxPage);
       }
       setNotification({
@@ -264,10 +300,9 @@ export default function GroupRequestPage() {
         severity: success ? 'success' : 'error',
       });
     } catch (error) {
-      console.error('Delete group error:', error);
       setNotification({
         open: true,
-        message: error.message || 'Failed to delete group',
+        message: error.message,
         severity: 'error',
       });
     } finally {
@@ -310,34 +345,7 @@ export default function GroupRequestPage() {
     }
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
-
-    if (!direction) {
-      setData([...originalData]);
-      return;
-    }
-
-    const sortedData = [...data].sort((a, b) => {
-      let aValue = a[key];
-      let bValue = b[key];
-
-      if (key === 'createdDate' || key === 'stockDate') {
-        aValue = formatDate(a[key]) || '';
-        bValue = formatDate(b[key]) || '';
-      }
-
-      if (aValue === null || aValue === undefined) return direction === 'asc' ? -1 : 1;
-      if (bValue === null || bValue === undefined) return direction === 'asc' ? 1 : -1;
-
-      if (typeof aValue === 'string') {
-        return direction === 'asc'
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
-
-      return direction === 'asc' ? aValue - bValue : bValue - aValue;
-    });
-
-    setData(sortedData);
+    fetchData();
   };
 
   const handleChangePage = (event, newPage) => setPage(newPage);
@@ -349,8 +357,6 @@ export default function GroupRequestPage() {
   const handleCloseNotification = () => {
     setNotification({ open: false, message: '', severity: 'info' });
   };
-
-  const displayData = data.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <Box
@@ -382,10 +388,7 @@ export default function GroupRequestPage() {
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={() => {
-            console.log('Opening AddGroupModal');
-            setIsAddModalOpen(true);
-          }}
+          onClick={() => setIsAddModalOpen(true)}
           sx={{
             textTransform: 'none',
             borderRadius: 2,
@@ -449,7 +452,7 @@ export default function GroupRequestPage() {
             component={Paper}
             elevation={4}
             sx={{
-              overflowX: 'auto', // Allow horizontal scroll if needed
+              overflowX: 'auto',
               boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
               '&::-webkit-scrollbar': {
                 height: '8px',
@@ -478,9 +481,9 @@ export default function GroupRequestPage() {
                         '&:last-child': { borderRight: 'none' },
                         position: 'sticky',
                         top: 0,
-                        zIndex: 20,
+                        zIndex: key === 'no' ? 21 : 20,
                         backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, zIndex: 21, width: '60px' }),
+                        ...(key === 'no' && { left: 0, width: '60px' }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                         ...(label === 'Name' && { width: '25%' }),
@@ -516,10 +519,8 @@ export default function GroupRequestPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {displayData.length > 0 ? (
-                  displayData.map((group, idx) => {
-                    const createdDateIso = formatDate(group.createdDate);
-                    const stockDateIso = formatDate(group.stockDate);
+                {data.length > 0 ? (
+                  data.map((group, idx) => {
                     const isCompleted = group.status === 'Completed';
                     return (
                       <TableRow
@@ -602,7 +603,7 @@ export default function GroupRequestPage() {
                           {group.createdBy || ''}
                         </TableCell>
                         <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
-                          {createdDateIso ? dayjs(createdDateIso).format('YYYY-MM-DD') : 'N/A'}
+                          {formatDate(group.createdDate) || 'N/A'}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -612,7 +613,7 @@ export default function GroupRequestPage() {
                             display: { xs: headers.find(h => h.key === 'stockDate').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
                           }}
                         >
-                          {stockDateIso ? dayjs(stockDateIso).format('YYYY-MM-DD') : 'N/A'}
+                          {formatDate(group.stockDate) || 'N/A'}
                         </TableCell>
                         <TableCell
                           align="center"
@@ -648,13 +649,12 @@ export default function GroupRequestPage() {
                                   p: 0.3,
                                 }}
                                 onClick={() => {
-                                  console.log('Navigating to group:', group.id, 'type:', group.type);
                                   if (group.type === 'Requisition_monthly') {
-                                    navigate(`/dashboard/requisition-monthly/${group.id}`);
+                                    navigate(`/requisition-monthly/${group.id}`);
                                   } else if (group.type === 'Requisition_weekly') {
-                                    navigate(`/dashboard/summary/${group.id}`);
+                                    navigate(`/summary/${group.id}`);
                                   } else {
-                                    navigate(`/dashboard/summary/${group.id}`);
+                                    navigate(`/summary/${group.id}`);
                                   }
                                 }}
                               >
@@ -673,7 +673,6 @@ export default function GroupRequestPage() {
                                   p: 0.3,
                                 }}
                                 onClick={() => {
-                                  console.log('Opening EditGroupModal with group:', group);
                                   setCurrentItem(group);
                                   setIsEditModalOpen(true);
                                 }}
@@ -718,7 +717,7 @@ export default function GroupRequestPage() {
           <TablePagination
             rowsPerPageOptions={[10, 12, 20, 50]}
             component="div"
-            count={data.length}
+            count={totalElements}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -741,17 +740,13 @@ export default function GroupRequestPage() {
 
       <AddGroupModal
         open={isAddModalOpen}
-        onCancel={() => {
-          console.log('Closing AddGroupModal');
-          setIsAddModalOpen(false);
-        }}
+        onCancel={() => setIsAddModalOpen(false)}
         onOk={handleAddOk}
       />
       <EditGroupModal
         open={isEditModalOpen}
         currentItem={currentItem}
         onCancel={() => {
-          console.log('Closing EditGroupModal');
           setIsEditModalOpen(false);
           setCurrentItem(null);
         }}

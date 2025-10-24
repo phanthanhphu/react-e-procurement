@@ -3,12 +3,44 @@ import { Modal, Form, Input, Select, DatePicker, Radio } from 'antd';
 import { Snackbar, Alert } from '@mui/material';
 import dayjs from 'dayjs';
 import { API_BASE_URL } from '../../config';
+import axios from 'axios';
 
 // Check React version
 const reactVersion = React.version.split('.')[0];
 if (reactVersion >= 19) {
   console.warn('React 19 detected. Ant Design v5.x may have compatibility issues. See https://u.ant.design/v5-for-19 for details.');
 }
+
+// Cấu hình apiClient giống trong GroupRequestPage
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    Accept: '*/*',
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 const apiUrl = `${API_BASE_URL}/api/group-summary-requisitions`;
 
@@ -20,45 +52,37 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
     message: '',
     severity: 'info',
   });
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   // Get username from localStorage
   const storedUser = JSON.parse(localStorage.getItem('user')) || {};
   const username = storedUser.username || '';
 
-  // Set form values when the modal opens
-  useEffect(() => {
-    console.log('EditGroupModal mounted. Props:', { open, currentItem });
-    if (open && currentItem) {
-      console.log('Setting form values:', currentItem);
-      form.setFieldsValue({
-        name: currentItem.name || '',
-        type: currentItem.type || 'Requisition_weekly',
-        status: currentItem.status || 'Not Started',
-        stockDate: currentItem.stockDate ? dayjs(formatDate(currentItem.stockDate)) : null,
-        currency: currentItem.currency || 'VND',
-      });
-    } else {
-      console.log('Resetting form');
-      form.resetFields();
-    }
-    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed when modal opens/closes
-  }, [currentItem, form, open]);
-
-  // Convert date array to ISO string for dayjs
-  const formatDate = (dateArray) => {
-    if (!Array.isArray(dateArray) || dateArray.length < 3) {
-      console.warn('Invalid date array:', dateArray);
+  // Convert date input (array or string) to dayjs object
+  const formatDate = (dateInput) => {
+    if (!dateInput) {
+      console.warn('Invalid date input:', dateInput);
       return null;
     }
-    const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
-    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+
+    let date;
+    if (Array.isArray(dateInput)) {
+      const [year, month, day, hour = 0, minute = 0, second = 0] = dateInput;
+      date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+    } else if (typeof dateInput === 'string' && dayjs(dateInput).isValid()) {
+      date = dayjs(dateInput);
+    } else {
+      console.warn('Invalid date format:', dateInput);
+      return null;
+    }
+
+    return date.isValid() ? date : null;
   };
 
   // Convert ISO date to array [year, month, day, hour, minute, second]
   const toDateArray = (isoDate) => {
-    if (!isoDate) {
-      console.warn('No ISO date provided for conversion');
+    if (!isoDate || !dayjs(isoDate).isValid()) {
+      console.warn('No valid ISO date provided for conversion:', isoDate);
       return null;
     }
     const date = new Date(isoDate);
@@ -72,6 +96,26 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
     ];
   };
 
+  // Set form values when the modal opens
+  useEffect(() => {
+    console.log('EditGroupModal mounted. Props:', { open, currentItem });
+    if (open && currentItem) {
+      console.log('Setting form values:', currentItem);
+      const stockDate = formatDate(currentItem.stockDate);
+      form.setFieldsValue({
+        name: currentItem.name || '',
+        type: currentItem.type || 'Requisition_weekly',
+        status: currentItem.status || 'Not Started',
+        stockDate: stockDate,
+        currency: currentItem.currency || 'VND',
+      });
+    } else {
+      console.log('Resetting form');
+      form.resetFields();
+    }
+    setOpenConfirmDialog(false);
+  }, [currentItem, form, open]);
+
   // Handle close notification
   const handleCloseNotification = () => {
     setNotification((prev) => ({ ...prev, open: false }));
@@ -82,9 +126,9 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
     console.log('Save button clicked. Starting handleSaveClick...');
     try {
       console.log('Validating form fields...');
-      await form.validateFields(); // Validate form before showing confirmation
+      await form.validateFields();
       console.log('Form validation passed');
-      setOpenConfirmDialog(true); // Show confirmation dialog
+      setOpenConfirmDialog(true);
     } catch (error) {
       console.error('Form validation failed:', error);
       setNotification({
@@ -98,7 +142,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
   // Handle confirm save
   const handleConfirmSave = async () => {
     console.log('Confirm save clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
+    setOpenConfirmDialog(false);
     setLoading(true);
     setNotification({ open: false, message: '', severity: 'info' });
     try {
@@ -115,50 +159,35 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
         ...values,
         id: currentItem.id,
         createdBy: username || currentItem.createdBy || 'Unknown',
-        createdDate: currentItem.createdDate,
-        stockDate: values.stockDate ? toDateArray(values.stockDate.toISOString()) : null,
+        createdDate: currentItem.createdDate, // Giữ nguyên createdDate từ dữ liệu gốc
+        stockDate: values.stockDate && dayjs(values.stockDate).isValid() ? toDateArray(values.stockDate.toISOString()) : null,
         currency: values.currency.toUpperCase(),
       };
       console.log('Formatted API payload:', formattedValues);
 
-      // Update existing group via API
-      console.log('Sending fetch request to:', `${apiUrl}/${currentItem.id}`);
-      const response = await fetch(`${apiUrl}/${currentItem.id}`, {
-        method: 'PUT',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formattedValues),
-      });
+      // Update existing group via API using apiClient
+      console.log('Sending API request to:', `${apiUrl}/${currentItem.id}`);
+      const response = await apiClient.put(`${apiUrl}/${currentItem.id}`, formattedValues);
 
       console.log('API Response Status:', response.status);
-      let responseBody;
-      try {
-        responseBody = await response.json();
-        console.log('API Response Body:', responseBody);
-      } catch (jsonError) {
-        console.error('Failed to parse JSON:', jsonError);
-        throw new Error('Failed to update group');
-      }
+      console.log('API Response Body:', response.data);
 
-      if (response.ok) {
-        console.log('API request successful');
-        setNotification({
-          open: true,
-          message: responseBody.message || 'Group updated successfully',
-          severity: 'success',
-        });
-        onOk();
-        form.resetFields();
-      } else {
-        throw new Error(responseBody.message || 'Failed to update group');
-      }
-    } catch (error) {
-      console.error('Error in handleConfirmSave:', error);
       setNotification({
         open: true,
-        message: error.message || 'Failed to update group',
+        message: response.data.message || 'Group updated successfully',
+        severity: 'success',
+      });
+      onOk();
+      form.resetFields();
+    } catch (error) {
+      console.error('Error in handleConfirmSave:', error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to update group due to an unexpected error';
+      setNotification({
+        open: true,
+        message: errorMessage,
         severity: 'error',
       });
     } finally {
@@ -170,14 +199,14 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
   // Handle cancel confirmation
   const handleCancelSave = () => {
     console.log('Cancel confirmation clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
+    setOpenConfirmDialog(false);
   };
 
   // Handle cancel with safety check
   const handleCancel = () => {
     console.log('Cancel button or icon X clicked');
     form.resetFields();
-    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+    setOpenConfirmDialog(false);
     if (typeof onCancel === 'function') {
       onCancel();
     } else {
@@ -204,7 +233,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
       <Modal
         title="Edit Request Group"
         open={open}
-        onOk={handleSaveClick} // Updated to trigger confirmation dialog
+        onOk={handleSaveClick}
         onCancel={handleCancel}
         width={600}
         okText="Save"
@@ -280,7 +309,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
         cancelText="Cancel"
         okButtonProps={{ loading, disabled: loading }}
         cancelButtonProps={{ disabled: loading }}
-        style={{ borderRadius: '8px', zIndex: 1200 }} // Higher zIndex to ensure it appears above main modal
+        style={{ borderRadius: '8px', zIndex: 1200 }}
       >
         <p style={{ fontSize: '14px', color: '#333' }}>
           Are you sure you want to save changes to the group &quot;{form.getFieldValue('name') || 'Unknown'}&quot;?

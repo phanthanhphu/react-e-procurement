@@ -17,11 +17,29 @@ import {
   Button,
 } from '@mui/material';
 import InboxIcon from '@mui/icons-material/Inbox';
+import axios from 'axios';
 import ExportComparisonMonthlyExcelButton from './ExportComparisonMonthlyExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
 import AddDialog from './AddDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
 import { API_BASE_URL } from '../../config.js';
+
+// Retry function for API calls
+const fetchWithRetry = async (url, options, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await axios.get(url, options);
+      return response;
+    } catch (err) {
+      if (i < retries - 1) {
+        console.warn(`Retry ${i + 1}/${retries} for ${url}:`, err.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+};
 
 // Normalize currency codes for toLocaleString
 const normalizeCurrencyCode = (currency) => {
@@ -34,14 +52,14 @@ const normalizeCurrencyCode = (currency) => {
     case 'USD':
       return 'USD';
     default:
-      return 'VND'; // Fallback
+      return 'VND';
   }
 };
 
 // Get display currency name for UI labels
 const getDisplayCurrency = (currency) => {
   if (!currency) return 'VND';
-  return currency.toUpperCase(); // Keep original name (e.g., "EURO")
+  return currency.toUpperCase();
 };
 
 // Format currency based on normalized code
@@ -71,6 +89,7 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Hana SAP Code', key: 'hanaSapCode' },
   { label: 'Unit', key: 'unit' },
   { label: 'Suppliers', key: 'suppliers' },
+  { label: 'Best Price', key: 'isBestPrice' },
   { label: 'Department Requests', key: 'departmentRequests' },
   { label: 'Request Qty', key: 'totalRequestQty' },
   { label: 'Order Qty', key: 'orderQty' },
@@ -325,7 +344,7 @@ export default function RequestMonthlyComparisonPage() {
   const [error, setError] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [currency, setCurrency] = useState('VND'); // State for dynamic currency
+  const [currency, setCurrency] = useState('VND');
 
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
@@ -346,29 +365,45 @@ export default function RequestMonthlyComparisonPage() {
   }, [data]);
 
   const fetchUnfilteredTotals = useCallback(async () => {
-    if (!groupId) return;
+    if (!groupId) {
+      console.error('Invalid Group ID');
+      return;
+    }
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false`,
+      const response = await fetchWithRetry(
+        `${API_BASE_URL}/search/comparison-monthly`,
         {
+          params: { groupId, filter: false },
           headers: { Accept: '*/*' },
-        }
+        },
+        3,
+        1000
       );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result = await response.json();
+      console.log('Unfiltered totals response:', response.data);
       setUnfilteredTotals({
-        totalAmt: result.totalAmt || 0,
-        totalAmtDifference: result.totalAmtDifference || 0,
-        totalDifferencePercentage: result.totalDifferencePercentage || 0,
+        totalAmt: response.data.totalAmt || 0,
+        totalAmtDifference: response.data.totalAmtDifference || 0,
+        totalDifferencePercentage: response.data.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      console.error('Fetch unfiltered totals error:', err);
-      setError('Failed to fetch unfiltered totals. Please try again.');
+      console.error('Fetch unfiltered totals error:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+      if (!data.length) {
+        setError('Failed to fetch unfiltered totals. Please try again.');
+      }
     }
-  }, [groupId]);
+  }, [groupId, data.length]);
 
   const fetchData = useCallback(async (filters = {}) => {
-    if (!groupId) return;
+    if (!groupId) {
+      console.error('Invalid Group ID');
+      setError('Invalid Group ID. Please check the URL.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -385,27 +420,36 @@ export default function RequestMonthlyComparisonPage() {
         ...(filters.departmentName && { departmentName: filters.departmentName }),
       }).toString();
 
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${API_BASE_URL}/search/comparison-monthly?${queryParams}`,
         {
           headers: { Accept: '*/*' },
-        }
+        },
+        3,
+        1000
       );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result = await response.json();
-      const mappedData = result.requisitions?.map(item => ({
+      console.log('Fetch data response:', response.data);
+      const mappedData = response.data.requisitions?.map(item => ({
         ...item,
         productType2Name: item.goodtype || item.productType2Name || '',
       })) || [];
       setData(mappedData);
       setTotalElements(mappedData.length);
     } catch (err) {
-      console.error('Fetch error:', err);
-      setError('Failed to fetch data from API. Showing previously loaded data.');
+      console.error('Fetch data error:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+      if (!data.length) {
+        setError('Failed to fetch data from API. Please try again.');
+      } else {
+        setError('Failed to fetch new data. Showing previously loaded data.');
+      }
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, data.length]);
 
   useEffect(() => {
     fetchUnfilteredTotals();
@@ -583,14 +627,14 @@ export default function RequestMonthlyComparisonPage() {
               backgroundColor: '#fff',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 1700 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {getHeaders(currency).map(({ label, key }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
+                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Best Price', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -750,6 +794,18 @@ export default function RequestMonthlyComparisonPage() {
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <SupplierTable suppliers={item.suppliers} currency={item.currency} />
+                        </TableCell>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            px: 0.4,
+                            py: 0.2,
+                            fontSize: '0.55rem',
+                            fontWeight: 600,
+                            color: item.isBestPrice ? '#4caf50' : theme.palette.error.main,
+                          }}
+                        >
+                          {item.isBestPrice ? 'Yes' : 'No'}
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={item.departmentRequests} />

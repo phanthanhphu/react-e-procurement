@@ -3,6 +3,8 @@ import Select from 'react-select';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
+import { IconButton, InputAdornment } from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 
 import '../assets/css/vendor.min.css';
 import '../assets/vendor/icon-set/style.css';
@@ -110,16 +112,20 @@ function LanguageSelect() {
   );
 }
 
-export default function LoginPage() {
+function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  // Kiểm tra trạng thái đăng nhập khi component mount
+  const handleTogglePassword = () => {
+    setShowPassword((prev) => !prev);
+  };
+
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAuthenticated');
-    if (isAuthenticated === 'true') {
-      navigate('/dashboard');
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/dashboard', { replace: true });
     }
   }, [navigate]);
 
@@ -139,16 +145,12 @@ export default function LoginPage() {
       });
 
       if (response.ok) {
-        const data = await response.json(); // Giả định backend trả về { token, user: { id, username, email, role, profileImageUrl } }
+        const data = await response.json();
         localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('user', JSON.stringify(data.user)); // Lưu thông tin người dùng
-
         toast.success('Login successful! Redirecting...');
-
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
+        navigate('/dashboard', { replace: true });
       } else {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
@@ -172,7 +174,6 @@ export default function LoginPage() {
         <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
         <div className="container-fluid px-3">
           <div className="row">
-            {/* Left panel */}
             <div
               className="col-lg-6 d-none d-lg-flex justify-content-center align-items-center min-vh-lg-100 bg-light px-0"
               style={{ position: 'relative' }}
@@ -230,7 +231,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Right panel */}
             <div className="col-lg-6 d-flex justify-content-center align-items-center min-vh-lg-100">
               <div className="form-container w-100 pt-10 pt-lg-7 pb-7">
                 <form onSubmit={handleSubmit}>
@@ -261,28 +261,25 @@ export default function LoginPage() {
                       className="d-flex justify-content-between align-items-center"
                     >
                       <span>Password</span>
-                      <a className="input-label-secondary" href="authentication-reset-password-cover.html">
-                        Forgot Password?
-                      </a>
                     </label>
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       className="form-control form-control-lg"
                       id="signupSrPassword"
                       placeholder="8+ characters required"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton onClick={handleTogglePassword} edge="end">
+                              {showPassword ? <VisibilityOff /> : <Visibility />}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      }}
                     />
-                  </div>
-
-                  <div className="form-group">
-                    <div className="custom-control custom-checkbox">
-                      <input type="checkbox" className="custom-control-input" id="termsCheckbox" />
-                      <label className="custom-control-label text-muted" htmlFor="termsCheckbox">
-                        Remember me
-                      </label>
-                    </div>
                   </div>
 
                   <button type="submit" className="btn btn-lg btn-block btn-primary">
@@ -297,3 +294,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+export default LoginPage;

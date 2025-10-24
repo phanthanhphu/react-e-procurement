@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Typography,
   Box,
@@ -13,6 +14,7 @@ import {
   IconButton,
   TablePagination,
   useTheme,
+  useMediaQuery,
   Button,
   Input,
   Popover,
@@ -22,30 +24,72 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import ImageIcon from '@mui/icons-material/Image';
-import ArrowUpward from '@mui/icons-material/ArrowUpward';
-import ArrowDownward from '@mui/icons-material/ArrowDownward';
-import { API_BASE_URL } from '../../config';
+import { Delete, FileUpload, Add, Edit, Image as ImageIcon, ArrowUpward, ArrowDownward } from '@mui/icons-material';
+import axios from 'axios';
 import AddProductDialog from './AddProductDialog';
 import EditProductDialog from './EditProductDialog';
 import SupplierSearch from './SupplierSearch';
 import Notification from './Notification';
+import { API_BASE_URL } from '../../config';
+
+// Danh sách các endpoint công khai
+const PUBLIC_ENDPOINTS = [
+  '/api/product-type-1/search',
+  '/api/product-type-2/search',
+  '/api/group-summary-requisitions/',
+  '/api/departments/filter',
+  '/api/supplier-products/filter',
+  '/api/auth/login',
+  '/users/login',
+  '/api/users/add',
+  '/users/add',
+];
+
+// Cấu hình axios với interceptor
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    Accept: '*/*',
+    'Content-Type': 'application/json',
+  },
+});
+
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    const isPublicEndpoint = PUBLIC_ENDPOINTS.some((endpoint) => config.url.includes(endpoint));
+    if (token && !isPublicEndpoint) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    console.log('Request URL:', config.url, 'Headers:', config.headers);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.error('401 Unauthorized:', error.response.data);
+      localStorage.removeItem('token');
+      window.location.href = '/react/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Hàm định dạng màu sắc cho tiền tệ
 const getCurrencyColor = (currency) => {
   switch (currency) {
     case 'VND':
-      return '#4caf50'; // Green
+      return '#4caf50';
     case 'EURO':
-      return '#2196f3'; // Blue
+      return '#2196f3';
     case 'USD':
-      return '#e57373'; // Red
+      return '#e57373';
     default:
-      return '#9e9e9e'; // Gray
+      return '#9e9e9e';
   }
 };
 
@@ -53,38 +97,44 @@ const getCurrencyColor = (currency) => {
 const getGoodTypeColor = (goodType) => {
   switch (goodType) {
     case 'Common':
-      return '#4caf50'; // Green
+      return '#4caf50';
     case 'Special':
-      return '#2196f3'; // Blue
+      return '#2196f3';
     case 'Electronics':
-      return '#e57373'; // Red
+      return '#e57373';
     default:
-      return '#9e9e9e'; // Gray
+      return '#9e9e9e';
   }
 };
 
+// Định nghĩa cột sticky (chỉ SAP Code)
+const stickyColumns = [
+  { key: 'sapCode', minWidth: 100, left: 0 },
+];
+
 const headers = [
   { label: 'No', key: 'no', sortable: false },
-  { label: 'Product Item 1', key: 'productType1Name', sortable: true },
-  { label: 'Product Item 2', key: 'productType2Name', sortable: true },
-  { label: 'Supplier Code', key: 'supplierCode', sortable: true },
-  { label: 'Supplier Description', key: 'supplierName', sortable: true },
-  { label: 'SAP Code', key: 'sapCode', sortable: true },
-  { label: 'Item No', key: 'itemNo', sortable: true },
-  { label: 'Item Description', key: 'itemDescription', sortable: true },
-  { label: 'Full Description', key: 'fullDescription', sortable: true },
-  { label: 'Size', key: 'size', sortable: true },
-  { label: 'Unit', key: 'unit', sortable: true },
-  { label: 'Price', key: 'price', sortable: true },
-  { label: 'Currency', key: 'currency', sortable: true },
-  { label: 'Good Type', key: 'goodType', sortable: true },
+  { label: 'Product Item 1', key: 'productType1Name', sortable: true, backendKey: 'productType1Name' },
+  { label: 'Product Item 2', key: 'productType2Name', sortable: true, backendKey: 'productType2Name' },
+  { label: 'Supplier Code', key: 'supplierCode', sortable: true, backendKey: 'supplierCode' },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
+  { label: 'SAP Code', key: 'sapCode', sortable: true, backendKey: 'sapCode' },
+  { label: 'Item No', key: 'itemNo', sortable: true, backendKey: 'itemNo' },
+  { label: 'Item Description', key: 'itemDescription', sortable: true, backendKey: 'itemDescription' },
+  { label: 'Full Description', key: 'fullDescription', sortable: true, backendKey: 'fullDescription' },
+  { label: 'Size', key: 'size', sortable: true, backendKey: 'size' },
+  { label: 'Unit', key: 'unit', sortable: true, backendKey: 'unit' },
+  { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
+  { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
+  { label: 'Good Type', key: 'goodType', sortable: true, backendKey: 'goodType' },
   { label: 'Images', key: 'image', sortable: false },
   { label: 'Action', key: 'action', sortable: false },
 ];
 
-function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort, onRefresh }) {
+function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort, onRefresh, theme }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handlePopoverOpen = (event, imageUrls) => {
     setAnchorEl(event.currentTarget);
@@ -102,11 +152,6 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
     setPopoverImgSrcs([]);
   };
 
-  const handlePopoverEnter = () => {};
-  const handlePopoverLeave = () => {
-    handlePopoverClose();
-  };
-
   const open = Boolean(anchorEl);
 
   if (!supplierProducts || supplierProducts.length === 0) {
@@ -115,13 +160,13 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
 
   return (
     <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
-      <Table size="small" sx={{ minWidth: 1500 }}>
+      <Table size="small" sx={{ minWidth: 1500 }} stickyHeader>
         <TableHead>
           <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
             {headers.map(({ label, key, sortable }) => (
               <TableCell
                 key={key}
-                align={label === 'Action' || label === 'Images' || label === 'Currency' || label === 'Good Type' ? 'center' : 'left'}
+                align={['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'left'}
                 sx={{
                   fontWeight: 'bold',
                   fontSize: '0.55rem',
@@ -133,15 +178,20 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                   '&:last-child': { borderRight: 'none' },
                   position: 'sticky',
                   top: 0,
-                  zIndex: 1,
+                  zIndex: stickyColumns.some((col) => col.key === key) ? 3 : 1, // Tăng zIndex cho SAP Code
                   backgroundColor: '#027aff',
-                  ...(key === 'no' && { left: 0, zIndex: 2 }),
+                  ...(stickyColumns.some((col) => col.key === key) && !isMobile && {
+                    left: stickyColumns.find((col) => col.key === key).left,
+                    // Không sử dụng boxShadow để trông như cột bình thường
+                  }),
+                  minWidth: stickyColumns.find((col) => col.key === key)?.minWidth || 100,
                   cursor: sortable ? 'pointer' : 'default',
                   '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
+                  transition: 'background-color 0.3s ease',
                 }}
                 onClick={() => sortable && handleSort(key)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' || label === 'Images' || label === 'Currency' || label === 'Good Type' ? 'center' : 'flex-start' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'flex-start' }}>
                   <Tooltip title={label} arrow>
                     <span>{label}</span>
                   </Tooltip>
@@ -170,102 +220,105 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
               key={product.id}
               sx={{
                 backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
-                '&:hover': { backgroundColor: '#e3f2fd', transition: 'background-color 0.3s ease' },
+                '&:hover': {
+                  backgroundColor: '#e3f2fd',
+                  '& .sticky-cell': { backgroundColor: '#e3f2fd' },
+                },
                 cursor: 'pointer',
+                transition: 'background-color 0.3s ease',
               }}
             >
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>
-                {idx + 1 + page * rowsPerPage}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.productType1Name || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.productType2Name || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierCode || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.supplierName || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.sapCode || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.itemNo || ''}</TableCell>
-              <TableCell
-                sx={{
-                  fontSize: '0.55rem',
-                  py: 0.2,
-                  px: 0.4,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  width: '200px',
-                }}
-              >
-                {product.itemDescription || ''}
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontSize: '0.55rem',
-                  py: 0.2,
-                  px: 0.4,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  width: '200px',
-                }}
-              >
-                {product.fullDescription || ''}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.size || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>{product.unit || ''}</TableCell>
-              <TableCell align="left" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                {product.price ? Number(product.price).toLocaleString() : ''}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                <Box
+              {headers.map(({ key, label }) => (
+                <TableCell
+                  key={key}
+                  align={['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'left'}
+                  className={stickyColumns.some((col) => col.key === key) ? 'sticky-cell' : ''}
                   sx={{
-                    padding: '2px 6px',
-                    borderRadius: '4px',
                     fontSize: '0.55rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    backgroundColor: getCurrencyColor(product.currency),
-                    display: 'inline-block',
+                    py: 0.2,
+                    px: 0.4,
+                    whiteSpace: key === 'itemDescription' || key === 'fullDescription' ? 'normal' : 'nowrap',
+                    wordBreak: key === 'itemDescription' || key === 'fullDescription' ? 'break-word' : 'normal',
+                    width: key === 'itemDescription' || key === 'fullDescription' ? '200px' : 'auto',
+                    ...(stickyColumns.some((col) => col.key === key) && !isMobile && {
+                      position: 'sticky',
+                      left: stickyColumns.find((col) => col.key === key).left,
+                      zIndex: 2, // Tăng zIndex để đảm bảo không bị che
+                      backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
+                      // Không sử dụng boxShadow
+                    }),
+                    minWidth: stickyColumns.find((col) => col.key === key)?.minWidth || 100,
+                    transition: 'background-color 0.3s ease',
                   }}
                 >
-                  {product.currency || 'N/A'}
-                </Box>
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.2, px: 0.4 }}>
-                <Box
-                  sx={{
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    fontSize: '0.55rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    backgroundColor: getGoodTypeColor(product.goodType),
-                    display: 'inline-block',
-                  }}
-                >
-                  {product.goodType || 'N/A'}
-                </Box>
-              </TableCell>
-              <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
-                {product.imageUrls && product.imageUrls.length > 0 ? (
-                  <IconButton
-                    size="small"
-                    onMouseEnter={(e) => handlePopoverOpen(e, product.imageUrls)}
-                    aria-owns={open ? 'mouse-over-popover' : undefined}
-                    aria-haspopup="true"
-                  >
-                    <ImageIcon fontSize="small" />
-                  </IconButton>
-                ) : (
-                  <Typography sx={{ fontSize: '0.55rem', color: '#888' }}>No Images</Typography>
-                )}
-              </TableCell>
-              <TableCell align="center" sx={{ py: 0.2, px: 0.4 }}>
-                <Stack direction="row" spacing={0.5} justifyContent="center">
-                  <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDelete(product)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
-              </TableCell>
+                  {key === 'no' && (idx + 1 + page * rowsPerPage)}
+                  {key === 'productType1Name' && (product.productType1Name || '')}
+                  {key === 'productType2Name' && (product.productType2Name || '')}
+                  {key === 'supplierCode' && (product.supplierCode || '')}
+                  {key === 'supplierName' && (product.supplierName || '')}
+                  {key === 'sapCode' && (product.sapCode || '')}
+                  {key === 'itemNo' && (product.itemNo || '')}
+                  {key === 'itemDescription' && (product.itemDescription || '')}
+                  {key === 'fullDescription' && (product.fullDescription || '')}
+                  {key === 'size' && (product.size || '')}
+                  {key === 'unit' && (product.unit || '')}
+                  {key === 'price' && (product.price ? Number(product.price).toLocaleString() : '')}
+                  {key === 'currency' && (
+                    <Box
+                      sx={{
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.55rem',
+                        fontWeight: 600,
+                        color: '#fff',
+                        backgroundColor: getCurrencyColor(product.currency),
+                        display: 'inline-block',
+                      }}
+                    >
+                      {product.currency || 'N/A'}
+                    </Box>
+                  )}
+                  {key === 'goodType' && (
+                    <Box
+                      sx={{
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.55rem',
+                        fontWeight: 600,
+                        color: '#fff',
+                        backgroundColor: getGoodTypeColor(product.goodType),
+                        display: 'inline-block',
+                      }}
+                    >
+                      {product.goodType || 'N/A'}
+                    </Box>
+                  )}
+                  {key === 'image' && (
+                    product.imageUrls && product.imageUrls.length > 0 ? (
+                      <IconButton
+                        size="small"
+                        onMouseEnter={(e) => handlePopoverOpen(e, product.imageUrls)}
+                        aria-owns={open ? 'mouse-over-popover' : undefined}
+                        aria-haspopup="true"
+                      >
+                        <ImageIcon fontSize="small" />
+                      </IconButton>
+                    ) : (
+                      <Typography sx={{ fontSize: '0.55rem', color: '#888' }}>No Images</Typography>
+                    )
+                  )}
+                  {key === 'action' && (
+                    <Stack direction="row" spacing={0.5} justifyContent="center">
+                      <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
+                        <Edit fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(product)}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  )}
+                </TableCell>
+              ))}
             </TableRow>
           ))}
         </TableBody>
@@ -287,8 +340,6 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
             maxHeight: 300,
             overflowY: 'auto',
           }}
-          onMouseEnter={handlePopoverEnter}
-          onMouseLeave={handlePopoverLeave}
         >
           {popoverImgSrcs.length > 0 ? (
             <Stack direction="column" spacing={1}>
@@ -327,8 +378,8 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
 
 export default function SupplierProductsPage() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [data, setData] = useState([]);
-  const [originalData, setOriginalData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -365,7 +416,13 @@ export default function SupplierProductsPage() {
     setLoading(true);
     setNotification({ open: false, message: '', severity: 'info' });
     try {
-      const params = {};
+      const params = {
+        page,
+        size: rowsPerPage,
+        sort: sortConfig.key
+          ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction || 'asc'}`
+          : 'createdAt,desc',
+      };
       if (searchSupplierCode) params.supplierCode = searchSupplierCode;
       if (searchSupplierName) params.supplierName = searchSupplierName;
       if (searchSapCode) params.sapCode = searchSapCode;
@@ -377,41 +434,20 @@ export default function SupplierProductsPage() {
       if (searchProductType2Id) params.productType2Id = searchProductType2Id;
       if (searchCurrency) params.currency = searchCurrency;
       if (searchGoodType) params.goodType = searchGoodType;
-      params.page = page;
-      params.size = rowsPerPage;
-      params.sortBy = 'createdAt';
-      params.sortDirection = 'DESC';
-      const url = new URL(`${API_BASE_URL}/api/supplier-products/filter`);
-      url.search = new URLSearchParams(params).toString();
-      console.log('Request URL:', url.toString());
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { accept: '*/*' },
-      });
-      if (!response.ok) {
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorMessage;
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
-        }
-        throw new Error(errorMessage);
-      }
-      const result = await response.json();
-      console.log('API Response:', result);
-      setData(result.data.content || []);
-      setOriginalData(result.data.content || []);
-      setTotalElements(result.data.totalElements || 0);
+
+      console.log('Request Params:', params);
+      const response = await axiosInstance.get('/api/supplier-products/filter', { params });
+      console.log('API Response:', response.data);
+      setData(response.data.data.content || []);
+      setTotalElements(response.data.data.totalElements || 0);
     } catch (err) {
+      console.error('Fetch error:', err.response?.data || err.message);
       setNotification({
         open: true,
-        message: `Failed to load data: ${err.message}`,
+        message: `Failed to load data: ${err.response?.data?.message || err.message}`,
         severity: 'error',
       });
-      console.error(err);
       setData([]);
-      setOriginalData([]);
       setTotalElements(0);
     } finally {
       setLoading(false);
@@ -430,11 +466,22 @@ export default function SupplierProductsPage() {
     searchProductType2Id,
     searchCurrency,
     searchGoodType,
+    sortConfig,
   ]);
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setNotification({
+        open: true,
+        message: 'Please login to access this page.',
+        severity: 'error',
+      });
+      navigate('/react/login');
+      return;
+    }
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, navigate]);
 
   const handleAddSuccess = async (message) => {
     setPage(0);
@@ -470,28 +517,8 @@ export default function SupplierProductsPage() {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/supplier-products/${productToDelete.id}`, {
-        method: 'DELETE',
-        headers: { accept: '*/*' },
-      });
-      let message;
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const errorData = JSON.parse(text);
-          message = errorData.message || text || `Failed to delete product: ${response.status}`;
-        } catch (parseError) {
-          message = text || `Failed to delete product: ${response.status}`;
-        }
-        throw new Error(message);
-      }
-      const text = await response.text();
-      try {
-        const data = JSON.parse(text);
-        message = data.message || text || 'Product deleted successfully';
-      } catch (parseError) {
-        message = text || 'Product deleted successfully';
-      }
+      const response = await axiosInstance.delete(`/api/supplier-products/${productToDelete.id}`);
+      let message = response.data.message || 'Product deleted successfully';
       setPage(0);
       await fetchData();
       setNotification({
@@ -501,10 +528,10 @@ export default function SupplierProductsPage() {
         autoHideDuration: 6000,
       });
     } catch (error) {
-      console.error('Delete product error:', error);
+      console.error('Delete product error:', error.response?.data || error.message);
       setNotification({
         open: true,
-        message: error.message,
+        message: `Failed to delete product: ${error.response?.data?.message || error.message}`,
         severity: 'error',
         autoHideDuration: 6000,
       });
@@ -548,39 +575,10 @@ export default function SupplierProductsPage() {
     formData.append('file', file);
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/supplier-products/import`, {
-        method: 'POST',
-        body: formData,
+      const response = await axiosInstance.post('/api/supplier-products/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      let message;
-      if (!response.ok) {
-        const text = await response.text();
-        if (response.status === 400) {
-          message = text.includes('Invalid price format')
-            ? 'Invalid price format in the file'
-            : text.includes('Duplicate entry')
-            ? 'Duplicate data in the file'
-            : text || `Upload failed with status: ${response.status}`;
-        } else if (response.status === 409) {
-          message = text || 'Duplicate data in the file';
-        } else {
-          message = text || `Upload failed with status: ${response.status}`;
-        }
-        try {
-          const errorData = JSON.parse(text);
-          message = errorData.message || message;
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
-        }
-        throw new Error(message);
-      }
-      const text = await response.text();
-      try {
-        const data = JSON.parse(text);
-        message = data.message || text || 'File uploaded successfully';
-      } catch (parseError) {
-        message = text || 'File uploaded successfully';
-      }
+      let message = response.data.message || 'File uploaded successfully';
       setPage(0);
       await fetchData();
       setNotification({
@@ -591,10 +589,10 @@ export default function SupplierProductsPage() {
       });
       setFile(null);
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error('Upload error:', err.response?.data || err.message);
       setNotification({
         open: true,
-        message: `Error uploading file: ${err.message}`,
+        message: `Error uploading file: ${err.response?.data?.message || err.message}`,
         severity: 'error',
         autoHideDuration: 6000,
       });
@@ -627,31 +625,6 @@ export default function SupplierProductsPage() {
     }
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
-
-    if (!direction) {
-      setData([...originalData]);
-      return;
-    }
-
-    const sortedData = [...data].sort((a, b) => {
-      let aValue = a[key];
-      let bValue = b[key];
-
-      if (aValue === null || aValue === undefined) aValue = '';
-      if (bValue === null || bValue === undefined) bValue = '';
-
-      if (key === 'price') {
-        aValue = Number(aValue) || 0;
-        bValue = Number(bValue) || 0;
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
-      }
-
-      return direction === 'asc'
-        ? String(aValue).localeCompare(String(bValue))
-        : String(bValue).localeCompare(String(aValue));
-    });
-
-    setData(sortedData);
   };
 
   return (
@@ -662,7 +635,7 @@ export default function SupplierProductsPage() {
       <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end" alignItems="center">
         <Button
           variant="contained"
-          startIcon={<FileUploadIcon />}
+          startIcon={<FileUpload />}
           onClick={() => document.getElementById('file-input').click()}
           sx={{
             background: 'linear-gradient(to right, #4cb8ff, #027aff)',
@@ -692,7 +665,7 @@ export default function SupplierProductsPage() {
         )}
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
+          startIcon={<Add />}
           onClick={() => setOpenAddDialog(true)}
           sx={{
             background: 'linear-gradient(to right, #4cb8ff, #027aff)',
@@ -772,6 +745,7 @@ export default function SupplierProductsPage() {
         sortConfig={sortConfig}
         handleSort={handleSort}
         onRefresh={fetchData}
+        theme={theme}
       />
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}

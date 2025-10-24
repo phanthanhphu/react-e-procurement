@@ -30,7 +30,16 @@ export default function NavItem({ item, level, isParents = false, setSelectedID,
     false
   );
 
-  const isSelected = !!matchPath({ path: item?.link ? item.link : item.url, end: false }, pathname);
+  // Mở rộng logic isSelected để hỗ trợ highlight grouprequest
+  const isSelected = item.id === 'grouprequest'
+    ? [
+        '/group-requests',
+        '/summary/',
+        '/requisition-monthly/',
+        '/comparison/',
+        '/request-monthly-comparison/'
+      ].some(route => pathname.startsWith(route))
+    : !!matchPath({ path: item?.link ? item.link : item.url, end: false }, pathname);
 
   const iconSelectedColor = 'primary.main';
 
@@ -186,5 +195,5 @@ NavItem.propTypes = {
   level: PropTypes.number,
   isParents: PropTypes.bool,
   setSelectedID: PropTypes.any,
-  pathname: PropTypes.string // Thêm pathname vào propTypes
+  pathname: PropTypes.string
 };

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
-import { Button } from '@mui/material';
+import { Button, Snackbar, Alert } from '@mui/material';
+import axios from 'axios';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
@@ -10,43 +11,67 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
   const [totalAmt, setTotalAmt] = useState(0);
   const [totalAmtDifference, setTotalAmtDifference] = useState(0);
   const [totalDifferencePercentage, setTotalDifferencePercentage] = useState(0);
-  const [currency, setCurrency] = useState('VND'); // Default currency
+  const [currency, setCurrency] = useState('VND');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch group summary to get currency
-        const groupResponse = await fetch(
+        const groupResponse = await axios.get(
           `${API_BASE_URL}/api/group-summary-requisitions/${groupId}`,
           { headers: { Accept: '*/*' } }
         );
-        if (!groupResponse.ok) throw new Error('Failed to fetch group summary');
-        const groupResult = await groupResponse.json();
-        setCurrency(groupResult.currency || 'VND');
+        if (!groupResponse.data?.currency) {
+          console.warn('Warning: Currency not found, using default VND');
+        }
+        setCurrency(groupResponse.data.currency || 'VND');
 
         // Fetch comparison data
-        const response = await fetch(
-          `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&hasFilter=false&disablePagination=true&page=0&size=1000&sort=string`,
-          { headers: { Accept: '*/*' } }
+        const response = await axios.get(
+          `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
+          {
+            params: {
+              groupId,
+              hasFilter: false,
+              disablePagination: true,
+              page: 0,
+              size: 1000,
+              sort: 'updatedDate,desc',
+            },
+            headers: { Accept: '*/*' },
+          }
         );
-        if (!response.ok) throw new Error('Network response was not ok');
-        const result = await response.json();
-        console.log('API Response:', result); // Debug log
-        setData(result.page?.content || []);
-        setTotalAmt(result.totalAmt || 0);
-        setTotalAmtDifference(result.totalAmtDifference || 0);
-        setTotalDifferencePercentage(result.totalDifferencePercentage || 0);
+        console.log('API Response:', response.data);
+        if (!response.data?.page?.content) {
+          throw new Error('Invalid API response: Missing page.content');
+        }
+        setData(response.data.page.content || []);
+        setTotalAmt(response.data.totalAmt || 0);
+        setTotalAmtDifference(response.data.totalAmtDifference || 0);
+        setTotalDifferencePercentage(response.data.totalDifferencePercentage || 0);
       } catch (error) {
-        console.error('Failed to fetch data:', error);
-        alert('Failed to fetch data for export. Please try again.');
+        const errorMessage = error.response
+          ? `Failed to fetch data for export: ${error.response.status} - ${error.response.data?.message || error.message}`
+          : `Failed to fetch data for export: ${error.message}`;
+        console.error(errorMessage, error);
+        setSnackbarMessage(errorMessage);
+        setSnackbarOpen(true);
       }
     };
     fetchData();
   }, [groupId]);
 
+  const formatCurrency = (value, currency) => {
+    const locale = currency === 'USD' ? 'en-US' : currency === 'EUR' ? 'de-DE' : 'vi-VN';
+    return value != null ? value.toLocaleString(locale, { style: 'currency', currency }) : '0';
+  };
+
   const exportToExcel = () => {
     if (!data || data.length === 0) {
-      alert('No requisition data available to export. Please check your filters or try again later.');
+      setSnackbarMessage('No requisition data available to export. Please check your filters or try again later.');
+      setSnackbarOpen(true);
       return;
     }
 
@@ -76,6 +101,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     headerRow2[7] = 'Unit';
     headerRow2[8] = 'Order Qty';
     headerRow2[9] = 'SUPPLIER';
+    headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier';
     headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier';
     headerRow2[9 + allSupplierKeys.length + 3] = 'Difference';
     headerRow2[9 + allSupplierKeys.length + 5] = 'Remark';
@@ -125,7 +151,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
 
       const supplierInfo = {};
       (suppliers || []).forEach((sup) => {
-        supplierInfo[sup.supplierName] = sup.price ? sup.price.toLocaleString('vi-VN') : '';
+        supplierInfo[sup.supplierName] = sup.price ? formatCurrency(sup.price, currency) : '';
       });
 
       const row = [
@@ -140,9 +166,9 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
         orderQty != null ? orderQty : 0,
         ...allSupplierKeys.map((key) => supplierInfo[key] || ''),
         selectedSupplier ? selectedSupplier.supplierName : '',
-        selectedSupplier ? selectedSupplier.price?.toLocaleString('vi-VN') || '' : '',
-        amtVnd != null ? amtVnd.toLocaleString('vi-VN') : '',
-        amtDifference != null ? amtDifference.toLocaleString('vi-VN') : '',
+        selectedSupplier ? formatCurrency(selectedSupplier.price, currency) : '',
+        formatCurrency(amtVnd, currency),
+        formatCurrency(amtDifference, currency),
         percentage != null ? `${parseFloat(percentage).toFixed(2)}%` : '0%',
         remarkComparison || '',
       ];
@@ -154,9 +180,9 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     // Total row
     const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'TOTAL';
-    totalRow[9 + allSupplierKeys.length + 2] = totalAmt !== null && totalAmt !== undefined ? totalAmt.toLocaleString('vi-VN') : '0';
-    totalRow[9 + allSupplierKeys.length + 3] = totalAmtDifference !== null && totalAmtDifference !== undefined ? totalAmtDifference.toLocaleString('vi-VN') : '0';
-    totalRow[9 + allSupplierKeys.length + 4] = totalDifferencePercentage !== null && totalDifferencePercentage !== undefined ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` : '0%';
+    totalRow[9 + allSupplierKeys.length + 2] = formatCurrency(totalAmt, currency);
+    totalRow[9 + allSupplierKeys.length + 3] = formatCurrency(totalAmtDifference, currency);
+    totalRow[9 + allSupplierKeys.length + 4] = totalDifferencePercentage != null ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` : '0%';
     wsData.push(totalRow);
 
     // Signature rows
@@ -309,22 +335,33 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
   };
 
   return (
-    <Button
-      variant="contained"
-      color="success"
-      onClick={exportToExcel}
-      disabled={disabled}
-      startIcon={<img src={ExcelIcon} alt="Microsoft Excel Icon" style={{ width: 20, height: 20 }} />}
-      sx={{
-        textTransform: 'none',
-        borderRadius: 1,
-        px: 2,
-        py: 0.6,
-        fontWeight: 600,
-        fontSize: '0.75rem',
-      }}
-    >
-      Comparison
-    </Button>
+    <>
+      <Button
+        variant="contained"
+        color="success"
+        onClick={exportToExcel}
+        disabled={disabled}
+        startIcon={<img src={ExcelIcon} alt="Microsoft Excel Icon" style={{ width: 20, height: 20 }} />}
+        sx={{
+          textTransform: 'none',
+          borderRadius: 1,
+          px: 2,
+          py: 0.6,
+          fontWeight: 600,
+          fontSize: '0.75rem',
+        }}
+      >
+        Comparison
+      </Button>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+      >
+        <Alert onClose={() => setSnackbarOpen(false)} severity="error" sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </>
   );
 }

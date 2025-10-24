@@ -2,9 +2,9 @@ import { createRoot } from 'react-dom/client';
 
 // styles
 import './index.css';
-
+import './routes/globalApi';
 // project-imports
-import App from './App';
+import App from 'App';
 import reportWebVitals from './reportWebVitals';
 
 const container = document.getElementById('root');

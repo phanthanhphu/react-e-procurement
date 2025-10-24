@@ -6,7 +6,8 @@ import {
   ArrangeHorizontalSquare,
   Location,
   Box, // Icon for Product Type Management
-  Profile // Icon for User Management
+  Profile, // Icon for User Management
+  Building // Icon for Department Management
 } from 'iconsax-reactjs';
 
 // icons
@@ -18,7 +19,8 @@ const icons = {
   supplierproducts: Location,
   groupRequest: ArrangeHorizontalSquare,
   productType: Box,
-  userManagement: Profile
+  userManagement: Profile,
+  department: Building // Icon riêng cho department-management
 };
 
 // CSS styles for menu items and icons
@@ -56,14 +58,20 @@ const menuStyles = {
   }
 };
 
-// ==============================|| MENU ITEMS - DASHBOARD ||============================== //
+// Function to get menu items based on role
+const getDashboardMenu = () => {
+  const role = localStorage.getItem('role');
+  console.log('Debug - Role from localStorage:', role); // Log chi tiết hơn
 
-const dashboard = {
-  id: 'group-dashboard',
-  title: 'Management',
-  icon: icons.navigation,
-  type: 'group',
-  children: [
+  // Lấy toàn bộ localStorage dưới dạng object
+  const localStorageData = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    localStorageData[key] = localStorage.getItem(key);
+  }
+  console.log('Debug - Full localStorage:', localStorageData); // Log toàn bộ localStorage
+
+  const baseChildren = [
     {
       id: 'dashboard',
       title: 'Dashboard',
@@ -76,7 +84,7 @@ const dashboard = {
       id: 'grouprequest',
       title: 'Group Requests',
       type: 'item',
-      url: '/dashboard/group-requests',
+      url: '/group-requests',
       icon: icons.groupRequest,
       breadcrumbs: false
     },
@@ -84,7 +92,7 @@ const dashboard = {
       id: 'supplierproducts',
       title: 'Products',
       type: 'item',
-      url: '/dashboard/supplier-products',
+      url: '/supplier-products',
       icon: icons.supplierproducts,
       breadcrumbs: false
     },
@@ -92,27 +100,38 @@ const dashboard = {
       id: 'department-management',
       title: 'Departments',
       type: 'item',
-      url: '/dashboard/department-management',
-      icon: icons.summary,
+      url: '/department-management',
+      icon: icons.department,
       breadcrumbs: false
     },
     {
       id: 'product-type-management',
       title: 'Product Types',
       type: 'item',
-      url: '/dashboard/product-type-management',
-      icon: icons.productType, // Sử dụng icon Box
-      breadcrumbs: false
-    },
-    {
-      id: 'user-management',
-      title: 'Users',
-      type: 'item',
-      url: '/dashboard/user-management',
-      icon: icons.userManagement, // Sử dụng icon Profile
+      url: '/product-type-management',
+      icon: icons.productType,
       breadcrumbs: false
     }
-  ]
+  ];
+
+  const userManagementItem = {
+    id: 'user-management',
+    title: 'Users',
+    type: 'item',
+    url: '/user-management',
+    icon: icons.userManagement,
+    breadcrumbs: false
+  };
+
+  return {
+    id: 'group-dashboard',
+    title: 'Management',
+    icon: icons.navigation,
+    type: 'group',
+    children: role === 'Admin' ? [...baseChildren, userManagementItem] : baseChildren
+  };
 };
+
+const dashboard = getDashboardMenu();
 
 export default dashboard;

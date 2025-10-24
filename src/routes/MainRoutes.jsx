@@ -1,9 +1,10 @@
-import { lazy } from 'react';
-import { useNavigate, Outlet } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, useEffect } from 'react';
+import { useNavigate, Outlet, Navigate } from 'react-router-dom';
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
 import { Typography, Box, Button } from '@mui/material';
+import LoginPage from './LoginPage';
+import { toast } from 'react-toastify';
 
 // Lazy-loaded components
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
@@ -21,122 +22,95 @@ const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const TypographyPage = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 
-// Not Found component for 404 errors
+// Not Found component
 function NotFound() {
   const navigate = useNavigate();
   return (
     <Box sx={{ p: 3, textAlign: 'center' }}>
-      <Typography variant="h4" color="error" gutterBottom>
-        404 Not Found
-      </Typography>
-      <Typography variant="body1" sx={{ mb: 2 }}>
-        The page you're looking for doesn't exist.
-      </Typography>
-      <Button
-        variant="contained"
-        onClick={() => navigate('/dashboard/product-type-management')}
-        sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)', color: '#fff' }}
-      >
-        Go to Product Type 1
+      <Typography variant="h4" color="error">404 Not Found</Typography>
+      <Button variant="contained" onClick={() => navigate('/dashboard')} sx={{ mt: 2 }}>
+        Go to Dashboard
       </Button>
     </Box>
   );
 }
 
-// ProtectedRoute component to handle authentication
+// ProtectedRoute: Kiểm tra token
 function ProtectedRoute() {
   const navigate = useNavigate();
-  const isAuthenticated = localStorage.getItem('isAuthenticated');
+  const token = localStorage.getItem('token');
 
   useEffect(() => {
-    if (!isAuthenticated || isAuthenticated !== 'true') {
-      navigate('/'); // Redirect to login page if not authenticated
+    if (!token) {
+      navigate('/react/login', { replace: true });
     }
-  }, [navigate, isAuthenticated]);
+  }, [navigate, token]);
 
-  return isAuthenticated === 'true' ? <Outlet /> : null; // Render child routes if authenticated
+  return token ? <Outlet /> : null;
+}
+
+// AdminRoute: Kiểm tra token + role = Admin
+function AdminRoute({ children }) {
+  const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const role = user.role;
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/react/login', { replace: true });
+    } else if (role !== 'Admin') {
+      toast.error('Access denied. Admin only.');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate, token, role]);
+
+  if (!token || role !== 'Admin') {
+    return null;
+  }
+
+  return children;
 }
 
 // Route configuration
 const MainRoutes = {
   path: '/',
-  element: <DashboardLayout />,
   children: [
+    { path: '/react/login', element: <LoginPage /> },
     {
+      path: '/',
       element: <ProtectedRoute />,
       children: [
         {
           path: '/',
-          element: <DashboardDefault />
-        },
-        {
-          path: 'product-type-2/:productType1Id',
-          element: <ProductType2Page />
-        },
-        {
-          path: 'dashboard',
+          element: <DashboardLayout />,
           children: [
-            {
-              path: '',
-              element: <DashboardDefault />
-            },
-            {
-              path: 'summary/:groupId',
-              element: <SummaryPage />
-            },
-            {
-              path: 'supplier-products',
-              element: <SupplierProductsTable />
-            },
-            {
-              path: 'group-requests',
-              element: <GroupRequestPage />
-            },
-            {
-              path: 'department-management',
-              element: <DepartmentPage />
-            },
-            {
-              path: 'product-type-management',
-              element: <ProductType1Page />
-            },
-            {
-              path: 'product-type-2/:productType1Id',
-              element: <ProductType2Page />
-            },
+            { path: 'dashboard', element: <DashboardDefault /> },
+            { path: 'summary/:groupId', element: <SummaryPage /> },
+            { path: 'supplier-products', element: <SupplierProductsTable /> },
+            { path: 'group-requests', element: <GroupRequestPage /> },
+            { path: 'department-management', element: <DepartmentPage /> },
+            { path: 'product-type-management', element: <ProductType1Page /> },
+            { path: 'product-type-2/:productType1Id', element: <ProductType2Page /> },
+
+            // CHỈ ADMIN MỚI VÀO ĐƯỢC
             {
               path: 'user-management',
-              element: <UserManagementPage />
+              element: (
+                <AdminRoute>
+                  <UserManagementPage />
+                </AdminRoute>
+              )
             },
-            {
-              path: 'requisition-monthly/:groupId',
-              element: <RequisitionMonthlyPage />
-            },
-            {
-              path: 'comparison/:groupId',
-              element: <ComparisonPage />
-            },
-            {
-              path: 'request-monthly-comparison/:groupId',
-              element: <RequestMonthlyComparisonPage />
-            },
+
+            { path: 'requisition-monthly/:groupId', element: <RequisitionMonthlyPage /> },
+            { path: 'comparison/:groupId', element: <ComparisonPage /> },
+            { path: 'request-monthly-comparison/:groupId', element: <RequestMonthlyComparisonPage /> },
+            { path: 'typography', element: <TypographyPage /> },
+            { path: 'color', element: <Color /> },
+            { path: 'shadows', element: <Shadow /> },
+            { path: '*', element: <NotFound /> }
           ]
-        },
-        {
-          path: 'typography',
-          element: <TypographyPage />
-        },
-        {
-          path: 'color',
-          element: <Color />
-        },
-        {
-          path: 'shadows',
-          element: <Shadow />
-        },
-        {
-          path: '*',
-          element: <NotFound />
         }
       ]
     }

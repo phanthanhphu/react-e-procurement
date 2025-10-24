@@ -19,6 +19,7 @@ import {
 import InboxIcon from '@mui/icons-material/Inbox';
 import ArrowUpward from '@mui/icons-material/ArrowUpward';
 import ArrowDownward from '@mui/icons-material/ArrowDownward';
+import axios from 'axios';
 import ExportComparisonWeeklyExcelButton from './ExportComparisonWeeklyExcelButton.jsx';
 import EditDialog from './EditDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
@@ -26,7 +27,7 @@ import { API_BASE_URL } from '../../config.js';
 
 // Function to normalize currency codes for toLocaleString
 const normalizeCurrencyCode = (currency) => {
-  if (!currency) return 'VND'; // Fallback to VND if currency is missing
+  if (!currency) return 'VND';
   switch (currency.toUpperCase()) {
     case 'EURO':
       return 'EUR';
@@ -35,14 +36,14 @@ const normalizeCurrencyCode = (currency) => {
     case 'USD':
       return 'USD';
     default:
-      return 'VND'; // Fallback for unknown currencies
+      return 'VND';
   }
 };
 
 // Function to get display currency name (for UI labels)
 const getDisplayCurrency = (currency) => {
   if (!currency) return 'VND';
-  return currency.toUpperCase(); // Keep original name (e.g., "EURO" instead of "EUR")
+  return currency.toUpperCase();
 };
 
 // Function to get locale based on currency
@@ -55,11 +56,11 @@ const getLocaleForCurrency = (currency) => {
     case 'EUR':
       return 'de-DE';
     default:
-      return 'en-US'; // Fallback
+      return 'en-US';
   }
 };
 
-// Updated table headers with sortable property, including Order Qty, dynamic currency
+// Updated table headers
 const getHeaders = (currency = 'VND') => [
   { label: 'No', key: 'no', sortable: false },
   { label: 'Product Type 1', key: 'type1Name', sortable: true },
@@ -70,6 +71,7 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true },
   { label: 'Supplier Description', key: 'supplierName', sortable: true },
   { label: 'Supplier List', key: 'suppliers', sortable: false },
+  { label: 'Best Price', key: 'bestPrice', sortable: false },
   { label: 'Department', key: 'departmentRequests', sortable: false },
   { label: 'Request Qty', key: 'requestQty', sortable: true },
   { label: 'Order Qty', key: 'orderQty', sortable: true },
@@ -337,9 +339,8 @@ export default function ComparisonPage() {
     filter: false,
   });
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-  const [currency, setCurrency] = useState('VND'); // State to hold the currency
+  const [currency, setCurrency] = useState('VND');
 
-  // Extract currency from data when it changes
   useEffect(() => {
     if (data.length > 0 && data[0].currency) {
       setCurrency(data[0].currency);
@@ -347,33 +348,47 @@ export default function ComparisonPage() {
   }, [data]);
 
   const fetchUnfilteredTotals = useCallback(async () => {
-    if (!groupId) return;
+    if (!groupId) {
+      setError('Invalid Group ID');
+      return;
+    }
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search/comparison?groupId=${groupId}&hasFilter=false&disablePagination=true`,
+      const response = await axios.get(
+        `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
         {
+          params: {
+            groupId,
+            hasFilter: false,
+            disablePagination: true,
+          },
           headers: { Accept: '*/*' },
         }
       );
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const result = await response.json();
+      console.log('Unfiltered totals response:', response.data);
       setUnfilteredTotals({
-        totalAmt: result.totalAmt || 0,
-        totalAmtDifference: result.totalAmtDifference || 0,
-        totalDifferencePercentage: result.totalDifferencePercentage || 0,
+        totalAmt: response.data.totalAmt || 0,
+        totalAmtDifference: response.data.totalAmtDifference || 0,
+        totalDifferencePercentage: response.data.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      console.error('Error fetching unfiltered totals:', err);
+      console.error('Error fetching unfiltered totals:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
       setError('Failed to fetch unfiltered totals. Please try again.');
     }
   }, [groupId]);
 
   const fetchData = useCallback(async (filters = {}, pageNum = 0, size = 25, sort = 'string') => {
-    if (!groupId) return;
+    if (!groupId) {
+      setError('Invalid Group ID');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const queryParams = new URLSearchParams({
+      const queryParams = {
         groupId,
         productType1Name: filters.productType1Name || '',
         productType2Name: filters.productType2Name || '',
@@ -388,28 +403,31 @@ export default function ComparisonPage() {
         page: pageNum,
         size,
         sort,
-      }).toString();
+      };
 
       console.log('Fetching data with params:', queryParams);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/search/comparison?${queryParams}`,
+      const response = await axios.get(
+        `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
         {
+          params: queryParams,
           headers: { Accept: '*/*' },
         }
       );
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const result = await response.json();
-      const mappedData = result.page.content.map(item => ({
+      const mappedData = response.data.page.content.map(item => ({
         ...item,
         requestQty: Math.floor(item.requestQty || 0),
         orderQty: item.orderQty || 0,
       }));
       setData(mappedData);
       setOriginalData(mappedData);
-      setTotalElements(result.page.totalElements);
+      setTotalElements(response.data.page.totalElements);
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error('Error fetching data:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
       setError('Failed to fetch data from API. Showing previously loaded data.');
     } finally {
       setLoading(false);
@@ -417,6 +435,7 @@ export default function ComparisonPage() {
   }, [groupId]);
 
   useEffect(() => {
+    console.log('Group ID:', groupId);
     fetchUnfilteredTotals();
     fetchData({}, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
   }, [fetchUnfilteredTotals, fetchData, page, rowsPerPage, sortConfig]);
@@ -450,11 +469,12 @@ export default function ComparisonPage() {
   const handleDelete = async (oldSapCode) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/summary-requisitions/${oldSapCode}`, {
-        method: 'DELETE',
+      const response = await axios.delete(`${API_BASE_URL}/api/summary-requisitions/${oldSapCode}`, {
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) throw new Error(`Delete failed with status ${response.status}`);
+      if (!(response.status >= 200 && response.status < 300)) {
+        throw new Error(`Delete failed with status ${response.status}`);
+      }
       await fetchUnfilteredTotals();
       await fetchData(searchValues, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
@@ -518,6 +538,7 @@ export default function ComparisonPage() {
     requestQty: item.requestQty || 0,
     orderQty: item.orderQty || 0,
     currency: item.currency || 'VND',
+    bestPrice: item.bestPrice ? 'Yes' : 'No',
   }));
 
   return (
@@ -617,14 +638,14 @@ export default function ComparisonPage() {
               backgroundColor: '#fff',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 1700 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1780 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {getHeaders(currency).map(({ label, key, sortable }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Supplier Description', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
+                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Supplier Description', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)', 'Best Price'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -647,13 +668,14 @@ export default function ComparisonPage() {
                         ...(key === 'vietnameseName' && { left: 250, minWidth: 150 }),
                         ...(key === 'englishName' && { left: 400, minWidth: 150 }),
                         ...(key === 'oldSapCode' && { left: 550, minWidth: 100 }),
+                        ...(key === 'bestPrice' && { minWidth: 80 }),
                         cursor: sortable ? 'pointer' : 'default',
                         '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
                         ...(label === 'Remark' && { minWidth: 200 }),
                       }}
                       onClick={() => sortable && handleSort(key)}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Supplier List', 'Department'].includes(label) ? 'center' : 'flex-start' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Supplier List', 'Department', 'Best Price'].includes(label) ? 'center' : 'flex-start' }}>
                         <Tooltip title={label} arrow>
                           <span>{label}</span>
                         </Tooltip>
@@ -805,6 +827,9 @@ export default function ComparisonPage() {
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <SupplierTable suppliers={item.suppliers} currency={item.currency || currency} />
+                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', fontWeight: 600, color: item.bestPrice ? '#4caf50' : theme.palette.error.main }}>
+                          {item.bestPrice ? 'Yes' : 'No'}
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={item.departmentRequests} />

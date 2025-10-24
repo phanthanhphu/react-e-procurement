@@ -14,6 +14,9 @@ import {
   Alert,
   CircularProgress,
   InputLabel,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
@@ -26,6 +29,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
     address: '',
     phone: '',
     role: '',
+    isEnabled: true, // THÊM: bật/tắt user
   });
   const [newImage, setNewImage] = useState(null);
   const [newImagePreview, setNewImagePreview] = useState(null);
@@ -46,6 +50,7 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
         address: user.address || '',
         phone: user.phone || '',
         role: user.role || '',
+        isEnabled: user.isEnabled !== undefined ? user.isEnabled : true, // THÊM: lấy từ user
       });
       setNewImage(null);
       setNewImagePreview(null);
@@ -285,14 +290,36 @@ const EditUserDialog = ({ open, onClose, onUpdate, user }) => {
             size="small"
             disabled={saving}
           />
-          <TextField
-            label="Role"
-            value={formData.role}
-            onChange={handleChange('role')}
-            fullWidth
-            size="small"
-            disabled={saving}
-          />
+          <FormControl fullWidth size="small">
+            <InputLabel id="role-select-label">Role</InputLabel>
+            <Select
+              labelId="role-select-label"
+              label="Role"
+              value={formData.role}
+              onChange={handleChange('role')}
+              disabled={saving}
+            >
+              <MenuItem value="User">User</MenuItem>
+              <MenuItem value="Leader">Leader</MenuItem>
+              <MenuItem value="Admin">Admin</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* THÊM: BẬT/TẮT USER */}
+          <FormControl component="fieldset" sx={{ mt: 1 }}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <input
+                type="checkbox"
+                checked={formData.isEnabled}
+                onChange={(e) => setFormData(prev => ({ ...prev, isEnabled: e.target.checked }))}
+                disabled={saving}
+              />
+              <Typography variant="body2">
+                {formData.isEnabled ? 'Enabled' : 'Disabled'}
+              </Typography>
+            </Stack>
+          </FormControl>
+
           <Box>
             <InputLabel sx={{ mb: 1 }}>Profile Image (Leave empty to keep current)</InputLabel>
             <Stack direction="row" spacing={2} alignItems="center">

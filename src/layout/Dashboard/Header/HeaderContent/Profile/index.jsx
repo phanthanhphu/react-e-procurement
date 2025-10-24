@@ -3,75 +3,38 @@ import { useRef, useState } from 'react';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import ButtonBase from '@mui/material/ButtonBase';
-import CardContent from '@mui/material/CardContent';
-import ClickAwayListener from '@mui/material/ClickAwayListener';
-import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Popper from '@mui/material/Popper';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import TextField from '@mui/material/TextField';
-import IconButton from '@mui/material/IconButton';
+import Avatar from 'components/@extended/Avatar';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
 
 // project-imports
-import ProfileTab from './ProfileTab';
-import SettingTab from './SettingTab';
-import Avatar from 'components/@extended/Avatar';
 import Transitions from 'components/@extended/Transitions';
 import MainCard from 'components/MainCard';
-import { useUser } from './useUser'; // Import useUser hook
-
-// assets
-import avatar1 from 'assets/images/users/avatar-6.png';
-import { Setting2, Profile, Logout, Edit2 } from 'iconsax-react';
-
-// tab panel wrapper
-function TabPanel({ children, value, index, ...other }) {
-  return (
-    <Box
-      role="tabpanel"
-      hidden={value !== index}
-      id={`profile-tabpanel-${index}`}
-      aria-labelledby={`profile-tab-${index}`}
-      {...other}
-      sx={{ p: 1 }}
-    >
-      {value === index && children}
-    </Box>
-  );
-}
+import { useUser } from './useUser';
+import { User } from 'iconsax-react'; // Thay 'Profile' bằng 'User'
+import TabContent from './ProfileTab'; // Đổi tên import để tránh nhầm lẫn
 
 function a11yProps(index) {
   return {
-    id: `profile-tab-${index}`,
-    'aria-controls': `profile-tabpanel-${index}`,
+    id: `tab-${index}`, // Loại bỏ 'profile-' từ id
+    'aria-controls': `tabpanel-${index}`, // Loại bỏ 'profile-' từ aria-controls
   };
 }
 
-const tabStyle = {
-  display: 'flex',
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  textTransform: 'capitalize',
-  gap: 1.25,
-};
-
-// ==============================|| HEADER CONTENT - PROFILE ||============================== //
-
-export default function ProfilePage() {
+export default function UserPage() { // Đổi tên từ ProfilePage thành UserPage
   const theme = useTheme();
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
 
-  // Use useUser hook to get user data and functions
-  const { username, role, isEditing, editedUsername, setEditedUsername, setIsEditing, handleSaveUsername } = useUser();
+  const { profileImage } = useUser();
 
   const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen);
@@ -82,7 +45,6 @@ export default function ProfilePage() {
       return;
     }
     setOpen(false);
-    setIsEditing(false); // Close editing mode when closing popup
   };
 
   const handleChange = (event, newValue) => {
@@ -101,13 +63,13 @@ export default function ProfilePage() {
             outlineOffset: 2,
           },
         })}
-        aria-label="open profile"
+        aria-label="open user" // Thay 'profile' bằng 'user'
         ref={anchorRef}
-        aria-controls={open ? 'profile-grow' : undefined}
+        aria-controls={open ? 'user-grow' : undefined} // Thay 'profile-grow' bằng 'user-grow'
         aria-haspopup="true"
         onClick={handleToggle}
       >
-        <Avatar alt="profile user" src={avatar1} />
+        <Avatar alt="user" src={profileImage} /> {/* Thay 'profile user' bằng 'user' */}
       </ButtonBase>
       <Popper
         placement="bottom-end"
@@ -132,63 +94,28 @@ export default function ProfilePage() {
             >
               <ClickAwayListener onClickAway={handleClose}>
                 <MainCard border={false} content={false}>
-                  <CardContent sx={{ px: 2.5, pt: 3 }}>
-                    <Grid container sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Grid>
-                        <Stack direction="row" sx={{ gap: 1.25, alignItems: 'center' }}>
-                          <Avatar alt="profile user" src={avatar1} />
-                          <Stack>
-                            {isEditing ? (
-                              <Stack direction="row" alignItems="center" spacing={1}>
-                                <TextField
-                                  value={editedUsername}
-                                  onChange={(e) => setEditedUsername(e.target.value)}
-                                  size="small"
-                                  autoFocus
-                                />
-                                <IconButton color="primary" onClick={handleSaveUsername}>
-                                  <Edit2 size={18} />
-                                </IconButton>
-                              </Stack>
-                            ) : (
-                              <>
-                                <Typography
-                                  variant="subtitle1"
-                                  onClick={() => setIsEditing(true)}
-                                  style={{ cursor: 'pointer' }}
-                                >
-                                  {username}
-                                </Typography>
-                                <Typography variant="body2" color="secondary">
-                                  {role || 'User'} {/* Display role, fallback to 'User' */}
-                                </Typography>
-                              </>
-                            )}
-                          </Stack>
-                        </Stack>
-                      </Grid>
-                      <Grid>
-                        <Tooltip title="Logout">
-                          <IconButton size="large" color="error" sx={{ p: 1 }}>
-                            <Logout variant="Bulk" />
-                          </IconButton>
-                        </Tooltip>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-
                   <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tabs variant="fullWidth" value={value} onChange={handleChange} aria-label="profile tabs">
-                      <Tab sx={tabStyle} icon={<Profile size={18} style={{ marginBottom: 0 }} />} label="Profile" {...a11yProps(0)} />
-                      <Tab sx={tabStyle} icon={<Setting2 size={18} style={{ marginBottom: 0 }} />} label="Setting" {...a11yProps(1)} />
+                    <Tabs
+                      variant="fullWidth"
+                      value={value}
+                      onChange={handleChange}
+                      aria-label="user tabs" // Thay 'profile tabs' bằng 'user tabs'
+                    >
+                      <Tab
+                        sx={{
+                          textTransform: 'capitalize',
+                          fontWeight: 600,
+                        }}
+                        icon={<User size={18} />} // Thay 'Profile' bằng 'User'
+                        label="User" // Thay 'Profile' bằng 'User'
+                        {...a11yProps(0)}
+                      />
                     </Tabs>
                   </Box>
-                  <TabPanel value={value} index={0} dir={theme.direction}>
-                    <ProfileTab />
-                  </TabPanel>
-                  <TabPanel value={value} index={1} dir={theme.direction}>
-                    <SettingTab />
-                  </TabPanel>
+
+                  <Box sx={{ p: 1 }}>
+                    <TabContent />
+                  </Box>
                 </MainCard>
               </ClickAwayListener>
             </Paper>
@@ -198,5 +125,3 @@ export default function ProfilePage() {
     </Box>
   );
 }
-
-TabPanel.propTypes = { children: PropTypes.node, value: PropTypes.number, index: PropTypes.number, other: PropTypes.any };
