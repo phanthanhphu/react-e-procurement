@@ -65,7 +65,6 @@ const baseHeaders = [
   { label: 'Action', key: 'action', align: 'center', width: 100 },
 ];
 
-// Tính left chính xác
 let stickyOffset = 0;
 const headers = baseHeaders.map(h => {
   const header = { ...h };
@@ -99,17 +98,9 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
 
   return (
     <>
-      {/* BẢNG - BỎ BO GÓC */}
       <Box sx={{ maxHeight: 'calc(100vh - 320px)', overflow: 'auto', border: '1px solid #ddd', borderRadius: 0 }}>
         {/* HEADER */}
-        <Box
-          display="grid"
-          gridTemplateColumns={gridTemplate}
-          bgcolor="#027aff"
-          position="sticky"
-          top={0}
-          zIndex={22}
-        >
+        <Box display="grid" gridTemplateColumns={gridTemplate} bgcolor="#027aff" position="sticky" top={0} zIndex={22}>
           {headers.map(h => (
             <Box
               key={h.key}
@@ -243,7 +234,6 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
         </Box>
       </Box>
 
-      {/* POPOVER */}
       <Popover
         open={!!popover.anchor}
         anchorEl={popover.anchor}
@@ -302,6 +292,7 @@ export default function SupplierProductsPage() {
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
+  // === FETCH DATA ===
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -312,7 +303,15 @@ export default function SupplierProductsPage() {
       } else {
         params.sort = 'createdAt,desc';
       }
-      Object.entries(search).forEach(([k, v]) => v && (params[k] = v));
+
+      // === ĐÃ FIX: Thêm tất cả search fields ===
+      Object.entries(search).forEach(([key, value]) => {
+        if (value !== '' && value !== null && value !== undefined) {
+          params[key] = value;
+        }
+      });
+
+      console.log('API PARAMS:', params); // DEBUG
 
       const res = await axiosInstance.get('/api/supplier-products/filter', { params });
       setData(res.data.data.content || []);
@@ -323,13 +322,17 @@ export default function SupplierProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, sortConfig, search]);
+  }, [page, rowsPerPage, sortConfig, search]); // ĐÃ CÓ search
 
+  // === ĐÃ FIX: useEffect theo dõi search, page, sortConfig ===
   useEffect(() => { 
     const token = localStorage.getItem('token');
-    if (!token) { navigate('/react/login'); return; }
+    if (!token) { 
+      navigate('/react/login'); 
+      return; 
+    }
     fetchData();
-  }, [fetchData, navigate]);
+  }, [fetchData, navigate]); // fetchData đã bao gồm search, page, sortConfig
 
   const handleSort = k => {
     setSortConfig(s => ({
@@ -339,7 +342,11 @@ export default function SupplierProductsPage() {
     setPage(0);
   };
 
-  const handleSearch = () => { setPage(0); fetchData(); };
+  const handleSearch = () => { 
+    setPage(0); 
+    fetchData(); 
+  };
+
   const handleReset = () => {
     setSearch({
       supplierCode: '', supplierName: '', sapCode: '', itemNo: '', itemDescription: '',
@@ -354,7 +361,7 @@ export default function SupplierProductsPage() {
   const handleFile = e => {
     const f = e.target.files[0];
     if (f && !/\.(xlsx|xls)$/.test(f.name)) {
-      setNotification({ open: true, message: 'Chỉ chấp nhận .xlsx hoặc .xls', severity: 'error' });
+      setNotification({ open: true, message: 'Only .xlsx or .xls files allowed', severity: 'error' });
       return;
     }
     setFile(f);
@@ -362,10 +369,15 @@ export default function SupplierProductsPage() {
 
   useEffect(() => {
     if (file) {
-      const form = new FormData(); form.append('file', file);
+      const form = new FormData(); 
+      form.append('file', file);
       axiosInstance.post('/api/supplier-products/import', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-        .then(() => { setPage(0); fetchData(); setNotification({ open: true, message: 'Upload thành công!', severity: 'success' }); })
-        .catch(err => setNotification({ open: true, message: `Upload thất bại: ${err.response?.data?.message || err.message}`, severity: 'error' }))
+        .then(() => { 
+          setPage(0); 
+          fetchData(); 
+          setNotification({ open: true, message: 'Upload successful!', severity: 'success' }); 
+        })
+        .catch(err => setNotification({ open: true, message: `Upload failed: ${err.response?.data?.message || err.message}`, severity: 'error' }))
         .finally(() => { setFile(null); setLoading(false); });
     }
   }, [file]);
@@ -410,9 +422,30 @@ export default function SupplierProductsPage() {
         </Button>
       </Stack>
 
+      {/* ĐÃ FIX: Truyền đúng tên props */}
       <SupplierSearch 
-        {...search} 
-        {...Object.fromEntries(Object.keys(search).map(k => [`set${k.charAt(0).toUpperCase() + k.slice(1)}`, v => setSearch(s => ({ ...s, [k]: v }))]))} 
+        supplierCode={search.supplierCode}
+        setSearchSupplierCode={(v) => { setSearch(s => ({ ...s, supplierCode: v })); setPage(0); }}
+        supplierName={search.supplierName}
+        setSearchSupplierName={(v) => { setSearch(s => ({ ...s, supplierName: v })); setPage(0); }}
+        sapCode={search.sapCode}
+        setSearchSapCode={(v) => { setSearch(s => ({ ...s, sapCode: v })); setPage(0); }}
+        itemNo={search.itemNo}
+        setSearchItemNo={(v) => { setSearch(s => ({ ...s, itemNo: v })); setPage(0); }}
+        itemDescription={search.itemDescription}
+        setSearchItemDescription={(v) => { setSearch(s => ({ ...s, itemDescription: v })); setPage(0); }}
+        fullDescription={search.fullDescription}
+        setSearchFullDescription={(v) => { setSearch(s => ({ ...s, fullDescription: v })); setPage(0); }}
+        materialGroupFullDescription={search.materialGroupFullDescription}
+        setSearchMaterialGroupFullDescription={(v) => { setSearch(s => ({ ...s, materialGroupFullDescription: v })); setPage(0); }}
+        productType1Id={search.productType1Id}
+        setSearchProductType1Id={(v) => { setSearch(s => ({ ...s, productType1Id: v })); setPage(0); }}
+        productType2Id={search.productType2Id}
+        setSearchProductType2Id={(v) => { setSearch(s => ({ ...s, productType2Id: v })); setPage(0); }}
+        currency={search.currency}
+        setSearchCurrency={(v) => { setSearch(s => ({ ...s, currency: v })); setPage(0); }}
+        goodType={search.goodType}
+        setSearchGoodType={(v) => { setSearch(s => ({ ...s, goodType: v })); setPage(0); }}
         onSearch={handleSearch} 
         onReset={handleReset} 
         setPage={setPage} 
@@ -468,12 +501,12 @@ export default function SupplierProductsPage() {
       )}
       
       <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
-        <DialogTitle sx={{ fontSize: '0.7rem' }}>Xóa sản phẩm</DialogTitle>
+        <DialogTitle sx={{ fontSize: '0.7rem' }}>Delete Product</DialogTitle>
         <DialogContent>
-          <Typography fontSize="0.55rem">Xác nhận xóa "{productToDelete?.itemNo}"?</Typography>
+          <Typography fontSize="0.55rem">Confirm delete "{productToDelete?.itemNo}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDelete(false)} sx={{ fontSize: '0.55rem' }}>Hủy</Button>
+          <Button onClick={() => setOpenDelete(false)} sx={{ fontSize: '0.55rem' }}>Cancel</Button>
           <Button 
             variant="contained" 
             color="error" 
@@ -486,7 +519,7 @@ export default function SupplierProductsPage() {
             }} 
             sx={{ fontSize: '0.55rem' }}
           >
-            Xóa
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
