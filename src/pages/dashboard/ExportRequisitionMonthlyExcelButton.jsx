@@ -76,7 +76,6 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
         });
       } catch (error) {
         console.error('Error fetching data for export:', error);
-        alert('Failed to fetch data for export. Please try again.');
       }
     };
 

@@ -71,7 +71,7 @@ const headers = [
   { label: 'Old SAP Code', key: 'oldSapCode', sortable: true, backendKey: 'oldSapCode' },
   { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true, backendKey: 'hanaSapCode' },
   { label: 'Department', key: 'departmentRequests', sortable: false, backendKey: 'departmentRequests' },
-  { label: 'Request Qty', key: 'requestQty', sortable: true, backendKey: 'sumBuy' },
+  { label: 'Request Qty', key: 'requestQty', sortable: true, backendKey: 'totalRequestQty' }, // Updated backendKey to totalRequestQty
   { label: 'Order Qty', key: 'orderQty', sortable: true, backendKey: 'orderQty' },
   { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
   { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
@@ -211,7 +211,7 @@ export default function SummaryPage() {
   const [data, setData] = useState([]);
   const [originalData, setOriginalData] = useState([]);
   const [groupStatus, setGroupStatus] = useState(null);
-  const [totalElements, setTotalElements] = useState(0); // Thêm state cho totalElements
+  const [totalElements, setTotalElements] = useState(0);
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
     productType2Name: '',
@@ -297,7 +297,7 @@ export default function SummaryPage() {
 
       const mappedData = response.data.content.map((item) => ({
         ...item,
-        requestQty: item.sumBuy,
+        requestQty: item.totalRequestQty, // Updated to map to totalRequestQty
         amount: item.totalPrice,
         currency: item.supplierProduct?.currency || 'VND',
         goodType: item.supplierProduct?.goodType || '',
@@ -305,7 +305,7 @@ export default function SummaryPage() {
 
       setData(mappedData);
       setOriginalData(mappedData);
-      setTotalElements(response.data.totalElements || mappedData.length); // Cập nhật totalElements
+      setTotalElements(response.data.totalElements || mappedData.length);
     } catch (err) {
       console.error('Fetch data error:', err.response?.data || err.message);
       setError(`Failed to fetch data from API: ${err.message}. Showing previously loaded data.`);
@@ -321,7 +321,7 @@ export default function SummaryPage() {
       navigate('/login');
       return;
     }
-    setData([]); // Clear previous data
+    setData([]);
     fetchGroupStatus();
     fetchData();
   }, [fetchData, fetchGroupStatus, navigate]);
@@ -455,7 +455,6 @@ export default function SummaryPage() {
     }
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
-    // Sử dụng server-side sorting bằng cách gọi fetchData
     if (!direction) {
       fetchData();
       return;

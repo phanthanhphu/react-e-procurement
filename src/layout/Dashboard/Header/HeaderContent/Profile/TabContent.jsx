@@ -41,9 +41,10 @@ function TabContent() {
     createdAt,
     error,
     success,
+    firstLetter,
     fetchUser,
     handleUpdateUser,
-    handleUpdatePassword,
+    handleUpdatePassword
   } = useUser();
 
   useEffect(() => {
@@ -97,6 +98,7 @@ function TabContent() {
       });
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('role');
       setSnackbarOpen(true);
       setTimeout(() => {
         window.location.href = '/react/login';
@@ -112,78 +114,103 @@ function TabContent() {
     const hasError = imageErrors[id];
 
     const renderContent = () => {
-      if (hasError) {
+      if (displayImageUrl && !hasError) {
         return (
-          <Box sx={{ 
-            bgcolor: '#f5f5f5', width: 48, height: 48, 
-            borderRadius: '50%', display: 'flex', alignItems: 'center', 
-            justifyContent: 'center', fontSize: '1rem', color: '#999' 
-          }}>
-            ?
-          </Box>
+          <img
+            src={`${API_BASE_URL}${displayImageUrl}`}
+            alt={username}
+            width={48}
+            height={48}
+            style={{
+              borderRadius: '50%',
+              objectFit: 'cover',
+              display: 'block',
+              border: '2px solid',
+              borderColor: theme.palette.primary.main,
+            }}
+            loading="lazy"
+            onError={(e) => {
+              console.error(`Failed to load image: ${displayImageUrl}`);
+              handleImageError(id);
+            }}
+          />
         );
       }
+
       return (
-        <img
-          src={displayImageUrl ? `${API_BASE_URL}${displayImageUrl}` : `${API_BASE_URL}/Uploads/users/default-user.png`}
-          alt={username}
-          width={48}
-          height={48}
-          style={{ 
-            borderRadius: '50%', 
-            objectFit: 'cover', 
-            display: 'block',
-            border: '2px solid',
-            borderColor: theme.palette.primary.main,
+        <Box
+          sx={{
+            bgcolor: '#f5f5f5',
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.5rem',
+            fontWeight: 600,
+            color: theme.palette.primary.main,
+            border: `2px solid ${theme.palette.primary.main}`,
           }}
-          loading="lazy"
-          onError={(e) => {
-            console.error(`Failed to load image: ${displayImageUrl || '/Uploads/users/default-user.png'}`);
-            e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
-            handleImageError(id);
-          }}
-        />
+        >
+          {firstLetter || '?'}
+        </Box>
       );
     };
 
     return (
-      <Tooltip 
+      <Tooltip
         title={
           <Box>
-            <img 
-              src={displayImageUrl ? `${API_BASE_URL}${displayImageUrl}` : `${API_BASE_URL}/Uploads/users/default-user.png`} 
-              alt={username} 
-              style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} 
-              onError={(e) => {
-                console.error(`Failed to load tooltip image: ${displayImageUrl || '/Uploads/users/default-user.png'}`);
-                e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
+            <Box
+              sx={{
+                bgcolor: '#f5f5f5',
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '2rem',
+                fontWeight: 600,
+                color: theme.palette.primary.main,
               }}
-            />
-            <Typography variant="caption" sx={{ mt: 0.5, display: 'block', textAlign: 'center', fontSize: '0.8rem' }}>
+            >
+              {firstLetter || '?'}
+            </Box>
+            <Typography
+              variant="caption"
+              sx={{ mt: 0.5, display: 'block', textAlign: 'center', fontSize: '0.8rem' }}
+            >
               {username}
             </Typography>
           </Box>
         }
         arrow
-        sx={{ 
-          '& .MuiTooltip-tooltip': { 
-            bgcolor: 'white', 
-            borderRadius: 2, 
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)' 
-          } 
+        sx={{
+          '& .MuiTooltip-tooltip': {
+            bgcolor: 'white',
+            borderRadius: 2,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+          },
         }}
       >
-        <Box sx={{ 
-          width: 48, height: 48, 
-          borderRadius: '50%', 
-          display: 'inline-flex', alignItems: 'center', 
-          justifyContent: 'center', cursor: 'pointer',
-          '&:hover': { 
-            transform: 'scale(1.05)', 
-            transition: '0.2s',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }
-        }}>
+        <Box
+          sx={{
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            '&:hover': {
+              transform: 'scale(1.05)',
+              transition: '0.2s',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            },
+          }}
+        >
           {renderContent()}
         </Box>
       </Tooltip>

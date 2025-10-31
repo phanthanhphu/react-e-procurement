@@ -579,7 +579,7 @@ export default function ProductType2Page() {
   return (
     <Box sx={{ p: 1, fontSize: '0.85rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
       <IconButton
-        onClick={() => navigate('/dashboard/product-type-management')}
+        onClick={() => navigate('/product-type-management')}
         sx={{
           mb: 1.5,
           background: 'linear-gradient(to right, #4cb8ff, #027aff)',

@@ -139,7 +139,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
 
     // Data rows
     exportData.forEach((item, index) => {
-      const { requisition, supplierProduct, departmentRequests, sumBuy, productType1Name, productType2Name } = item;
+      const { requisition, supplierProduct, departmentRequests, totalRequestQty, productType1Name, productType2Name } = item;
       const deptBuy = {};
       (departmentRequests || []).forEach((dept) => {
         deptBuy[dept.departmentName] = dept.buy;
@@ -155,7 +155,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
         requisition?.hanaSapCode || '',
         supplierProduct?.unit || '',
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
-        sumBuy || 0,
+        totalRequestQty || 0, // Updated to use totalRequestQty
         requisition?.stock || 0,
         requisition?.orderQty || '',
         requisition?.reason || '',
@@ -312,7 +312,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
     // Generate file name
     const sanitizedGroupName = groupName.replace(/\s+/g, '-');
     const currentDateTime = dayjs().format('DDMMYYYYHHmm');
-    const fileName = `urgent_request_${currentDateTime}.xlsx`;
+    const fileName = `weekly_request_${currentDateTime}.xlsx`;
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     console.log('wbout size:', wbout.length);

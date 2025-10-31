@@ -149,8 +149,12 @@ function LoginPage() {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('role', data.user.role); // Store role for menu
         toast.success('Login successful! Redirecting...');
         navigate('/dashboard', { replace: true });
+        setTimeout(() => {
+          window.location.reload(); // Auto-reload after navigation
+        }, 100); // Small delay to ensure navigation completes
       } else {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {

@@ -8,23 +8,14 @@ export const useUser = () => {
   const [address, setAddress] = useState(storedUser.address || '');
   const [phone, setPhone] = useState(storedUser.phone || '');
   const [role, setRole] = useState(storedUser.role || '');
-  const [profileImage, setProfileImage] = useState(
-    storedUser.profileImageUrl || storedUser.avatar || null
-  );
+  const [profileImage, setProfileImage] = useState(storedUser.profileImageUrl || storedUser.avatar || null);
   const [userId, setUserId] = useState(storedUser.id || '');
   const [createdAt, setCreatedAt] = useState(storedUser.createdAt || null);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editedUsername, setEditedUsername] = useState(storedUser.username || '');
-
-  // Compute the first letter of the username, capitalized
-  const firstLetter = username ? username.charAt(0).toUpperCase() : '';
-
-  // Load user from localStorage when component mounts
-  useEffect(() => {
-    loadUserFromStorage();
-  }, []);
+  const [firstLetter, setFirstLetter] = useState(storedUser.username ? storedUser.username.charAt(0).toUpperCase() : '');
 
   const loadUserFromStorage = () => {
     const user = JSON.parse(localStorage.getItem('user')) || {};
@@ -37,14 +28,17 @@ export const useUser = () => {
     setUserId(user.id || '');
     setCreatedAt(user.createdAt || null);
     setEditedUsername(user.username || '');
+    setFirstLetter(user.username ? user.username.charAt(0).toUpperCase() : '');
 
-    // Lưu role riêng biệt vào localStorage
     if (user.role) {
       localStorage.setItem('role', user.role);
     }
   };
 
-  // Auto-fetch user when userId exists but username is missing
+  useEffect(() => {
+    loadUserFromStorage();
+  }, []);
+
   useEffect(() => {
     if (userId && !username) {
       fetchUser(userId);
@@ -84,10 +78,10 @@ export const useUser = () => {
       setUserId(user.id || '');
       setCreatedAt(user.createdAt || null);
       setEditedUsername(user.username || '');
+      setFirstLetter(user.username ? user.username.charAt(0).toUpperCase() : '');
       setSuccess('User data loaded successfully');
       setError('');
 
-      // Lưu role riêng biệt vào localStorage
       if (user.role) {
         localStorage.setItem('role', user.role);
       }
@@ -114,12 +108,12 @@ export const useUser = () => {
     setRole(updatedUser.role);
     setProfileImage(updatedUser.profileImageUrl || updatedUser.avatar);
     setEditedUsername(updatedUser.username);
+    setFirstLetter(updatedUser.username ? updatedUser.username.charAt(0).toUpperCase() : '');
     setCreatedAt(updatedUser.createdAt);
     setIsEditing(false);
     setSuccess('Profile updated successfully');
     setError('');
 
-    // Lưu role riêng biệt vào localStorage
     if (updatedUser.role) {
       localStorage.setItem('role', updatedUser.role);
     }
@@ -132,11 +126,11 @@ export const useUser = () => {
 
   const handleSaveUsername = () => {
     setUsername(editedUsername);
+    setFirstLetter(editedUsername ? editedUsername.charAt(0).toUpperCase() : '');
     localStorage.setItem('user', JSON.stringify({ ...storedUser, username: editedUsername }));
     setIsEditing(false);
     setSuccess('Username updated successfully');
 
-    // Lưu role riêng biệt vào localStorage (nếu có)
     if (storedUser.role) {
       localStorage.setItem('role', storedUser.role);
     }
@@ -155,12 +149,12 @@ export const useUser = () => {
     error,
     success,
     editedUsername,
+    firstLetter,
     setEditedUsername,
     setIsEditing,
     fetchUser,
     handleUpdateUser,
     handleUpdatePassword,
-    handleSaveUsername,
-    firstLetter // Added to return the first letter of the username
+    handleSaveUsername
   };
 };

@@ -1,40 +1,39 @@
 import PropTypes from 'prop-types';
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo, useCallback } from 'react';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import ButtonBase from '@mui/material/ButtonBase';
 import Paper from '@mui/material/Paper';
 import Popper from '@mui/material/Popper';
-import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Box from '@mui/material/Box';
-import Avatar from 'components/@extended/Avatar';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 
 // project-imports
 import Transitions from 'components/@extended/Transitions';
 import MainCard from 'components/MainCard';
 import { useUser } from './useUser';
-import { User } from 'iconsax-react'; // Thay 'Profile' bằng 'User'
-import TabContent from './ProfileTab'; // Đổi tên import để tránh nhầm lẫn
+import { User } from 'iconsax-react';
+import TabContent from './TabContent';
+import { API_BASE_URL } from '../../../../../config';
 
 function a11yProps(index) {
   return {
-    id: `tab-${index}`, // Loại bỏ 'profile-' từ id
-    'aria-controls': `tabpanel-${index}`, // Loại bỏ 'profile-' từ aria-controls
+    id: `tab-${index}`,
+    'aria-controls': `tabpanel-${index}`,
   };
 }
 
-export default function UserPage() { // Đổi tên từ ProfilePage thành UserPage
+export default function UserPage() {
   const theme = useTheme();
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
+  const [imageError, setImageError] = useState(false); // Trạng thái lỗi hình ảnh
 
-  const { profileImage } = useUser();
+  const { profileImage, username, firstLetter, userId } = useUser(); // Lấy thêm firstLetter và userId
 
   const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen);
@@ -51,6 +50,102 @@ export default function UserPage() { // Đổi tên từ ProfilePage thành User
     setValue(newValue);
   };
 
+  const normalizeImageUrl = useCallback((url) => {
+    if (!url) return null;
+    let normalized = url.replace(/\\/g, '/');
+    let finalUrl;
+
+    normalized = normalized.split('?')[0];
+
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      finalUrl = normalized.replace(/^https?:\/\/[^\/]+/, '');
+    } else if (normalized.startsWith('/uploads/users/') || normalized.startsWith('/Uploads/users/')) {
+      finalUrl = normalized;
+    } else {
+      const cleanPath = normalized.replace(/^\/?uploads\/users\//i, '');
+      finalUrl = `/uploads/users/${cleanPath}`;
+    }
+    return finalUrl || null;
+  }, []);
+
+  const processedUser = useMemo(() => {
+    const imageUrl = normalizeImageUrl(profileImage);
+    const finalImageUrl = imageUrl || '/uploads/users/default-user.png';
+    return { id: userId, username, profileImageUrl: imageUrl, displayImageUrl: finalImageUrl };
+  }, [profileImage, userId, username, normalizeImageUrl]);
+
+  const handleImageError = useCallback(() => {
+    setImageError(true);
+  }, []);
+
+  const UserAvatar = () => {
+    const { username, displayImageUrl } = processedUser;
+
+    const renderContent = () => {
+      // Nếu có ảnh profile và không có lỗi, hiển thị ảnh
+      if (displayImageUrl && !imageError) {
+        return (
+          <img
+            src={`${API_BASE_URL}${displayImageUrl}`}
+            alt={username || 'User'}
+            width={40}
+            height={40}
+            style={{
+              borderRadius: '50%',
+              objectFit: 'cover',
+              display: 'block',
+              border: `2px solid ${theme.palette.primary.main}`,
+            }}
+            loading="lazy"
+            onError={handleImageError}
+          />
+        );
+      }
+
+      // Nếu không có ảnh hoặc có lỗi, hiển thị chữ cái đầu tiên
+      return (
+        <Box
+          sx={{
+            bgcolor: '#f5f5f5',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.5rem',
+            fontWeight: 600,
+            color: theme.palette.primary.main,
+            border: `2px solid ${theme.palette.primary.main}`,
+          }}
+        >
+          {firstLetter || '?'}
+        </Box>
+      );
+    };
+
+    return (
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          '&:hover': {
+            transform: 'scale(1.05)',
+            transition: '0.2s',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          },
+        }}
+      >
+        {renderContent()}
+      </Box>
+    );
+  };
+
   return (
     <Box sx={{ flexShrink: 0, ml: 0.75 }}>
       <ButtonBase
@@ -63,13 +158,13 @@ export default function UserPage() { // Đổi tên từ ProfilePage thành User
             outlineOffset: 2,
           },
         })}
-        aria-label="open user" // Thay 'profile' bằng 'user'
+        aria-label="open user"
         ref={anchorRef}
-        aria-controls={open ? 'user-grow' : undefined} // Thay 'profile-grow' bằng 'user-grow'
+        aria-controls={open ? 'user-grow' : undefined}
         aria-haspopup="true"
         onClick={handleToggle}
       >
-        <Avatar alt="user" src={profileImage} /> {/* Thay 'profile user' bằng 'user' */}
+        <UserAvatar />
       </ButtonBase>
       <Popper
         placement="bottom-end"
@@ -99,20 +194,19 @@ export default function UserPage() { // Đổi tên từ ProfilePage thành User
                       variant="fullWidth"
                       value={value}
                       onChange={handleChange}
-                      aria-label="user tabs" // Thay 'profile tabs' bằng 'user tabs'
+                      aria-label="user tabs"
                     >
                       <Tab
                         sx={{
                           textTransform: 'capitalize',
                           fontWeight: 600,
                         }}
-                        icon={<User size={18} />} // Thay 'Profile' bằng 'User'
-                        label="User" // Thay 'Profile' bằng 'User'
+                        icon={<User size={18} />}
+                        label="User"
                         {...a11yProps(0)}
                       />
                     </Tabs>
                   </Box>
-
                   <Box sx={{ p: 1 }}>
                     <TabContent />
                   </Box>
@@ -125,3 +219,7 @@ export default function UserPage() { // Đổi tên từ ProfilePage thành User
     </Box>
   );
 }
+
+UserPage.propTypes = {
+  children: PropTypes.node,
+};

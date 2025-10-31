@@ -18,6 +18,10 @@ const UserManagementPage = Loadable(lazy(() => import('pages/dashboard/UserManag
 const RequisitionMonthlyPage = Loadable(lazy(() => import('pages/dashboard/RequisitionMonthlyPage')));
 const ComparisonPage = Loadable(lazy(() => import('pages/dashboard/ComparisonPage')));
 const RequestMonthlyComparisonPage = Loadable(lazy(() => import('pages/dashboard/RequestMonthlyComparisonPage')));
+
+// THÊM MỚI
+const WeeklyMonthlyRequisitionsPage = Loadable(lazy(() => import('pages/dashboard/WeeklyMonthlyRequisitionsPage')));
+
 const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const TypographyPage = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
@@ -106,6 +110,13 @@ const MainRoutes = {
             { path: 'requisition-monthly/:groupId', element: <RequisitionMonthlyPage /> },
             { path: 'comparison/:groupId', element: <ComparisonPage /> },
             { path: 'request-monthly-comparison/:groupId', element: <RequestMonthlyComparisonPage /> },
+
+            // THÊM TRANG MỚI – CHỈ CẦN ĐĂNG NHẬP
+            {
+              path: 'weekly-monthly-requisitions',
+              element: <WeeklyMonthlyRequisitionsPage />
+            },
+
             { path: 'typography', element: <TypographyPage /> },
             { path: 'color', element: <Color /> },
             { path: 'shadows', element: <Shadow /> },

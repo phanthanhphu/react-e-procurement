@@ -1,58 +1,170 @@
 import React from 'react';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import { Typography, Stack, Avatar, IconButton } from '@mui/material';
-import { Trash } from 'iconsax-react';
-import { API_BASE_URL } from '../../config.js'; // Adjusted for D:\Project\React\react\config.js
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Typography,
+  Stack,
+  Avatar,
+  Chip,
+  Divider,
+  Box,
+  IconButton,
+  useTheme,
+} from '@mui/material';
+import { Icon } from 'iconsax-react'; // CHẠY ĐƯỢC MỌI PHIÊN BẢN
+import { API_BASE_URL } from '../../config.js';
 
 export default function ViewUserDialog({ open, onClose, user }) {
+  const theme = useTheme();
+
+  // Format date từ mảng [year, month, day, hour, minute, second]
   const formatDate = (dateArray) => {
-    if (!dateArray || dateArray.length < 7) return 'N/A';
-    const [year, month, day, hour, minute, second] = dateArray;
-    const date = new Date(year, month - 1, day, hour, minute, second);
+    if (!dateArray || dateArray.length < 6) return 'N/A';
+    const [y, m, d, h, min] = dateArray;
+    const date = new Date(y, m - 1, d, h, min);
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
       hour12: true,
     });
+  };
+
+  // Màu cho role
+  const getRoleColor = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r.includes('admin')) return 'error';
+    if (r.includes('manager') || r.includes('mod')) return 'warning';
+    if (r.includes('user') || r.includes('member')) return 'success';
+    return 'default';
   };
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      aria-labelledby="view-user-dialog-title"
-      sx={{ '& .MuiDialog-paper': { maxWidth: 400, p: 2 } }}
+      maxWidth="xs"
+      fullWidth
+      sx={{
+        '& .MuiDialog-paper': {
+          borderRadius: 3,
+          p: { xs: 2, sm: 3 },
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+        },
+      }}
     >
-      <DialogTitle id="view-user-dialog-title">View Profile</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} alignItems="center">
-          <Avatar
-            src={user.profileImageUrl ? `${API_BASE_URL}${user.profileImageUrl}` : `${API_BASE_URL}/Uploads/users/default-user.png`}
-            sx={{ width: 100, height: 100 }}
-            onError={(e) => {
-              console.error(`Failed to load image: ${user.profileImageUrl || '/Uploads/users/default-user.png'}`);
-              e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
+      {/* Header */}
+      <DialogTitle sx={{ pb: 1, position: 'relative' }}>
+        <Typography variant="h6" fontWeight={600}>
+          User Profile
+        </Typography>
+        <IconButton
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            right: 12,
+            top: 12,
+            color: 'text.secondary',
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
+          <Icon name="close" size={20} />
+        </IconButton>
+      </DialogTitle>
+
+      <Divider />
+
+      {/* Content */}
+      <DialogContent sx={{ pt: 3 }}>
+        <Stack spacing={3} alignItems="center">
+          {/* Avatar + Online Status */}
+          <Box sx={{ position: 'relative' }}>
+            <Avatar
+              src={
+                user?.profileImageUrl
+                  ? `${API_BASE_URL}${user.profileImageUrl}`
+                  : `${API_BASE_URL}/Uploads/users/default-user.png`
+              }
+              alt={user?.username}
+              sx={{
+                width: 110,
+                height: 110,
+                border: `4px solid ${theme.palette.background.paper}`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              }}
+              onError={(e) => {
+                e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
+              }}
+            />
+            {/* Online dot */}
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 8,
+                right: 8,
+                width: 16,
+                height: 16,
+                bgcolor: user?.isActive ? 'success.main' : 'grey.400',
+                border: '3px solid',
+                borderColor: 'background.paper',
+                borderRadius: '50%',
+              }}
+            />
+          </Box>
+
+          {/* Username */}
+          <Typography variant="h5" fontWeight={700}>
+            {user?.username || 'N/A'}
+          </Typography>
+
+          {/* Role Chip – ĐÃ CĂN GIỮA */}
+          <Chip
+            icon={<Icon name="shield-tick" size={16} />}
+            label={user?.role || 'Unknown'}
+            color={getRoleColor(user?.role)}
+            size="small"
+            sx={{
+              fontWeight: 600,
+              textTransform: 'capitalize',
+              alignSelf: 'center', // ĐÃ SỬA: CĂN GIỮA HOÀN HẢO
             }}
           />
-          <Typography><strong>Username:</strong> {user.username || 'N/A'}</Typography>
-          <Typography><strong>Email:</strong> {user.email || 'N/A'}</Typography>
-          <Typography><strong>Address:</strong> {user.address || 'N/A'}</Typography>
-          <Typography><strong>Phone:</strong> {user.phone || 'N/A'}</Typography>
-          <Typography><strong>Role:</strong> {user.role || 'N/A'}</Typography>
-          <Typography><strong>Created At:</strong> {formatDate(user.createdAt)}</Typography>
+
+          <Divider sx={{ width: '100%', my: 1 }} />
+
+          {/* Info List */}
+          <Stack spacing={2} width="100%">
+            {[
+              { icon: <Icon name="mail" size={18} />, label: 'Email', value: user?.email },
+              { icon: <Icon name="call" size={18} />, label: 'Phone', value: user?.phone },
+              { icon: <Icon name="location" size={18} />, label: 'Address', value: user?.address },
+              { icon: <Icon name="calendar-1" size={18} />, label: 'Created', value: formatDate(user?.createdAt) },
+            ].map((item, idx) => (
+              <Stack direction="row" spacing={1.5} key={idx} alignItems="flex-start">
+                <Box sx={{ color: 'primary.main', mt: 0.5 }}>{item.icon}</Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                    {item.label}
+                  </Typography>
+                  <Typography variant="body1" color="text.primary" sx={{ wordBreak: 'break-word' }}>
+                    {item.value || '—'}
+                  </Typography>
+                </Box>
+              </Stack>
+            ))}
+          </Stack>
         </Stack>
       </DialogContent>
-      <DialogActions>
-        <IconButton color="error" onClick={onClose}>
-          <Trash variant="Bulk" size={18} />
-        </IconButton>
+
+      {/* Footer */}
+      <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
+        <Typography variant="caption" color="text.disabled">
+          ID: {user?.id || 'N/A'}
+        </Typography>
       </DialogActions>
     </Dialog>
   );

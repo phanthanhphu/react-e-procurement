@@ -7,7 +7,8 @@ import {
   Location,
   Box, // Icon for Product Type Management
   Profile, // Icon for User Management
-  Building // Icon for Department Management
+  Building, // Icon for Department Management
+  DocumentText1 // Icon cho Weekly & Monthly Requisitions
 } from 'iconsax-reactjs';
 
 // icons
@@ -20,7 +21,8 @@ const icons = {
   groupRequest: ArrangeHorizontalSquare,
   productType: Box,
   userManagement: Profile,
-  department: Building // Icon riêng cho department-management
+  department: Building,
+  weeklyMonthlyRequisitions: DocumentText1 // Icon mới cho Weekly & Monthly
 };
 
 // CSS styles for menu items and icons
@@ -61,15 +63,14 @@ const menuStyles = {
 // Function to get menu items based on role
 const getDashboardMenu = () => {
   const role = localStorage.getItem('role');
-  console.log('Debug - Role from localStorage:', role); // Log chi tiết hơn
+  console.log('Debug - Role from localStorage:', role);
 
-  // Lấy toàn bộ localStorage dưới dạng object
   const localStorageData = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     localStorageData[key] = localStorage.getItem(key);
   }
-  console.log('Debug - Full localStorage:', localStorageData); // Log toàn bộ localStorage
+  console.log('Debug - Full localStorage:', localStorageData);
 
   const baseChildren = [
     {
@@ -86,6 +87,14 @@ const getDashboardMenu = () => {
       type: 'item',
       url: '/group-requests',
       icon: icons.groupRequest,
+      breadcrumbs: false
+    },
+    {
+      id: 'weekly-monthly-requisitions',
+      title: 'Requisitions',
+      type: 'item',
+      url: '/weekly-monthly-requisitions',
+      icon: icons.weeklyMonthlyRequisitions, // ĐÃ CÓ ICON
       breadcrumbs: false
     },
     {

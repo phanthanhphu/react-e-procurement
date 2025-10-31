@@ -1,28 +1,10 @@
+// src/pages/supplier/SupplierProductsPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Typography,
-  Box,
-  Table,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Paper,
-  Stack,
-  IconButton,
-  TablePagination,
-  useTheme,
-  useMediaQuery,
-  Button,
-  Input,
-  Popover,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Typography, Box, Stack, IconButton, TablePagination,
+  useTheme, useMediaQuery, Button, Input, Popover, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { Delete, FileUpload, Add, Edit, Image as ImageIcon, ArrowUpward, ArrowDownward } from '@mui/icons-material';
 import axios from 'axios';
@@ -32,779 +14,479 @@ import SupplierSearch from './SupplierSearch';
 import Notification from './Notification';
 import { API_BASE_URL } from '../../config';
 
-// Danh sách các endpoint công khai
+// === Axios Config ===
 const PUBLIC_ENDPOINTS = [
-  '/api/product-type-1/search',
-  '/api/product-type-2/search',
-  '/api/group-summary-requisitions/',
-  '/api/departments/filter',
-  '/api/supplier-products/filter',
-  '/api/auth/login',
-  '/users/login',
-  '/api/users/add',
-  '/users/add',
+  '/api/product-type-1/search', '/api/product-type-2/search', '/api/group-summary-requisitions/',
+  '/api/departments/filter', '/api/supplier-products/filter', '/api/auth/login',
+  '/users/login', '/api/users/add', '/users/add',
 ];
 
-// Cấu hình axios với interceptor
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    Accept: '*/*',
-    'Content-Type': 'application/json',
-  },
+  headers: { Accept: '*/*', 'Content-Type': 'application/json' },
 });
 
-axiosInstance.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    const isPublicEndpoint = PUBLIC_ENDPOINTS.some((endpoint) => config.url.includes(endpoint));
-    if (token && !isPublicEndpoint) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    console.log('Request URL:', config.url, 'Headers:', config.headers);
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+axiosInstance.interceptors.request.use(cfg => {
+  const token = localStorage.getItem('token');
+  const isPublic = PUBLIC_ENDPOINTS.some(e => cfg.url.includes(e));
+  if (token && !isPublic) cfg.headers.Authorization = `Bearer ${token}`;
+  return cfg;
+}, err => Promise.reject(err));
 
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      console.error('401 Unauthorized:', error.response.data);
-      localStorage.removeItem('token');
-      window.location.href = '/react/login';
-    }
-    return Promise.reject(error);
+axiosInstance.interceptors.response.use(res => res, err => {
+  if (err.response?.status === 401) {
+    localStorage.removeItem('token');
+    window.location.href = '/react/login';
   }
-);
+  return Promise.reject(err);
+});
 
-// Hàm định dạng màu sắc cho tiền tệ
-const getCurrencyColor = (currency) => {
-  switch (currency) {
-    case 'VND':
-      return '#4caf50';
-    case 'EURO':
-      return '#2196f3';
-    case 'USD':
-      return '#e57373';
-    default:
-      return '#9e9e9e';
-  }
-};
+// === Color Helpers ===
+const getCurrencyColor = c => ({ VND: '#4caf50', EURO: '#2196f3', USD: '#e57373' }[c] || '#9e9e9e');
+const getGoodTypeColor = t => ({ Common: '#4caf50', Special: '#2196f3', Electronics: '#e57373' }[t] || '#9e9e9e');
 
-// Hàm định dạng màu sắc cho goodType
-const getGoodTypeColor = (goodType) => {
-  switch (goodType) {
-    case 'Common':
-      return '#4caf50';
-    case 'Special':
-      return '#2196f3';
-    case 'Electronics':
-      return '#e57373';
-    default:
-      return '#9e9e9e';
-  }
-};
-
-// Định nghĩa cột sticky (chỉ SAP Code)
-const stickyColumns = [
-  { key: 'sapCode', minWidth: 100, left: 0 },
+// === HEADERS + STICKY ===
+const baseHeaders = [
+  { label: 'No', key: 'no', align: 'center', width: 50, sticky: true },
+  { label: 'Product Item 1', key: 'productType1Name', sortable: true, width: 120, sticky: true, wrap: true },
+  { label: 'Product Item 2', key: 'productType2Name', sortable: true, width: 120, sticky: true, wrap: true },
+  { label: 'Supplier Code', key: 'supplierCode', sortable: true, width: 110, sticky: true, wrap: true },
+  { label: 'Supplier Description', key: 'supplierName', sortable: true, width: 150, sticky: true, wrap: true },
+  { label: 'SAP Code', key: 'sapCode', sortable: true, width: 100, sticky: true },
+  { label: 'Item No', key: 'itemNo', sortable: true, width: 90 },
+  { label: 'Item Description', key: 'itemDescription', sortable: true, width: 180, wrap: true },
+  { label: 'Full Description', key: 'fullDescription', sortable: true, width: 200, wrap: true },
+  { label: 'Size', key: 'size', sortable: true, width: 70 },
+  { label: 'Unit', key: 'unit', sortable: true, width: 60 },
+  { label: 'Price', key: 'price', sortable: true, align: 'center', width: 90 },
+  { label: 'Currency', key: 'currency', sortable: true, align: 'center', width: 70 },
+  { label: 'Good Type', key: 'goodType', sortable: true, align: 'center', width: 90 },
+  { label: 'Images', key: 'image', align: 'center', width: 70 },
+  { label: 'Action', key: 'action', align: 'center', width: 100 },
 ];
 
-const headers = [
-  { label: 'No', key: 'no', sortable: false },
-  { label: 'Product Item 1', key: 'productType1Name', sortable: true, backendKey: 'productType1Name' },
-  { label: 'Product Item 2', key: 'productType2Name', sortable: true, backendKey: 'productType2Name' },
-  { label: 'Supplier Code', key: 'supplierCode', sortable: true, backendKey: 'supplierCode' },
-  { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
-  { label: 'SAP Code', key: 'sapCode', sortable: true, backendKey: 'sapCode' },
-  { label: 'Item No', key: 'itemNo', sortable: true, backendKey: 'itemNo' },
-  { label: 'Item Description', key: 'itemDescription', sortable: true, backendKey: 'itemDescription' },
-  { label: 'Full Description', key: 'fullDescription', sortable: true, backendKey: 'fullDescription' },
-  { label: 'Size', key: 'size', sortable: true, backendKey: 'size' },
-  { label: 'Unit', key: 'unit', sortable: true, backendKey: 'unit' },
-  { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
-  { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
-  { label: 'Good Type', key: 'goodType', sortable: true, backendKey: 'goodType' },
-  { label: 'Images', key: 'image', sortable: false },
-  { label: 'Action', key: 'action', sortable: false },
-];
+// Tính left chính xác
+let stickyOffset = 0;
+const headers = baseHeaders.map(h => {
+  const header = { ...h };
+  if (header.sticky) {
+    header.left = stickyOffset;
+    stickyOffset += header.width;
+  }
+  return header;
+});
 
-function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort, onRefresh, theme }) {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [popoverImgSrcs, setPopoverImgSrcs] = useState([]);
+const gridTemplate = headers.map(h => `${h.width}px`).join(' ');
+
+// === SUB TABLE COMPONENT ===
+function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort, theme }) {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [popover, setPopover] = useState({ anchor: null, images: [] });
 
-  const handlePopoverOpen = (event, imageUrls) => {
-    setAnchorEl(event.currentTarget);
-    const fullSrcs = imageUrls.map((imgSrc) =>
-      imgSrc.startsWith('http')
-        ? `${imgSrc}?t=${new Date().getTime()}`
-        : `${API_BASE_URL}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}?t=${new Date().getTime()}`
+  const openPopover = (e, urls) => {
+    const full = urls.map(src =>
+      src.startsWith('http') ? `${src}?t=${Date.now()}` :
+      `${API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}?t=${Date.now()}`
     );
-    console.log('Image URLs:', fullSrcs);
-    setPopoverImgSrcs(fullSrcs);
+    setPopover({ anchor: e.currentTarget, images: full });
   };
 
-  const handlePopoverClose = () => {
-    setAnchorEl(null);
-    setPopoverImgSrcs([]);
-  };
+  const closePopover = () => setPopover({ anchor: null, images: [] });
 
-  const open = Boolean(anchorEl);
-
-  if (!supplierProducts || supplierProducts.length === 0) {
-    return <Typography sx={{ fontStyle: 'italic', fontSize: '0.7rem', color: '#666' }}>No Data</Typography>;
+  if (!supplierProducts.length) {
+    return <Typography sx={{ fontSize: '0.55rem', color: '#666', fontStyle: 'italic', py: 2, fontWeight: 600, textAlign: 'center' }}>No Data</Typography>;
   }
 
   return (
-    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
-      <Table size="small" sx={{ minWidth: 1500 }} stickyHeader>
-        <TableHead>
-          <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-            {headers.map(({ label, key, sortable }) => (
-              <TableCell
-                key={key}
-                align={['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'left'}
+    <>
+      {/* BẢNG - BỎ BO GÓC */}
+      <Box sx={{ maxHeight: 'calc(100vh - 320px)', overflow: 'auto', border: '1px solid #ddd', borderRadius: 0 }}>
+        {/* HEADER */}
+        <Box
+          display="grid"
+          gridTemplateColumns={gridTemplate}
+          bgcolor="#027aff"
+          position="sticky"
+          top={0}
+          zIndex={22}
+        >
+          {headers.map(h => (
+            <Box
+              key={h.key}
+              sx={{
+                p: '4px 6px',
+                fontWeight: 700,
+                fontSize: '0.55rem',
+                color: '#fff',
+                fontFamily: '"Inter var", sans-serif',
+                textAlign: h.align || 'left',
+                whiteSpace: h.wrap ? 'normal' : 'nowrap',
+                wordBreak: h.wrap ? 'break-word' : 'normal',
+                position: h.sticky ? 'sticky' : 'relative',
+                left: h.sticky ? h.left : 'auto',
+                backgroundColor: '#027aff',
+                zIndex: h.sticky ? 21 : 20,
+                cursor: h.sortable ? 'pointer' : 'default',
+                '&:hover': h.sortable ? { bgcolor: '#016ae3' } : {},
+                lineHeight: 1.4,
+                borderRight: '1px solid rgba(255,255,255,0.15)',
+                '&:last-child': { borderRight: 'none' },
+              }}
+              onClick={() => h.sortable && handleSort(h.key)}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: h.align === 'center' ? 'center' : 'flex-start' }}>
+                <Tooltip title={h.label} arrow><span>{h.label}</span></Tooltip>
+                {h.sortable && (
+                  <Box sx={{ ml: 0.3 }}>
+                    {sortConfig.key === h.key ? (
+                      sortConfig.direction === 'asc' ? 
+                        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#fff' }} /> : 
+                        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#fff' }} />
+                    ) : (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <ArrowUpward sx={{ fontSize: '0.55rem', color: '#ccc' }} />
+                        <ArrowDownward sx={{ fontSize: '0.55rem', color: '#ccc' }} />
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+
+        {/* BODY */}
+        <Box>
+          {supplierProducts.map((p, i) => {
+            const idx = page * rowsPerPage + i + 1;
+            const rowBg = i % 2 === 0 ? '#fff' : '#f7f9fc';
+
+            return (
+              <Box
+                key={p.id}
+                display="grid"
+                gridTemplateColumns={gridTemplate}
+                bgcolor={rowBg}
                 sx={{
-                  fontWeight: 'bold',
-                  fontSize: '0.55rem',
-                  color: '#ffffff',
-                  py: 0.2,
-                  px: 0.4,
-                  whiteSpace: 'nowrap',
-                  borderRight: '1px solid rgba(255,255,255,0.15)',
-                  '&:last-child': { borderRight: 'none' },
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: stickyColumns.some((col) => col.key === key) ? 3 : 1, // Tăng zIndex cho SAP Code
-                  backgroundColor: '#027aff',
-                  ...(stickyColumns.some((col) => col.key === key) && !isMobile && {
-                    left: stickyColumns.find((col) => col.key === key).left,
-                    // Không sử dụng boxShadow để trông như cột bình thường
-                  }),
-                  minWidth: stickyColumns.find((col) => col.key === key)?.minWidth || 100,
-                  cursor: sortable ? 'pointer' : 'default',
-                  '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                  transition: 'background-color 0.3s ease',
+                  '&:hover': { bgcolor: '#e3f2fd', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', transition: 'all 0.2s ease' },
+                  borderBottom: '1px solid #fafbfb',
                 }}
-                onClick={() => sortable && handleSort(key)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'flex-start' }}>
-                  <Tooltip title={label} arrow>
-                    <span>{label}</span>
-                  </Tooltip>
-                  {sortable && (
-                    <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
-                      {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                        <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                      ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                        <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
-                          <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
+                {headers.map(h => {
+                  const isSticky = !isMobile && h.sticky;
+                  return (
+                    <Box
+                      key={h.key}
+                      sx={{
+                        p: '3px 6px',
+                        fontSize: '0.55rem',
+                        fontWeight: 400,
+                        fontFamily: '"Inter var", sans-serif',
+                        lineHeight: 1.4,
+                        textAlign: h.align || 'left',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        position: isSticky ? 'sticky' : 'relative',
+                        left: isSticky ? h.left : 'auto',
+                        backgroundColor: rowBg,
+                        zIndex: isSticky ? 1 : 'auto',
+                        color: '#1D2630',
+                      }}
+                    >
+                      {h.key === 'no' && <Box fontWeight={700} textAlign="center">{idx}</Box>}
+                      {h.key === 'productType1Name' && (p.productType1Name || '-')}
+                      {h.key === 'productType2Name' && (p.productType2Name || '-')}
+                      {h.key === 'supplierCode' && (p.supplierCode || '-')}
+                      {h.key === 'supplierName' && (p.supplierName || '-')}
+                      {h.key === 'sapCode' && (p.sapCode || '-')}
+                      {h.key === 'itemNo' && (p.itemNo || '-')}
+                      {h.key === 'itemDescription' && (p.itemDescription || '-')}
+                      {h.key === 'fullDescription' && (p.fullDescription || '-')}
+                      {h.key === 'size' && (p.size || '-')}
+                      {h.key === 'unit' && (p.unit || '-')}
+                      {h.key === 'price' && <Box textAlign="center">{p.price ? Number(p.price).toLocaleString() : '-'}</Box>}
+                      {h.key === 'currency' && (
+                        <Box sx={{ ...tagSx, bgcolor: getCurrencyColor(p.currency) }}>
+                          {p.currency || 'N/A'}
                         </Box>
                       )}
+                      {h.key === 'goodType' && (
+                        <Box sx={{ ...tagSx, bgcolor: getGoodTypeColor(p.goodType) }}>
+                          {p.goodType || 'N/A'}
+                        </Box>
+                      )}
+                      {h.key === 'image' && (
+                        p.imageUrls?.length ? (
+                          <IconButton size="small" onMouseEnter={(e) => openPopover(e, p.imageUrls)} onMouseLeave={closePopover} sx={{ p: 0.1 }}>
+                            <ImageIcon sx={{ fontSize: '0.75rem' }} />
+                          </IconButton>
+                        ) : (
+                          <Typography fontSize="0.55rem" color="#999" textAlign="center">—</Typography>
+                        )
+                      )}
+                      {h.key === 'action' && (
+                        <Stack direction="row" spacing={0.25} justifyContent="center">
+                          <IconButton size="small" color="primary" onClick={() => handleEdit(p)} sx={{ p: 0.25 }}>
+                            <Edit fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" color="error" onClick={() => handleDelete(p)} sx={{ p: 0.25 }}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      )}
                     </Box>
-                  )}
-                </Box>
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {supplierProducts.map((product, idx) => (
-            <TableRow
-              key={product.id}
-              sx={{
-                backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
-                '&:hover': {
-                  backgroundColor: '#e3f2fd',
-                  '& .sticky-cell': { backgroundColor: '#e3f2fd' },
-                },
-                cursor: 'pointer',
-                transition: 'background-color 0.3s ease',
-              }}
-            >
-              {headers.map(({ key, label }) => (
-                <TableCell
-                  key={key}
-                  align={['Action', 'Images', 'Currency', 'Good Type', 'No', 'Price'].includes(label) ? 'center' : 'left'}
-                  className={stickyColumns.some((col) => col.key === key) ? 'sticky-cell' : ''}
-                  sx={{
-                    fontSize: '0.55rem',
-                    py: 0.2,
-                    px: 0.4,
-                    whiteSpace: key === 'itemDescription' || key === 'fullDescription' ? 'normal' : 'nowrap',
-                    wordBreak: key === 'itemDescription' || key === 'fullDescription' ? 'break-word' : 'normal',
-                    width: key === 'itemDescription' || key === 'fullDescription' ? '200px' : 'auto',
-                    ...(stickyColumns.some((col) => col.key === key) && !isMobile && {
-                      position: 'sticky',
-                      left: stickyColumns.find((col) => col.key === key).left,
-                      zIndex: 2, // Tăng zIndex để đảm bảo không bị che
-                      backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
-                      // Không sử dụng boxShadow
-                    }),
-                    minWidth: stickyColumns.find((col) => col.key === key)?.minWidth || 100,
-                    transition: 'background-color 0.3s ease',
-                  }}
-                >
-                  {key === 'no' && (idx + 1 + page * rowsPerPage)}
-                  {key === 'productType1Name' && (product.productType1Name || '')}
-                  {key === 'productType2Name' && (product.productType2Name || '')}
-                  {key === 'supplierCode' && (product.supplierCode || '')}
-                  {key === 'supplierName' && (product.supplierName || '')}
-                  {key === 'sapCode' && (product.sapCode || '')}
-                  {key === 'itemNo' && (product.itemNo || '')}
-                  {key === 'itemDescription' && (product.itemDescription || '')}
-                  {key === 'fullDescription' && (product.fullDescription || '')}
-                  {key === 'size' && (product.size || '')}
-                  {key === 'unit' && (product.unit || '')}
-                  {key === 'price' && (product.price ? Number(product.price).toLocaleString() : '')}
-                  {key === 'currency' && (
-                    <Box
-                      sx={{
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '0.55rem',
-                        fontWeight: 600,
-                        color: '#fff',
-                        backgroundColor: getCurrencyColor(product.currency),
-                        display: 'inline-block',
-                      }}
-                    >
-                      {product.currency || 'N/A'}
-                    </Box>
-                  )}
-                  {key === 'goodType' && (
-                    <Box
-                      sx={{
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '0.55rem',
-                        fontWeight: 600,
-                        color: '#fff',
-                        backgroundColor: getGoodTypeColor(product.goodType),
-                        display: 'inline-block',
-                      }}
-                    >
-                      {product.goodType || 'N/A'}
-                    </Box>
-                  )}
-                  {key === 'image' && (
-                    product.imageUrls && product.imageUrls.length > 0 ? (
-                      <IconButton
-                        size="small"
-                        onMouseEnter={(e) => handlePopoverOpen(e, product.imageUrls)}
-                        aria-owns={open ? 'mouse-over-popover' : undefined}
-                        aria-haspopup="true"
-                      >
-                        <ImageIcon fontSize="small" />
-                      </IconButton>
-                    ) : (
-                      <Typography sx={{ fontSize: '0.55rem', color: '#888' }}>No Images</Typography>
-                    )
-                  )}
-                  {key === 'action' && (
-                    <Stack direction="row" spacing={0.5} justifyContent="center">
-                      <IconButton size="small" color="primary" onClick={() => handleEdit(product)}>
-                        <Edit fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDelete(product)}>
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  )}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                  );
+                })}
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+
+      {/* POPOVER */}
       <Popover
-        id="mouse-over-popover"
-        sx={{ pointerEvents: 'auto' }}
-        open={open}
-        anchorEl={anchorEl}
+        open={!!popover.anchor}
+        anchorEl={popover.anchor}
+        onClose={closePopover}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        onClose={handlePopoverClose}
-        disableRestoreFocus
+        sx={{ pointerEvents: 'none' }}
       >
-        <Box
-          sx={{
-            p: 1,
-            maxWidth: 300,
-            maxHeight: 300,
-            overflowY: 'auto',
-          }}
-        >
-          {popoverImgSrcs.length > 0 ? (
-            <Stack direction="column" spacing={1}>
-              {popoverImgSrcs.map((imgSrc, index) => (
-                <Box key={index} sx={{ textAlign: 'center' }}>
-                  <img
-                    src={imgSrc}
-                    alt={`Product Image ${index + 1}`}
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: 200,
-                      borderRadius: 4,
-                      objectFit: 'contain',
-                    }}
-                    loading="lazy"
-                    onError={(e) => {
-                      console.error(`Failed to load image: ${imgSrc}`);
-                      e.target.src = '/images/fallback.jpg';
-                      e.target.alt = 'Failed to load';
-                    }}
-                  />
-                  <Typography sx={{ mt: 0.5, fontSize: '0.7rem', color: '#555' }}>
-                    Image {index + 1}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          ) : (
-            <Typography sx={{ p: 1, fontSize: '0.7rem' }}>No images available</Typography>
-          )}
+        <Box p={1} maxWidth={220} maxHeight={220} sx={{ overflow: 'auto' }}>
+          {popover.images.map((src, i) => (
+            <Box key={i} textAlign="center" mb={1}>
+              <img src={src} alt="" style={{ maxWidth: '100%', maxHeight: 140, borderRadius: 4, objectFit: 'contain' }} />
+              <Typography fontSize="0.55rem" color="#555">Image {i + 1}</Typography>
+            </Box>
+          ))}
         </Box>
       </Popover>
-    </TableContainer>
+    </>
   );
 }
 
+const tagSx = { 
+  padding: '1px 4px', 
+  borderRadius: '3px', 
+  fontSize: '0.5rem', 
+  fontWeight: 600, 
+  color: '#fff', 
+  display: 'inline-flex', 
+  justifyContent: 'center', 
+  minWidth: 44, 
+  mx: 'auto' 
+};
+
+// === MAIN PAGE ===
 export default function SupplierProductsPage() {
   const theme = useTheme();
   const navigate = useNavigate();
   const [data, setData] = useState([]);
-  const [totalElements, setTotalElements] = useState(0);
+  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'info',
-  });
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
   const [file, setFile] = useState(null);
-  const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [productToDelete, setProductToDelete] = useState(null);
+  const [openAdd, setOpenAdd] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [openDelete, setOpenDelete] = useState(false);
   const [productToEdit, setProductToEdit] = useState(null);
-  const [searchSupplierCode, setSearchSupplierCode] = useState('');
-  const [searchSupplierName, setSearchSupplierName] = useState('');
-  const [searchSapCode, setSearchSapCode] = useState('');
-  const [searchItemNo, setSearchItemNo] = useState('');
-  const [searchItemDescription, setSearchItemDescription] = useState('');
-  const [searchFullDescription, setSearchFullDescription] = useState('');
-  const [searchMaterialGroupFullDescription, setSearchMaterialGroupFullDescription] = useState('');
-  const [searchProductType1Id, setSearchProductType1Id] = useState('');
-  const [searchProductType2Id, setSearchProductType2Id] = useState('');
-  const [searchCurrency, setSearchCurrency] = useState('');
-  const [searchGoodType, setSearchGoodType] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [productToDelete, setProductToDelete] = useState(null);
 
-  const handleCloseNotification = () => {
-    setNotification((prev) => ({ ...prev, open: false }));
-  };
+  const [search, setSearch] = useState({
+    supplierCode: '', supplierName: '', sapCode: '', itemNo: '', itemDescription: '',
+    fullDescription: '', materialGroupFullDescription: '', productType1Id: '',
+    productType2Id: '', currency: '', goodType: ''
+  });
+
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setNotification({ open: false, message: '', severity: 'info' });
     try {
-      const params = {
-        page,
-        size: rowsPerPage,
-        sort: sortConfig.key
-          ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction || 'asc'}`
-          : 'createdAt,desc',
-      };
-      if (searchSupplierCode) params.supplierCode = searchSupplierCode;
-      if (searchSupplierName) params.supplierName = searchSupplierName;
-      if (searchSapCode) params.sapCode = searchSapCode;
-      if (searchItemNo) params.itemNo = searchItemNo;
-      if (searchItemDescription) params.itemDescription = searchItemDescription;
-      if (searchFullDescription) params.fullDescription = searchFullDescription;
-      if (searchMaterialGroupFullDescription) params.materialGroupFullDescription = searchMaterialGroupFullDescription;
-      if (searchProductType1Id) params.productType1Id = searchProductType1Id;
-      if (searchProductType2Id) params.productType2Id = searchProductType2Id;
-      if (searchCurrency) params.currency = searchCurrency;
-      if (searchGoodType) params.goodType = searchGoodType;
+      const params = { page, size: rowsPerPage };
+      if (sortConfig.key) {
+        const header = headers.find(h => h.key === sortConfig.key);
+        params.sort = `${header?.backendKey || sortConfig.key},${sortConfig.direction}`;
+      } else {
+        params.sort = 'createdAt,desc';
+      }
+      Object.entries(search).forEach(([k, v]) => v && (params[k] = v));
 
-      console.log('Request Params:', params);
-      const response = await axiosInstance.get('/api/supplier-products/filter', { params });
-      console.log('API Response:', response.data);
-      setData(response.data.data.content || []);
-      setTotalElements(response.data.data.totalElements || 0);
+      const res = await axiosInstance.get('/api/supplier-products/filter', { params });
+      setData(res.data.data.content || []);
+      setTotal(res.data.data.totalElements || 0);
     } catch (err) {
-      console.error('Fetch error:', err.response?.data || err.message);
-      setNotification({
-        open: true,
-        message: `Failed to load data: ${err.response?.data?.message || err.message}`,
-        severity: 'error',
-      });
-      setData([]);
-      setTotalElements(0);
+      setNotification({ open: true, message: `Load failed: ${err.response?.data?.message || err.message}`, severity: 'error' });
+      setData([]); setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [
-    page,
-    rowsPerPage,
-    searchSupplierCode,
-    searchSupplierName,
-    searchSapCode,
-    searchItemNo,
-    searchItemDescription,
-    searchFullDescription,
-    searchMaterialGroupFullDescription,
-    searchProductType1Id,
-    searchProductType2Id,
-    searchCurrency,
-    searchGoodType,
-    sortConfig,
-  ]);
+  }, [page, rowsPerPage, sortConfig, search]);
 
-  useEffect(() => {
+  useEffect(() => { 
     const token = localStorage.getItem('token');
-    if (!token) {
-      setNotification({
-        open: true,
-        message: 'Please login to access this page.',
-        severity: 'error',
-      });
-      navigate('/react/login');
-      return;
-    }
+    if (!token) { navigate('/react/login'); return; }
     fetchData();
   }, [fetchData, navigate]);
 
-  const handleAddSuccess = async (message) => {
+  const handleSort = k => {
+    setSortConfig(s => ({
+      key: k,
+      direction: s.key === k && s.direction === 'asc' ? 'desc' : s.key === k && s.direction === 'desc' ? null : 'asc'
+    }));
     setPage(0);
-    setNotification({
-      open: true,
-      message: message,
-      severity: 'success',
-      autoHideDuration: 6000,
+  };
+
+  const handleSearch = () => { setPage(0); fetchData(); };
+  const handleReset = () => {
+    setSearch({
+      supplierCode: '', supplierName: '', sapCode: '', itemNo: '', itemDescription: '',
+      fullDescription: '', materialGroupFullDescription: '', productType1Id: '',
+      productType2Id: '', currency: '', goodType: ''
     });
-    await fetchData();
+    setSortConfig({ key: null, direction: null });
+    setPage(0);
+    fetchData();
   };
 
-  const handleEdit = (product) => {
-    setProductToEdit(null);
-    setProductToEdit({ ...product });
-    setOpenEditDialog(true);
-  };
-
-  const handleDelete = (product) => {
-    setProductToDelete(product);
-    setOpenDeleteDialog(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!productToDelete) {
-      setNotification({
-        open: true,
-        message: 'No product selected for deletion',
-        severity: 'error',
-        autoHideDuration: 6000,
-      });
+  const handleFile = e => {
+    const f = e.target.files[0];
+    if (f && !/\.(xlsx|xls)$/.test(f.name)) {
+      setNotification({ open: true, message: 'Chỉ chấp nhận .xlsx hoặc .xls', severity: 'error' });
       return;
     }
-    setLoading(true);
-    try {
-      const response = await axiosInstance.delete(`/api/supplier-products/${productToDelete.id}`);
-      let message = response.data.message || 'Product deleted successfully';
-      setPage(0);
-      await fetchData();
-      setNotification({
-        open: true,
-        message: message,
-        severity: 'success',
-        autoHideDuration: 6000,
-      });
-    } catch (error) {
-      console.error('Delete product error:', error.response?.data || error.message);
-      setNotification({
-        open: true,
-        message: `Failed to delete product: ${error.response?.data?.message || error.message}`,
-        severity: 'error',
-        autoHideDuration: 6000,
-      });
-    } finally {
-      setLoading(false);
-      setOpenDeleteDialog(false);
-      setProductToDelete(null);
-    }
-  };
-
-  const handleCancelDelete = () => {
-    setOpenDeleteDialog(false);
-    setProductToDelete(null);
-  };
-
-  const handleFileChange = (event) => {
-    const selectedFile = event.target.files[0];
-    if (selectedFile && !selectedFile.name.match(/\.(xlsx|xls)$/)) {
-      setNotification({
-        open: true,
-        message: 'Please select an .xlsx or .xls file',
-        severity: 'error',
-        autoHideDuration: 6000,
-      });
-      return;
-    }
-    setFile(selectedFile);
-  };
-
-  const handleUpload = async () => {
-    if (!file) {
-      setNotification({
-        open: true,
-        message: 'Please select a file to upload',
-        severity: 'warning',
-        autoHideDuration: 6000,
-      });
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      setLoading(true);
-      const response = await axiosInstance.post('/api/supplier-products/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      let message = response.data.message || 'File uploaded successfully';
-      setPage(0);
-      await fetchData();
-      setNotification({
-        open: true,
-        message: message,
-        severity: 'success',
-        autoHideDuration: 6000,
-      });
-      setFile(null);
-    } catch (err) {
-      console.error('Upload error:', err.response?.data || err.message);
-      setNotification({
-        open: true,
-        message: `Error uploading file: ${err.response?.data?.message || err.message}`,
-        severity: 'error',
-        autoHideDuration: 6000,
-      });
-    } finally {
-      setLoading(false);
-    }
+    setFile(f);
   };
 
   useEffect(() => {
     if (file) {
-      handleUpload();
+      const form = new FormData(); form.append('file', file);
+      axiosInstance.post('/api/supplier-products/import', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+        .then(() => { setPage(0); fetchData(); setNotification({ open: true, message: 'Upload thành công!', severity: 'success' }); })
+        .catch(err => setNotification({ open: true, message: `Upload thất bại: ${err.response?.data?.message || err.message}`, severity: 'error' }))
+        .finally(() => { setFile(null); setLoading(false); });
     }
   }, [file]);
 
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null;
-    }
-    setSortConfig({ key: direction ? key : null, direction });
-    setPage(0);
-  };
-
   return (
-    <Box sx={{ p: 1, fontSize: '0.65rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1976d2', fontSize: '1rem' }}>
-        Products
-      </Typography>
-      <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end" alignItems="center">
-        <Button
-          variant="contained"
-          startIcon={<FileUpload />}
+    <Box sx={{ p: 1, bgcolor: '#f5f8fa', minHeight: '100vh', fontFamily: '"Inter var", sans-serif' }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, color: '#1976d2', fontSize: '1rem', mb: 1 }}>Products</Typography>
+
+      <Stack direction="row" spacing={1} mb={1} justifyContent="flex-end">
+        <Button 
+          variant="contained" 
+          startIcon={<FileUpload />} 
           onClick={() => document.getElementById('file-input').click()}
-          sx={{
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
+          sx={{ 
+            bgcolor: 'linear-gradient(to right, #4cb8ff, #027aff)', 
+            fontSize: '0.55rem', 
+            px: 1.2, 
+            py: 0.25, 
+            borderRadius: 2, 
             textTransform: 'none',
-            px: 1.5,
-            py: 0.3,
-            borderRadius: '8px',
-            fontSize: '0.65rem',
-            '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            minWidth: 'auto'
           }}
-          disabled={loading}
         >
           Upload Excel
         </Button>
-        <Input
-          id="file-input"
-          type="file"
-          accept=".xlsx, .xls"
-          onChange={handleFileChange}
-          sx={{ display: 'none' }}
-        />
-        {file && (
-          <Typography sx={{ fontSize: '0.65rem', color: '#555', mr: 1 }}>
-            Uploading: {file.name}
-          </Typography>
-        )}
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setOpenAddDialog(true)}
-          sx={{
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
+        <Input id="file-input" type="file" accept=".xlsx,.xls" onChange={handleFile} sx={{ display: 'none' }} />
+        <Button 
+          variant="contained" 
+          startIcon={<Add />} 
+          onClick={() => setOpenAdd(true)}
+          sx={{ 
+            bgcolor: 'linear-gradient(to right, #4cb8ff, #027aff)', 
+            fontSize: '0.55rem', 
+            px: 1.2, 
+            py: 0.25, 
+            borderRadius: 2, 
             textTransform: 'none',
-            px: 1.5,
-            py: 0.3,
-            borderRadius: '8px',
-            fontSize: '0.65rem',
-            '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+            minWidth: 'auto'
           }}
-          disabled={loading}
         >
           Add Product
         </Button>
       </Stack>
-      <SupplierSearch
-        searchSupplierCode={searchSupplierCode}
-        setSearchSupplierCode={setSearchSupplierCode}
-        searchSupplierName={searchSupplierName}
-        setSearchSupplierName={setSearchSupplierName}
-        searchSapCode={searchSapCode}
-        setSearchSapCode={setSearchSapCode}
-        searchItemNo={searchItemNo}
-        setSearchItemNo={setSearchItemNo}
-        searchItemDescription={searchItemDescription}
-        setSearchItemDescription={setSearchItemDescription}
-        searchFullDescription={searchFullDescription}
-        setSearchFullDescription={setSearchFullDescription}
-        searchMaterialGroupFullDescription={searchMaterialGroupFullDescription}
-        setSearchMaterialGroupFullDescription={setSearchMaterialGroupFullDescription}
-        searchProductType1Id={searchProductType1Id}
-        setSearchProductType1Id={setSearchProductType1Id}
-        searchProductType2Id={searchProductType2Id}
-        setSearchProductType2Id={setSearchProductType2Id}
-        searchCurrency={searchCurrency}
-        setSearchCurrency={setSearchCurrency}
-        searchGoodType={searchGoodType}
-        setSearchGoodType={setSearchGoodType}
-        setPage={setPage}
-        onSearch={fetchData}
-        onReset={() => {
-          setSearchSupplierCode('');
-          setSearchSupplierName('');
-          setSearchSapCode('');
-          setSearchItemNo('');
-          setSearchItemDescription('');
-          setSearchFullDescription('');
-          setSearchMaterialGroupFullDescription('');
-          setSearchProductType1Id('');
-          setSearchProductType2Id('');
-          setSearchCurrency('');
-          setSearchGoodType('');
-          setSortConfig({ key: null, direction: null });
-          setPage(0);
-          fetchData();
-        }}
+
+      <SupplierSearch 
+        {...search} 
+        {...Object.fromEntries(Object.keys(search).map(k => [`set${k.charAt(0).toUpperCase() + k.slice(1)}`, v => setSearch(s => ({ ...s, [k]: v }))]))} 
+        onSearch={handleSearch} 
+        onReset={handleReset} 
+        setPage={setPage} 
       />
+
       {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
-          Loading data...
-        </Typography>
+        <Box display="flex" justifyContent="center" alignItems="center" mt={2}>
+          <Typography fontSize="0.55rem" color="#666">Loading...</Typography>
+        </Box>
       )}
-      <Notification
-        open={notification.open}
-        message={notification.message}
-        severity={notification.severity}
-        onClose={handleCloseNotification}
-        autoHideDuration={6000}
-      />
+
+      <Notification open={notification.open} message={notification.message} severity={notification.severity} onClose={() => setNotification({ ...notification, open: false })} />
+
       <SupplierProductsTable
         supplierProducts={data}
-        handleDelete={handleDelete}
-        handleEdit={handleEdit}
-        page={page}
-        rowsPerPage={rowsPerPage}
-        sortConfig={sortConfig}
-        handleSort={handleSort}
-        onRefresh={fetchData}
+        handleDelete={p => { setProductToDelete(p); setOpenDelete(true); }}
+        handleEdit={p => { setProductToEdit(p); setOpenEdit(true); }}
+        page={page} 
+        rowsPerPage={rowsPerPage} 
+        sortConfig={sortConfig} 
+        handleSort={handleSort} 
         theme={theme}
       />
+
       <TablePagination
         rowsPerPageOptions={[5, 10, 25]}
         component="div"
-        count={totalElements}
+        count={total}
         rowsPerPage={rowsPerPage}
         page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
+        onPageChange={(_, p) => setPage(p)}
+        onRowsPerPageChange={e => { setRowsPerPage(+e.target.value); setPage(0); }}
         sx={{
           mt: 1,
-          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-            fontSize: '0.65rem',
-            color: theme.palette.text.secondary,
-          },
-          '.MuiTablePagination-select': { fontSize: '0.65rem' },
-          '.MuiTablePagination-actions > button': {
-            color: theme.palette.primary.main,
-          },
+          fontSize: '0.55rem',
+          border: '1px solid #ddd',
+          borderTop: 'none',
+          bgcolor: '#fff',
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { fontSize: '0.55rem' },
+          '.MuiTablePagination-select': { fontSize: '0.55rem', py: 0.3 },
         }}
       />
-      <AddProductDialog
-        open={openAddDialog}
-        onClose={() => setOpenAddDialog(false)}
-        onRefresh={fetchData}
-        onSuccess={handleAddSuccess}
-        disabled={loading}
-      />
+
+      <AddProductDialog open={openAdd} onClose={() => setOpenAdd(false)} onRefresh={fetchData} disabled={loading} />
       {productToEdit && (
-        <EditProductDialog
-          open={openEditDialog}
-          onClose={() => {
-            setOpenEditDialog(false);
-            setProductToEdit(null);
-          }}
-          product={productToEdit}
-          onRefresh={fetchData}
-          disabled={loading}
+        <EditProductDialog 
+          open={openEdit} 
+          onClose={() => { setOpenEdit(false); setProductToEdit(null); }} 
+          product={productToEdit} 
+          onRefresh={fetchData} 
+          disabled={loading} 
         />
       )}
-      <Dialog open={openDeleteDialog} onClose={handleCancelDelete}>
-        <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Product</DialogTitle>
+      
+      <Dialog open={openDelete} onClose={() => setOpenDelete(false)}>
+        <DialogTitle sx={{ fontSize: '0.7rem' }}>Xóa sản phẩm</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
-            Are you sure you want to delete &quot;{productToDelete?.itemNo || 'Unknown'}&quot;?
-          </Typography>
+          <Typography fontSize="0.55rem">Xác nhận xóa "{productToDelete?.itemNo}"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmDelete}
-            variant="contained"
-            color="error"
-            sx={{ fontSize: '0.65rem' }}
-            disabled={loading}
+          <Button onClick={() => setOpenDelete(false)} sx={{ fontSize: '0.55rem' }}>Hủy</Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={async () => {
+              await axiosInstance.delete(`/api/supplier-products/${productToDelete.id}`);
+              setOpenDelete(false); 
+              setProductToDelete(null); 
+              setPage(0); 
+              fetchData();
+            }} 
+            sx={{ fontSize: '0.55rem' }}
           >
-            Delete
+            Xóa
           </Button>
         </DialogActions>
       </Dialog>

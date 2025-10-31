@@ -26,7 +26,7 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
 
         // Fetch comparison data
         const response = await fetch(
-          `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false&removeDuplicateSuppliers=true`,
+          `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false`,
           { headers: { Accept: '*/*' } }
         );
         if (!response.ok) throw new Error('Network response was not ok');

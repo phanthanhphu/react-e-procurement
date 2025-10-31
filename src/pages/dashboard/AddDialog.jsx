@@ -80,7 +80,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [initialVNDescription, setInitialVNDescription] = useState('');
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   // Fetch currency from API
   const fetchGroupCurrency = useCallback(async () => {
@@ -133,7 +133,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setShowSupplierSelector(true);
       setIsEnManuallyEdited(false);
       setInitialVNDescription('');
-      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+      setOpenConfirmDialog(false);
     }
   }, [open, groupId, fetchGroupCurrency]);
 
@@ -406,30 +406,22 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map((file) => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })));
     e.target.value = null;
     setErrorOpen(false);
     setErrorMessage('');
   };
 
   const handleRemoveFile = (index) => {
-    console.log('Removing file at index:', index);
     URL.revokeObjectURL(previews[index]);
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
     setFiles(newFiles);
     setPreviews(newPreviews);
-    console.log('Updated files:', newFiles.map((file) => file.name));
     setErrorOpen(false);
     setErrorMessage('');
   };
 
   const handleAddClick = () => {
-    // Perform validation from handleAdd
     if (!groupId) {
       setErrorMessage('Group ID is missing.');
       setErrorOpen(true);
@@ -456,28 +448,28 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       return;
     }
 
-    setOpenConfirmDialog(true); // Show confirmation dialog
+    setOpenConfirmDialog(true);
   };
 
   const handleConfirmAdd = async () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    await handleAdd(); // Execute the original add logic
+    setOpenConfirmDialog(false);
+    await handleAdd();
   };
 
   const handleCancelAdd = () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog without adding
+    setOpenConfirmDialog(false);
   };
 
+  // ĐÃ SỬA: TOÀN BỘ LOGIC ĐƯA VÀO TRONG handleAdd
   const handleAdd = async () => {
-    const deptQtyMap = { quantities: {} };
-    deptRows.forEach((row) => {
-      if (row.department && row.qty && row.buy) {
-        deptQtyMap.quantities[row.department] = {
-          qty: parseFloat(row.qty) || 0,
-          buy: parseFloat(row.buy) || 0,
-        };
-      }
-    });
+    const departmentRequisitions = deptRows
+      .filter(row => row.department && row.qty && row.buy)
+      .map(row => ({
+        id: row.department,
+        name: departmentList.find(d => d.id === row.department)?.departmentName || '',
+        qty: parseFloat(row.qty) || 0,
+        buy: parseFloat(row.buy) || 0,
+      }));
 
     const formDataToSend = new FormData();
     formDataToSend.append('englishName', formData.itemDescriptionEN || '');
@@ -485,7 +477,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     formDataToSend.append('fullDescription', formData.fullItemDescriptionVN || '');
     formDataToSend.append('oldSapCode', formData.oldSapCode || '');
     formDataToSend.append('hanaSapCode', formData.hanaSapCode || '');
-    formDataToSend.append('departmentRequestQty', JSON.stringify(deptQtyMap));
+    formDataToSend.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
     formDataToSend.append('stock', parseFloat(formData.stock) || 0);
     formDataToSend.append('orderQty', parseFloat(formData.orderQty) || 0);
     formDataToSend.append('reason', formData.reason || '');
@@ -522,9 +514,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         onClose(responseData.message || 'Request added successfully!');
       }
 
-      if (typeof onRefresh === 'function') {
-        await onRefresh();
-      }
+      onRefresh?.();
 
       setFormData(defaultFormData);
       setDeptRows([{ department: '', qty: '', buy: '' }]);

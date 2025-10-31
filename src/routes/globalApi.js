@@ -4,7 +4,7 @@ import axios from 'axios';
 const setupApiBaseUrl = () => {
   if (!window.API_BASE_URL) {
     window.API_BASE_URL = window.location.hostname === 'localhost' 
-      ? `${API_BASE_URL}`
+      ? 'http://localhost:8080'
       : `http://${window.location.hostname}:8080`;
   }
   console.log('🌐 API BASE URL:', window.API_BASE_URL);

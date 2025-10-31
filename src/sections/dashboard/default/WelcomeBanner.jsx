@@ -5,6 +5,8 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 // project-imports
 import MainCard from 'components/MainCard';
@@ -16,6 +18,22 @@ import cardBack from 'assets/images/widget/img-dropbox-bg.svg';
 // ==============================|| ANALYTICS - WELCOME ||============================== //
 
 export default function WelcomeBanner() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Kiểm tra xem có phải đang ở trang /react/login/dashboard
+    if (location.pathname === '/react/login/dashboard') {
+      // Kiểm tra xem trang đã được reload lần đầu tiên hay chưa
+      const hasReloaded = localStorage.getItem('hasReloadedDashboard');
+      if (!hasReloaded) {
+        // Đặt cờ để tránh reload lại lần nữa
+        localStorage.setItem('hasReloadedDashboard', 'true');
+        // Thực hiện reload một lần
+        window.location.reload();
+      }
+    }
+  }, [location.pathname]);
+
   return (
     <MainCard
       border={false}

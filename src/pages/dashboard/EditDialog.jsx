@@ -32,9 +32,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
-    fullItemDescriptionVN: '',
-    oldSapCode: '',
-    hanaSapCode: '',
+    fullDescription: '',
+    oldSAPCode: '',
+    hanaSAPCode: '',
     stock: '',
     orderQty: '',
     reason: '',
@@ -67,16 +67,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [translating, setTranslating] = useState(false);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [initialVNDescription, setInitialVNDescription] = useState('');
-  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   // Fetch currency from API
   const fetchGroupCurrency = useCallback(async () => {
     if (!item?.requisition?.groupId) {
       setCurrencyError('ID nhóm không hợp lệ');
-      setGroupCurrency('VND'); // Mặc định về VND
+      setGroupCurrency('VND');
       return;
     }
     setLoadingCurrency(true);
@@ -91,28 +91,24 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
       const result = await response.json();
       const apiCurrency = result.currency || 'VND';
-      console.log('Mã tiền tệ từ API:', apiCurrency); // Ghi log để kiểm tra
-      // Ánh xạ các mã tiền tệ không chuẩn sang mã ISO 4217
       const currencyCodeMap = {
         EURO: 'EUR',
         VND: 'VND',
         USD: 'USD',
       };
-      // Chuẩn hóa mã tiền tệ
       const normalizedCurrency = currencyCodeMap[apiCurrency.toUpperCase()] || apiCurrency;
-      // Kiểm tra mã tiền tệ
       try {
         new Intl.NumberFormat('vi-VN', { style: 'currency', currency: normalizedCurrency }).format(0);
         setGroupCurrency(normalizedCurrency);
       } catch (err) {
         console.error('Mã tiền tệ không hợp lệ:', normalizedCurrency);
         setCurrencyError(`Mã tiền tệ không hợp lệ: ${normalizedCurrency}. Sử dụng mặc định (VND).`);
-        setGroupCurrency('VND'); // Mặc định về VND
+        setGroupCurrency('VND');
       }
     } catch (err) {
       console.error('Lỗi khi lấy mã tiền tệ:', err);
       setCurrencyError('Không thể lấy mã tiền tệ. Sử dụng mặc định (VND).');
-      setGroupCurrency('VND'); // Mặc định về VND
+      setGroupCurrency('VND');
     } finally {
       setLoadingCurrency(false);
     }
@@ -122,7 +118,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     console.log('EditDialog opened with item:', item);
     if (open && item && item.requisition && item.requisition.id) {
       fetchData();
-      fetchGroupCurrency(); // Fetch currency when dialog opens
+      fetchGroupCurrency();
     } else {
       resetForm();
       setShowSupplierSelector(true);
@@ -131,7 +127,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       fetchProductType1List();
       fetchDepartmentList();
     }
-    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed when dialog opens/closes
+    setOpenConfirmDialog(false);
   }, [open, item, fetchGroupCurrency]);
 
   const fetchData = async () => {
@@ -140,41 +136,41 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       const data = await res.json();
       console.log('API response:', data);
-      const requisition = data.requisition || data;
+      const requisition = data; // Since API now returns RequisitionMonthly directly
       const supplierProduct = data.supplierProduct || {};
-      const vietnameseName = requisition.vietnameseName || '';
+      const vietnameseName = requisition.itemDescriptionVN || '';
 
       setFormData({
-        itemDescriptionEN: requisition.englishName || '',
+        itemDescriptionEN: requisition.itemDescriptionEN || '',
         itemDescriptionVN: vietnameseName,
-        fullItemDescriptionVN: requisition.fullDescription || '',
-        oldSapCode: requisition.oldSapCode || '',
-        hanaSapCode: requisition.hanaSapCode || '',
-        stock: requisition.stock || '',
-        orderQty: requisition.orderQty || '',
+        fullDescription: requisition.fullDescription || '',
+        oldSAPCode: requisition.oldSAPCode || '',
+        hanaSAPCode: requisition.hanaSAPCode || '',
+        stock: requisition.stock != null ? requisition.stock.toString() : '', // Use stock, synced with dailyMedInventory
+        orderQty: requisition.orderQty != null ? requisition.orderQty.toString() : '',
         reason: requisition.reason || '',
         remark: requisition.remark || '',
         remarkComparison: requisition.remarkComparison || '',
-        supplierId: supplierProduct.id || '',
+        supplierId: requisition.supplierId || '',
         groupId: requisition.groupId || '',
         productType1Id: requisition.productType1Id || '',
         productType2Id: requisition.productType2Id || '',
-        unit: supplierProduct.unit || '',
-        supplierPrice: supplierProduct.price || 0,
+        unit: requisition.unit || '',
+        supplierPrice: requisition.price || 0,
       });
 
       setDeptRows(
-        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
-          ? data.departmentRequestQuantities.map((dept) => ({
-              department: dept.departmentId,
-              qty: dept.qty?.toString() || '',
-              buy: dept.buy?.toString() || '',
+        requisition.departmentRequisitions && Array.isArray(requisition.departmentRequisitions)
+          ? requisition.departmentRequisitions.map((dept) => ({
+              department: dept.id,
+              qty: dept.qty != null ? dept.qty.toString() : '',
+              buy: dept.buy != null ? dept.buy.toString() : '',
             }))
           : [{ department: '', qty: '', buy: '' }]
       );
       setDeptErrors(
-        data.departmentRequestQuantities && Array.isArray(data.departmentRequestQuantities)
-          ? data.departmentRequestQuantities.map(() => '') // Initialize empty errors
+        requisition.departmentRequisitions && Array.isArray(requisition.departmentRequisitions)
+          ? requisition.departmentRequisitions.map(() => '')
           : ['']
       );
 
@@ -182,8 +178,22 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setImagesToDelete([]);
       setFiles([]);
       setPreviews([]);
-      setSelectedSupplier(supplierProduct.id ? { id: supplierProduct.id, ...supplierProduct } : null);
-      if (supplierProduct.id) {
+      setSelectedSupplier(
+        requisition.supplierId
+          ? {
+              id: requisition.supplierId,
+              supplierName: requisition.supplierName || '',
+              sapCode: requisition.oldSAPCode || '',
+              itemDescription: requisition.itemDescriptionVN || '',
+              price: requisition.price || 0,
+              unit: requisition.unit || '',
+              fullDescription: requisition.fullDescription || '',
+              productType1Id: requisition.productType1Id || '',
+              productType2Id: requisition.productType2Id || '',
+            }
+          : null
+      );
+      if (requisition.supplierId) {
         setShowSupplierSelector(false);
       }
       setIsEnManuallyEdited(false);
@@ -199,9 +209,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     setFormData({
       itemDescriptionEN: '',
       itemDescriptionVN: '',
-      fullItemDescriptionVN: '',
-      oldSapCode: '',
-      hanaSapCode: '',
+      fullDescription: '',
+      oldSAPCode: '',
+      hanaSAPCode: '',
       stock: '',
       orderQty: '',
       reason: '',
@@ -224,9 +234,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     setShowSupplierSelector(true);
     setIsEnManuallyEdited(false);
     setInitialVNDescription('');
-    setGroupCurrency('VND'); // Reset currency
+    setGroupCurrency('VND');
     setCurrencyError(null);
-    setOpenConfirmDialog(false); // Reset confirmation dialog
+    setOpenConfirmDialog(false);
   };
 
   const translateText = async (text) => {
@@ -244,7 +254,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept': '*/*',
+          accept: '*/*',
         },
         body: JSON.stringify({ text }),
       });
@@ -254,10 +264,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
 
       const data = await response.json();
-      if (!data.translatedText && !data.text) {
-        throw new Error('Invalid translation response: missing translated text');
-      }
-
       const translatedText = data.translatedText || data.text;
       setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
       setIsEnManuallyEdited(false);
@@ -294,7 +300,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         setFiles([]);
         setPreviews([]);
         console.log('Cleanup: Files and previews cleared');
-        setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+        setOpenConfirmDialog(false);
       }
     };
   }, [open]);
@@ -360,9 +366,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: supplierData.fullItemDescriptionVN,
-        oldSapCode: supplierData.oldSapCode,
-        supplierId: supplierData.supplierId,
+        fullDescription: supplierData.fullItemDescriptionVN || '',
+        oldSAPCode: supplierData.oldSapCode || '',
+        supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
@@ -391,8 +397,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     } else {
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: '',
-        oldSapCode: '',
+        fullDescription: '',
+        oldSAPCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
@@ -406,18 +412,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const handleChange = (field) => (e) => {
     const value = ['stock', 'orderQty'].includes(field)
-      ? parseFloat(e.target.value) || ''
+      ? e.target.value // Keep as string to allow empty input
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (field === 'itemDescriptionEN') {
       setIsEnManuallyEdited(true);
     } else if (field === 'itemDescriptionVN') {
       setIsEnManuallyEdited(false);
-    } else if (field === 'oldSapCode') {
+    } else if (field === 'oldSAPCode') {
       if (!value) {
         setSelectedSupplier(null);
         setShowSupplierSelector(true);
-      } else if (value !== formData.oldSapCode) {
+      } else if (value !== formData.oldSAPCode) {
         setShowSupplierSelector(true);
       }
     }
@@ -536,7 +542,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const handleSaveClick = () => {
     console.log('Save button clicked. Starting handleSaveClick...');
-    // Perform the same validations as in handleSave
     if (!item || !item.requisition || !item.requisition.id) {
       setSnackbarMessage('Cannot save: Missing item or requisition ID.');
       setSnackbarOpen(true);
@@ -565,18 +570,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    setOpenConfirmDialog(true); // Show confirmation dialog
+    setOpenConfirmDialog(true);
   };
 
   const handleConfirmSave = async () => {
     console.log('Confirm save clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    await handleSave(); // Execute the original save logic
+    setOpenConfirmDialog(false);
+    await handleSave();
   };
 
   const handleCancelSave = () => {
     console.log('Cancel confirmation clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
+    setOpenConfirmDialog(false);
   };
 
   const handleSave = async () => {
@@ -608,28 +613,34 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    const deptQtyMap = { quantities: {} };
-    deptRows.forEach((row) => {
-      if (row.department && row.qty && row.buy) {
-        deptQtyMap.quantities[row.department] = {
-          qty: parseFloat(row.qty) || 0,
-          buy: parseFloat(row.buy) || 0,
-        };
-      }
-    });
+    // Validate stock for non-negative value
+    if (formData.stock && parseFloat(formData.stock) < 0) {
+      setSnackbarMessage('Stock value cannot be negative.');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const deptRequisitions = deptRows
+      .filter((row) => row.department && row.qty && row.buy)
+      .map((row) => ({
+        id: row.department,
+        name: departmentList.find((dept) => dept.id === row.department)?.departmentName || '',
+        qty: parseFloat(row.qty) || 0,
+        buy: parseFloat(row.buy) || 0,
+      }));
 
     const formDataToSend = new FormData();
     files.forEach(file => formDataToSend.append('files', file));
     const cleanImagesToDelete = imagesToDelete.filter(url => url && url.trim() !== '');
-    formDataToSend.append('imagesToDelete', JSON.stringify(cleanImagesToDelete.length > 0 ? cleanImagesToDelete : []));
+    formDataToSend.append('imagesToDelete', JSON.stringify(cleanImagesToDelete));
     Object.entries({
       englishName: formData.itemDescriptionEN || '',
       vietnameseName: formData.itemDescriptionVN || '',
-      fullDescription: formData.fullItemDescriptionVN || '',
-      oldSapCode: formData.oldSapCode || '',
-      hanaSapCode: formData.hanaSapCode || '',
-      departmentRequestQty: JSON.stringify(deptQtyMap),
-      stock: parseFloat(formData.stock) || 0,
+      fullDescription: formData.fullDescription || '',
+      oldSapCode: formData.oldSAPCode || '',
+      hanaSapCode: formData.hanaSAPCode || '',
+      departmentRequisitions: JSON.stringify(deptRequisitions), // Updated key
+      stock: formData.stock ? parseFloat(formData.stock) : 0, // Send stock as number
       orderQty: parseFloat(formData.orderQty) || 0,
       reason: formData.reason || '',
       remark: formData.remark || '',
@@ -638,8 +649,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       groupId: formData.groupId || '',
       productType1Id: formData.productType1Id || undefined,
       productType2Id: formData.productType2Id || undefined,
-      unit: formData.unit || '',
-      supplierPrice: formData.supplierPrice || 0,
     }).forEach(([key, value]) => {
       if (value !== undefined) {
         formDataToSend.append(key, value);
@@ -674,9 +683,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const successMessage = data.message || 'Request updated successfully!';
       setSnackbarMessage(successMessage);
       setSnackbarOpen(true);
-      if (data.requisition && data.requisition.imageUrls) {
-        setImageUrls(data.requisition.imageUrls);
-        console.log('Updated imageUrls from response:', data.requisition.imageUrls);
+      if (data.imageUrls) {
+        setImageUrls(data.imageUrls);
+        console.log('Updated imageUrls from response:', data.imageUrls);
       }
       previews.forEach(preview => preview && URL.revokeObjectURL(preview));
       setFiles([]);
@@ -718,16 +727,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             <Stack direction="row" spacing={2}>
               <TextField
                 label="Old SAP Code"
-                value={formData.oldSapCode}
-                onChange={handleChange('oldSapCode')}
+                value={formData.oldSAPCode}
+                onChange={handleChange('oldSAPCode')}
                 size="small"
                 fullWidth
                 sx={{ flex: 1 }}
               />
               <TextField
                 label="Hana SAP Code"
-                value={formData.hanaSapCode}
-                onChange={handleChange('hanaSapCode')}
+                value={formData.hanaSAPCode}
+                onChange={handleChange('hanaSAPCode')}
                 size="small"
                 fullWidth
                 sx={{ flex: 1 }}
@@ -765,8 +774,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
             <TextField
               label="Full Description (VN)"
-              value={formData.fullItemDescriptionVN}
-              onChange={handleChange('fullItemDescriptionVN')}
+              value={formData.fullDescription}
+              onChange={handleChange('fullDescription')}
               fullWidth
               size="small"
               multiline
@@ -775,13 +784,13 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
             {showSupplierSelector ? (
               <SupplierSelector
-                oldSapCode={formData.oldSapCode}
+                oldSapCode={formData.oldSAPCode}
                 onSelectSupplier={handleSelectSupplier}
                 selectedSupplier={selectedSupplier}
                 productType1List={productType1List}
                 productType2List={productType2List}
-                currency={groupCurrency} // Use groupCurrency
-                disabled={loadingCurrency} // Disable while loading currency
+                currency={groupCurrency}
+                disabled={loadingCurrency}
               />
             ) : (
               selectedSupplier && (
@@ -902,6 +911,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 fullWidth
                 type="number"
                 sx={{ flex: 1 }}
+                error={formData.stock && parseFloat(formData.stock) < 0}
+                helperText={formData.stock && parseFloat(formData.stock) < 0 ? 'Stock cannot be negative' : ''}
               />
               <TextField
                 label="Order Q'ty"
@@ -1021,7 +1032,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           </Button>
           <Button
             variant="contained"
-            onClick={handleSaveClick} // Updated to trigger confirmation
+            onClick={handleSaveClick}
             disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
