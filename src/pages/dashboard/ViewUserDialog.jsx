@@ -3,45 +3,18 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   Typography,
   Stack,
   Avatar,
-  Chip,
-  Divider,
   Box,
   IconButton,
   useTheme,
 } from '@mui/material';
-import { Icon } from 'iconsax-react'; // CHẠY ĐƯỢC MỌI PHIÊN BẢN
+import { Icon } from 'iconsax-react';
 import { API_BASE_URL } from '../../config.js';
 
 export default function ViewUserDialog({ open, onClose, user }) {
   const theme = useTheme();
-
-  // Format date từ mảng [year, month, day, hour, minute, second]
-  const formatDate = (dateArray) => {
-    if (!dateArray || dateArray.length < 6) return 'N/A';
-    const [y, m, d, h, min] = dateArray;
-    const date = new Date(y, m - 1, d, h, min);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  };
-
-  // Màu cho role
-  const getRoleColor = (role) => {
-    const r = (role || '').toLowerCase();
-    if (r.includes('admin')) return 'error';
-    if (r.includes('manager') || r.includes('mod')) return 'warning';
-    if (r.includes('user') || r.includes('member')) return 'success';
-    return 'default';
-  };
 
   return (
     <Dialog
@@ -52,36 +25,37 @@ export default function ViewUserDialog({ open, onClose, user }) {
       sx={{
         '& .MuiDialog-paper': {
           borderRadius: 3,
-          p: { xs: 2, sm: 3 },
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+          p: { xs: 1.5, sm: 2 },
+          width: { xs: '90%', sm: 340 },
+          maxWidth: 340,
+          maxHeight: '80vh', // Limit height
+          boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
         },
       }}
     >
       {/* Header */}
-      <DialogTitle sx={{ pb: 1, position: 'relative' }}>
-        <Typography variant="h6" fontWeight={600}>
+      <DialogTitle sx={{ pb: 0, position: 'relative' }}>
+        <Typography variant="h6" fontWeight={600} align="center">
           User Profile
         </Typography>
         <IconButton
           onClick={onClose}
           sx={{
             position: 'absolute',
-            right: 12,
-            top: 12,
+            right: 6,
+            top: 6,
             color: 'text.secondary',
-            '&:hover': { bgcolor: 'action.hover' },
+            p: 0.5,
           }}
         >
-          <Icon name="close" size={20} />
+          <Icon name="Close" size={18} />
         </IconButton>
       </DialogTitle>
 
-      <Divider />
-
-      {/* Content */}
-      <DialogContent sx={{ pt: 3 }}>
-        <Stack spacing={3} alignItems="center">
-          {/* Avatar + Online Status */}
+      {/* Body */}
+      <DialogContent sx={{ pt: 1.5, pb: 2, px: 2 }}>
+        <Stack spacing={2} alignItems="center">
+          {/* Avatar + Online Indicator */}
           <Box sx={{ position: 'relative' }}>
             <Avatar
               src={
@@ -91,66 +65,58 @@ export default function ViewUserDialog({ open, onClose, user }) {
               }
               alt={user?.username}
               sx={{
-                width: 110,
-                height: 110,
-                border: `4px solid ${theme.palette.background.paper}`,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                width: 72,
+                height: 72,
+                border: `3px solid ${theme.palette.background.paper}`,
+                boxShadow: '0 3px 12px rgba(0,0,0,0.15)',
               }}
               onError={(e) => {
                 e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
               }}
             />
-            {/* Online dot */}
+            {/* Online Dot */}
             <Box
               sx={{
                 position: 'absolute',
-                bottom: 8,
-                right: 8,
+                bottom: 4,
+                right: 4,
                 width: 16,
                 height: 16,
-                bgcolor: user?.isActive ? 'success.main' : 'grey.400',
+                bgcolor: '#00C853',
                 border: '3px solid',
                 borderColor: 'background.paper',
                 borderRadius: '50%',
+                boxShadow: '0 0 8px rgba(0,200,83,0.7)',
+                animation: user?.isActive ? 'pulse 2s infinite' : 'none',
               }}
             />
           </Box>
 
           {/* Username */}
-          <Typography variant="h5" fontWeight={700}>
-            {user?.username || 'N/A'}
+          <Typography variant="h6" fontWeight={700} align="center">
+            {user?.username || '—'}
           </Typography>
 
-          {/* Role Chip – ĐÃ CĂN GIỮA */}
-          <Chip
-            icon={<Icon name="shield-tick" size={16} />}
-            label={user?.role || 'Unknown'}
-            color={getRoleColor(user?.role)}
-            size="small"
-            sx={{
-              fontWeight: 600,
-              textTransform: 'capitalize',
-              alignSelf: 'center', // ĐÃ SỬA: CĂN GIỮA HOÀN HẢO
-            }}
-          />
-
-          <Divider sx={{ width: '100%', my: 1 }} />
-
-          {/* Info List */}
-          <Stack spacing={2} width="100%">
+          {/* Info List - Compact */}
+          <Stack spacing={1.2} width="100%">
             {[
-              { icon: <Icon name="mail" size={18} />, label: 'Email', value: user?.email },
-              { icon: <Icon name="call" size={18} />, label: 'Phone', value: user?.phone },
-              { icon: <Icon name="location" size={18} />, label: 'Address', value: user?.address },
-              { icon: <Icon name="calendar-1" size={18} />, label: 'Created', value: formatDate(user?.createdAt) },
-            ].map((item, idx) => (
-              <Stack direction="row" spacing={1.5} key={idx} alignItems="flex-start">
-                <Box sx={{ color: 'primary.main', mt: 0.5 }}>{item.icon}</Box>
+              { icon: 'Mail', label: 'Email', value: user?.email },
+              { icon: 'Call', label: 'Phone', value: user?.phone },
+              { icon: 'Location', label: 'Address', value: user?.address },
+            ].map((item, i) => (
+              <Stack direction="row" spacing={1.2} key={i} alignItems="flex-start">
+                <Box sx={{ color: 'primary.main', mt: 0.3 }}>
+                  <Icon name={item.icon} size={16} />
+                </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500}>
                     {item.label}
                   </Typography>
-                  <Typography variant="body1" color="text.primary" sx={{ wordBreak: 'break-word' }}>
+                  <Typography
+                    variant="body2"
+                    color="text.primary"
+                    sx={{ wordBreak: 'break-word', fontSize: '0.875rem' }}
+                  >
                     {item.value || '—'}
                   </Typography>
                 </Box>
@@ -159,6 +125,21 @@ export default function ViewUserDialog({ open, onClose, user }) {
           </Stack>
         </Stack>
       </DialogContent>
+
+      {/* Pulse Animation */}
+      <style jsx>{`
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.5);
+          }
+          70% {
+            box-shadow: 0 0 0 8px rgba(0, 200, 83, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(0, 200, 83, 0);
+          }
+        }
+      `}</style>
     </Dialog>
   );
 }
