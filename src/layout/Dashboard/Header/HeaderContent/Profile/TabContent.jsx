@@ -14,7 +14,7 @@ import { Snackbar, Alert, Tooltip, Portal } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { useUser } from './useUser';
 import { User, Edit2, Lock, Logout } from 'iconsax-react';
-import EditUserDialog from '../../../../../pages/dashboard/EditUserDialog';
+import ProfileEditDialog from '../../../../../pages/dashboard/ProfileEditDialog';
 import ChangePasswordDialog from '../../../../../pages/dashboard/ChangePasswordDialog';
 import ViewUserDialog from '../../../../../pages/dashboard/ViewUserDialog';
 import { API_BASE_URL } from '../../../../../config';
@@ -297,7 +297,7 @@ function TabContent() {
         onClose={handleCloseViewDialog}
         user={{ username, email, address, phone, role, profileImageUrl: profileImage, createdAt }}
       />
-      <EditUserDialog
+      <ProfileEditDialog
         open={openEditDialog}
         onClose={handleCloseEditDialog}
         onUpdate={handleUpdateUser}

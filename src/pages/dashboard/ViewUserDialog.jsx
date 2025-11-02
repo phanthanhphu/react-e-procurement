@@ -159,13 +159,6 @@ export default function ViewUserDialog({ open, onClose, user }) {
           </Stack>
         </Stack>
       </DialogContent>
-
-      {/* Footer */}
-      <DialogActions sx={{ justifyContent: 'center', pb: 2 }}>
-        <Typography variant="caption" color="text.disabled">
-          ID: {user?.id || 'N/A'}
-        </Typography>
-      </DialogActions>
     </Dialog>
   );
 }
