@@ -8,6 +8,7 @@ import {
   Avatar,
   Box,
   IconButton,
+  Chip,
   useTheme,
 } from '@mui/material';
 import { Icon } from 'iconsax-react';
@@ -15,6 +16,15 @@ import { API_BASE_URL } from '../../config.js';
 
 export default function ViewUserDialog({ open, onClose, user }) {
   const theme = useTheme();
+
+  const getRoleColor = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r.includes('admin')) return 'error';
+    if (r.includes('manager') || r.includes('mod')) return 'warning';
+    return 'success';
+  };
+
+  const getRoleLabel = (role) => role || 'User';
 
   return (
     <Dialog
@@ -28,7 +38,7 @@ export default function ViewUserDialog({ open, onClose, user }) {
           p: { xs: 1.5, sm: 2 },
           width: { xs: '90%', sm: 340 },
           maxWidth: 340,
-          maxHeight: '80vh', // Limit height
+          maxHeight: '80vh',
           boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
         },
       }}
@@ -55,7 +65,7 @@ export default function ViewUserDialog({ open, onClose, user }) {
       {/* Body */}
       <DialogContent sx={{ pt: 1.5, pb: 2, px: 2 }}>
         <Stack spacing={2} alignItems="center">
-          {/* Avatar + Online Indicator */}
+          {/* Avatar + Online Dot */}
           <Box sx={{ position: 'relative' }}>
             <Avatar
               src={
@@ -74,7 +84,6 @@ export default function ViewUserDialog({ open, onClose, user }) {
                 e.target.src = `${API_BASE_URL}/Uploads/users/default-user.png`;
               }}
             />
-            {/* Online Dot */}
             <Box
               sx={{
                 position: 'absolute',
@@ -97,12 +106,13 @@ export default function ViewUserDialog({ open, onClose, user }) {
             {user?.username || '—'}
           </Typography>
 
-          {/* Info List - Compact */}
+          {/* Info List */}
           <Stack spacing={1.2} width="100%">
             {[
               { icon: 'Mail', label: 'Email', value: user?.email },
               { icon: 'Call', label: 'Phone', value: user?.phone },
               { icon: 'Location', label: 'Address', value: user?.address },
+              { icon: 'UserTag', label: 'Role', value: user?.role },
             ].map((item, i) => (
               <Stack direction="row" spacing={1.2} key={i} alignItems="flex-start">
                 <Box sx={{ color: 'primary.main', mt: 0.3 }}>
@@ -129,15 +139,9 @@ export default function ViewUserDialog({ open, onClose, user }) {
       {/* Pulse Animation */}
       <style jsx>{`
         @keyframes pulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.5);
-          }
-          70% {
-            box-shadow: 0 0 0 8px rgba(0, 200, 83, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(0, 200, 83, 0);
-          }
+          0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.5); }
+          70% { box-shadow: 0 0 0 8px rgba(0, 200, 83, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); }
         }
       `}</style>
     </Dialog>
