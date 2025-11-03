@@ -278,12 +278,12 @@ export default function WeeklyMonthlyGroupSearch({
 
           {/* Item (EN) */}
           <Box sx={{ width: '16.67%', minWidth: 150 }}>
-            <TextField label="Item (EN)" size="small" value={searchValues.englishName || ''} onChange={onInput('englishName')} sx={inputStyle} />
+            <TextField label="Item Description (EN)" size="small" value={searchValues.englishName || ''} onChange={onInput('englishName')} sx={inputStyle} />
           </Box>
 
           {/* Item (VN) */}
           <Box sx={{ width: '16.67%', minWidth: 150 }}>
-            <TextField label="Item (VN)" size="small" value={searchValues.vietnameseName || ''} onChange={onInput('vietnameseName')} sx={inputStyle} />
+            <TextField label="Item Description(VN)" size="small" value={searchValues.vietnameseName || ''} onChange={onInput('vietnameseName')} sx={inputStyle} />
           </Box>
 
           {/* Search Button */}
