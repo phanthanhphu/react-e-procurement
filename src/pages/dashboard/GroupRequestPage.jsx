@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import UpdateStatusGroup from './UpdateStatusGroup';
 import {
   Typography,
   Box,
@@ -578,16 +579,12 @@ export default function GroupRequestPage() {
                             }}
                           />
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
-                          <Chip
-                            label={group.status || ''}
-                            size="small"
-                            sx={{
-                              fontSize: '0.55rem',
-                              fontWeight: 600,
-                              bgcolor: getStatusColor(group.status),
-                              color: '#fff',
-                            }}
+                        <TableCell align="center" sx={{ px: 1, py: 0.5 }}>
+                          <UpdateStatusGroup
+                            groupId={group.id}
+                            currentStatus={group.status || 'Not Started'}
+                            onSuccess={fetchData}
+                            userRole={localStorage.getItem('role') || ''}
                           />
                         </TableCell>
                         <TableCell
