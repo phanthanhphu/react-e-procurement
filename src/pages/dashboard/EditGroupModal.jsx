@@ -237,15 +237,6 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
               <Radio value="USD">USD</Radio>
             </Radio.Group>
           </Form.Item>
-
-          {/* Read-only current status */}
-          <div style={{ marginTop: 16, color: '#555', fontSize: 14 }}>
-            <strong>Current Status:</strong>{' '}
-            <span style={{ color: '#1890ff', fontWeight: 500 }}>
-              {currentItem?.status || 'Not Started'}
-            </span>{' '}
-            (cannot be changed)
-          </div>
         </Form>
       </Modal>
 
