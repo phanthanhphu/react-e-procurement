@@ -72,47 +72,64 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [currencyError, setCurrencyError] = useState(null);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
-  // Fetch currency from API
-  const fetchGroupCurrency = useCallback(async () => {
-    if (!item?.requisition?.groupId) {
-      setCurrencyError('ID nhóm không hợp lệ');
-      setGroupCurrency('VND');
-      return;
-    }
-    setLoadingCurrency(true);
-    setCurrencyError(null);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`, {
+const fetchGroupCurrency = useCallback(async () => {
+  if (!item?.requisition?.groupId) {
+    setCurrencyError('Invalid group ID');
+    setGroupCurrency('VND');
+    return;
+  }
+
+  setLoadingCurrency(true);
+  setCurrencyError(null);
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`,
+      {
         method: 'GET',
-        headers: { Accept: '*/*' },
-      });
-      if (!response.ok) {
-        throw new Error(`Lỗi HTTP! trạng thái: ${response.status}`);
+        headers: { Accept: 'application/json' },
       }
-      const result = await response.json();
-      const apiCurrency = result.currency || 'VND';
-      const currencyCodeMap = {
-        EURO: 'EUR',
-        VND: 'VND',
-        USD: 'USD',
-      };
-      const normalizedCurrency = currencyCodeMap[apiCurrency.toUpperCase()] || apiCurrency;
-      try {
-        new Intl.NumberFormat('vi-VN', { style: 'currency', currency: normalizedCurrency }).format(0);
-        setGroupCurrency(normalizedCurrency);
-      } catch (err) {
-        console.error('Mã tiền tệ không hợp lệ:', normalizedCurrency);
-        setCurrencyError(`Mã tiền tệ không hợp lệ: ${normalizedCurrency}. Sử dụng mặc định (VND).`);
-        setGroupCurrency('VND');
-      }
-    } catch (err) {
-      console.error('Lỗi khi lấy mã tiền tệ:', err);
-      setCurrencyError('Không thể lấy mã tiền tệ. Sử dụng mặc định (VND).');
-      setGroupCurrency('VND');
-    } finally {
-      setLoadingCurrency(false);
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
-  }, [item]);
+
+    // Read JSON directly from response body
+    const result = await response.json();
+
+    const apiCurrency = result.currency || 'VND';
+
+    const currencyCodeMap = {
+      EURO: 'EUR',
+      VND: 'VND',
+      USD: 'USD',
+    };
+
+    const normalizedCurrency =
+      currencyCodeMap[apiCurrency.toUpperCase()] || apiCurrency;
+
+    try {
+      new Intl.NumberFormat('vi-VN', {
+        style: 'currency',
+        currency: normalizedCurrency,
+      }).format(0);
+
+      setGroupCurrency(normalizedCurrency);
+    } catch (err) {
+      console.error('Invalid currency code:', normalizedCurrency);
+      setCurrencyError(`Invalid currency code: ${normalizedCurrency}. Using default (VND).`);
+      setGroupCurrency('VND');
+    }
+  } catch (err) {
+    console.error('Error fetching currency:', err);
+    setCurrencyError('Cannot fetch currency. Using default (VND).');
+    setGroupCurrency('VND');
+  } finally {
+    setLoadingCurrency(false);
+  }
+}, [item]);
+
 
   useEffect(() => {
     console.log('EditDialog opened with item:', item);
@@ -133,8 +150,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const fetchData = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`);
-      if (!res.ok) throw new Error(`Failed: ${res.status}`);
-      const data = await res.json();
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed: ${res.status} - ${text.substring(0, 100)}`);
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`Expected JSON, received: ${text.substring(0, 100)}`);
+      }
+
+      const data = await res.json();  
       console.log('API response:', data);
       const requisition = data; // Since API now returns RequisitionMonthly directly
       const supplierProduct = data.supplierProduct || {};
@@ -293,17 +320,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     return () => debouncedTranslate.cancel();
   }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
 
-  useEffect(() => {
-    return () => {
-      if (!open) {
+    useEffect(() => {
+      return () => {
         previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
-        setFiles([]);
-        setPreviews([]);
-        console.log('Cleanup: Files and previews cleared');
-        setOpenConfirmDialog(false);
-      }
-    };
-  }, [open]);
+      };
+    }, [previews]);
+
 
   const fetchProductType1List = async () => {
     setLoadingType1(true);
@@ -411,32 +433,29 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['stock', 'orderQty'].includes(field)
-      ? e.target.value // Keep as string to allow empty input
-      : e.target.value;
+    const value = e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (field === 'itemDescriptionEN') {
-      setIsEnManuallyEdited(true);
-    } else if (field === 'itemDescriptionVN') {
-      setIsEnManuallyEdited(false);
-    } else if (field === 'oldSAPCode') {
+    if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
+    if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+    if (field === 'oldSAPCode') {
       if (!value) {
         setSelectedSupplier(null);
         setShowSupplierSelector(true);
-      } else if (value !== formData.oldSAPCode) {
+      } else if (value !== item.oldSAPCode) { // So sánh với item gốc
         setShowSupplierSelector(true);
       }
     }
   };
+
 
   const handleDeptChange = (index, field, value) => {
     const updatedRows = [...deptRows];
     updatedRows[index][field] = value;
     setDeptRows(updatedRows);
 
-    const updatedErrors = deptRows.map((row, i) => {
+    const updatedErrors = updatedRows.map((row, i) => {
       if (i === index && field === 'department' && value) {
-        const isDuplicate = deptRows.some(
+        const isDuplicate = updatedRows.some(
           (otherRow, otherIndex) =>
             otherIndex !== i && otherRow.department === value && value !== ''
         );
@@ -446,7 +465,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     });
     setDeptErrors(updatedErrors);
   };
-
+  
   const handleAddDeptRow = () => {
     setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
     setDeptErrors([...deptErrors, '']);
@@ -676,6 +695,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         }
         const apiMessage = errorData.message || errorText || `Update failed with status ${res.status}`;
         throw new Error(apiMessage);
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(`Server returned non-JSON: ${text.substring(0, 100)}`);
       }
 
       const data = await res.json();

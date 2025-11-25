@@ -153,7 +153,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
         requisition?.vietnameseName || '',
         requisition?.oldSapCode || '',
         requisition?.hanaSapCode || '',
-        supplierProduct?.unit || '',
+        supplierProduct?.unit || item.unit || '',
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
         totalRequestQty || 0, // Updated to use totalRequestQty
         requisition?.stock || 0,

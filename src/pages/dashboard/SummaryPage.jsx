@@ -61,7 +61,7 @@ axios.interceptors.response.use(
   }
 );
 
-// Updated table headers with Currency and Good Type
+// === CẬP NHẬT HEADERS: THÊM CỘT UNIT SAU DEPARTMENT ===
 const headers = [
   { label: 'No', key: 'no', sortable: false, backendKey: 'no' },
   { label: 'Product Type 1', key: 'productType1Name', sortable: true, backendKey: 'productType1Name' },
@@ -70,8 +70,10 @@ const headers = [
   { label: 'Item Description (VN)', key: 'vietnameseName', sortable: true, backendKey: 'vietnameseName' },
   { label: 'Old SAP Code', key: 'oldSapCode', sortable: true, backendKey: 'oldSapCode' },
   { label: 'Hana SAP Code', key: 'hanaSapCode', sortable: true, backendKey: 'hanaSapCode' },
+    // THÊM CỘT UNIT Ở ĐÂY
+  { label: 'Unit', key: 'unit', sortable: true, backendKey: 'unit' },
   { label: 'Department', key: 'departmentRequests', sortable: false, backendKey: 'departmentRequests' },
-  { label: 'Request Qty', key: 'requestQty', sortable: true, backendKey: 'totalRequestQty' }, // Updated backendKey to totalRequestQty
+  { label: 'Request Qty', key: 'requestQty', sortable: true, backendKey: 'totalRequestQty' },
   { label: 'Order Qty', key: 'orderQty', sortable: true, backendKey: 'orderQty' },
   { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
   { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
@@ -256,7 +258,6 @@ export default function SummaryPage() {
         headers: { Accept: '*/*' },
       });
       setGroupStatus(response.data.status || null);
-      console.log('Group Status:', response.data.status);
     } catch (err) {
       console.error('Fetch group status error:', err.response?.data || err.message);
       setError('Failed to fetch group status.');
@@ -297,10 +298,11 @@ export default function SummaryPage() {
 
       const mappedData = response.data.content.map((item) => ({
         ...item,
-        requestQty: item.totalRequestQty, // Updated to map to totalRequestQty
+        requestQty: item.totalRequestQty,
         amount: item.totalPrice,
         currency: item.supplierProduct?.currency || 'VND',
         goodType: item.supplierProduct?.goodType || '',
+        unit: item.unit || '', // THÊM UNIT VÀO MAPPED DATA
       }));
 
       setData(mappedData);
@@ -679,7 +681,7 @@ export default function SummaryPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Price', 'Currency', 'Amount', 'Request Qty', 'Stock', 'Order Qty', 'Good Type', 'Created Date', 'Updated Date', 'Images', 'Actions'].includes(label)
+                        ['No', 'Price', 'Currency', 'Amount', 'Request Qty', 'Stock', 'Order Qty', 'Good Type', 'Created Date', 'Updated Date', 'Images', 'Actions', 'Unit'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -733,7 +735,7 @@ export default function SummaryPage() {
               <TableBody>
                 {displayData.length > 0 ? (
                   displayData.map((item, idx) => {
-                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests, requestQty, amount, currency, goodType } = item;
+                    const { requisition, supplierProduct, productType1Name, productType2Name, departmentRequests, requestQty, amount, currency, goodType, unit } = item;
                     const imageUrls = requisition.imageUrls || supplierProduct?.imageUrls || [];
 
                     return (
@@ -754,124 +756,36 @@ export default function SummaryPage() {
                           '& > *': { borderBottom: 'none' },
                         }}
                       >
-                        <TableCell
-                          align="center"
-                          className="sticky-cell"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            position: 'sticky',
-                            left: 0,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            fontSize: '0.55rem',
-                            boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
-                            minWidth: 50,
-                          }}
-                        >
+                        {/* Các cột cũ giữ nguyên... */}
+                        <TableCell align="center" className="sticky-cell" sx={{ px: 0.4, py: 0.2, position: 'sticky', left: 0, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', fontSize: '0.55rem', boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 50,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 50, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', minWidth: 100 }}>
                           {productType1Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 150,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 150, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', minWidth: 100 }}>
                           {productType2Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontWeight: 600,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 250,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem', position: 'sticky', left: 250, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', minWidth: 150 }}>
                           {requisition.englishName || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 400,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 400, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', minWidth: 150 }}>
                           {requisition.vietnameseName || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          align="center"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 550,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 550, zIndex: 1, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc', minWidth: 100 }}>
                           {requisition.oldSapCode || ''}
                         </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                          }}
-                        >
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc' }}>
                           {requisition.hanaSapCode || ''}
                         </TableCell>
-                        <TableCell
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                          }}
-                        >
+                                                {/* THÊM CỘT UNIT Ở ĐÂY */}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem', backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc' }}>
+                          {unit || '-'}
+                        </TableCell>
+                        <TableCell sx={{ px: 0.4, py: 0.2, backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc' }}>
                           <DeptRequestTable departmentRequests={departmentRequests} />
                         </TableCell>
+                        {/* Các cột tiếp theo... */}
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem' }}>
                           {requestQty || 0}
                         </TableCell>

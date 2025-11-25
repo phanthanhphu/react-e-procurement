@@ -30,25 +30,24 @@ import { debounce } from 'lodash';
 
 // Utility function to normalize currency codes
 const normalizeCurrencyCode = (code) => {
-  const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP']; // Add more as needed
-  const currencyMap = {
-    EURO: 'EUR', // Normalize incorrect codes
-  };
+  const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
+  const currencyMap = { EURO: 'EUR' };
 
-  if (!code) return 'VND'; // Default to VND if code is empty
+  if (!code) return 'VND';
   const normalizedCode = currencyMap[code.toUpperCase()] || code.toUpperCase();
   return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
 };
 
 export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupId }) {
+  // SỬA 1: Đặt mặc định là 0 thay vì chuỗi rỗng
   const defaultFormData = {
     itemDescriptionEN: '',
     itemDescriptionVN: '',
     fullDescription: '',
     oldSAPCode: '',
     hanaSAPCode: '',
-    dailyMedInventory: '',
-    safeStock: '',
+    dailyMedInventory: 0,     // ĐÃ SỬA
+    safeStock: 0,             // ĐÃ SỬA
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -79,16 +78,16 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [initialVNDescription, setInitialVNDescription] = useState('');
-  const [groupCurrency, setGroupCurrency] = useState('VND'); // Default to 'VND'
+  const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+  const [inventoryError, setInventoryError] = useState('');
 
-  // Fetch currency from API
   const fetchGroupCurrency = useCallback(async () => {
     if (!groupId) {
       setCurrencyError('Invalid Group ID');
-      setGroupCurrency('VND'); // Fallback to default
+      setGroupCurrency('VND');
       return;
     }
     setLoadingCurrency(true);
@@ -98,16 +97,14 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
         method: 'GET',
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      const validatedCurrency = normalizeCurrencyCode(result.currency); // Normalize currency
-      setGroupCurrency(validatedCurrency); // Use validated currency
+      const validatedCurrency = normalizeCurrencyCode(result.currency);
+      setGroupCurrency(validatedCurrency);
     } catch (err) {
       console.error('Fetch group currency error:', err);
       setCurrencyError('Failed to fetch group currency. Using default (VND).');
-      setGroupCurrency('VND'); // Fallback to default
+      setGroupCurrency('VND');
     } finally {
       setLoadingCurrency(false);
     }
@@ -117,11 +114,14 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     if (open) {
       fetchProductType1List();
       fetchDepartmentList();
-      fetchGroupCurrency(); // Fetch currency when dialog opens
-      setFormData((prev) => ({
+      fetchGroupCurrency();
+
+      // SỬA 2: Dùng object mới thay vì callback để reset đúng 0
+      setFormData({
         ...defaultFormData,
         groupId: groupId || '',
-      }));
+      });
+
       setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
       setSelectedSupplier(null);
@@ -131,9 +131,10 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       previews.forEach((preview) => URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
-      setGroupCurrency('VND'); // Reset currency
+      setGroupCurrency('VND');
       setCurrencyError(null);
-      setOpenConfirmDialog(false); // Reset confirmation dialog
+      setOpenConfirmDialog(false);
+      setInventoryError('');
     }
   }, [open, groupId, fetchGroupCurrency]);
 
@@ -202,7 +203,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
         setFiles([]);
         setPreviews([]);
         console.log('Cleanup: Files and previews cleared');
-        setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+        setOpenConfirmDialog(false);
       }
     };
   }, [open]);
@@ -404,27 +405,31 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map((file) => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })));
     e.target.value = null;
   };
 
   const handleRemoveFile = (index) => {
-    console.log('Removing file at index:', index);
     URL.revokeObjectURL(previews[index]);
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
     setFiles(newFiles);
     setPreviews(newPreviews);
-    console.log('Updated files:', newFiles.map((file) => file.name));
   };
 
+  useEffect(() => {
+    const available = (parseFloat(formData.dailyMedInventory) || 0) + (parseFloat(formData.safeStock) || 0);
+    const totalQty = deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
+
+    let error = '';
+    if (deptRows.some(row => row.qty !== '') && totalQty !== available && totalQty > 0) {
+      error = `Tổng số lượng yêu cầu (${totalQty}) phải bằng Daily Med Inventory + Safe Stock (${available})`;
+    }
+    setInventoryError(error);
+
+    // KHÔNG GỌI setDeptRows Ở ĐÂY → TRÁNH VÒNG LẶP
+  }, [formData.dailyMedInventory, formData.safeStock, deptRows]);
+
   const handleAddClick = () => {
-    console.log('Add button clicked. Starting handleAddClick...');
-    // Perform the same validations as in handleAdd
     if (!groupId) {
       setSnackbarMessage('Group ID is missing.');
       setSnackbarOpen(true);
@@ -441,9 +446,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return;
     }
 
-    const departmentIds = deptRows
-      .filter((row) => row.id)
-      .map((row) => row.id);
+    const departmentIds = deptRows.filter((row) => row.id).map((row) => row.id);
     const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
     if (hasDuplicates) {
       setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
@@ -451,18 +454,22 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return;
     }
 
-    setOpenConfirmDialog(true); // Show confirmation dialog
+    if (inventoryError) {
+      setSnackbarMessage(inventoryError);
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setOpenConfirmDialog(true);
   };
 
   const handleConfirmAdd = async () => {
-    console.log('Confirm add clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    await handleAdd(); // Execute the original add logic
+    setOpenConfirmDialog(false);
+    await handleAdd();
   };
 
   const handleCancelAdd = () => {
-    console.log('Cancel confirmation clicked');
-    setOpenConfirmDialog(false); // Close confirmation dialog
+    setOpenConfirmDialog(false);
   };
 
   const handleAdd = async () => {
@@ -482,9 +489,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return;
     }
 
-    const departmentIds = deptRows
-      .filter((row) => row.id)
-      .map((row) => row.id);
+    const departmentIds = deptRows.filter((row) => row.id).map((row) => row.id);
     const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
     if (hasDuplicates) {
       setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
@@ -525,9 +530,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     try {
       const res = await fetch(`${API_BASE_URL}/requisition-monthly`, {
         method: 'POST',
-        headers: {
-          'accept': '*/*',
-        },
+        headers: { 'accept': '*/*' },
         body: formDataToSend,
       });
       if (!res.ok) {
@@ -538,9 +541,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       setSnackbarMessage('Request added successfully!');
       setSnackbarOpen(true);
 
-      if (typeof onRefresh === 'function') {
-        await onRefresh();
-      }
+      if (typeof onRefresh === 'function') await onRefresh();
       onClose();
 
       setFormData(defaultFormData);
@@ -550,7 +551,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       setProductType2List([]);
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
-      setGroupCurrency('VND'); // Reset currency
+      setGroupCurrency('VND');
       setCurrencyError(null);
       previews.forEach((preview) => URL.revokeObjectURL(preview));
       setFiles([]);
@@ -594,9 +595,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 size="small"
                 fullWidth
                 sx={{ flex: 1 }}
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
+                InputLabelProps={{ style: { color: 'inherit' } }}
               />
               <TextField
                 label="Hana SAP Code"
@@ -615,9 +614,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 onChange={handleChange('itemDescriptionVN')}
                 fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
+                InputLabelProps={{ style: { color: 'inherit' } }}
               />
               <TextField
                 label="Item Description (EN)"
@@ -625,14 +622,10 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 onChange={handleChange('itemDescriptionEN')}
                 fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
+                InputLabelProps={{ style: { color: 'inherit' } }}
                 disabled={translating}
                 InputProps={{
-                  endAdornment: translating ? (
-                    <CircularProgress size={16} />
-                  ) : null,
+                  endAdornment: translating ? <CircularProgress size={16} /> : null,
                 }}
               />
             </Stack>
@@ -653,15 +646,20 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 onSelectSupplier={handleSelectSupplier}
                 productType1List={productType1List}
                 productType2List={productType2List}
-                currency={groupCurrency} // Use normalized groupCurrency
-                disabled={loadingCurrency} // Disable while loading currency
+                currency={groupCurrency}
+                disabled={loadingCurrency}
               />
             ) : (
               selectedSupplier && (
                 <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
                   <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
                   <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                  <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
+                  <Typography>
+                    Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', {
+                      style: 'currency',
+                      currency: groupCurrency,
+                    })}
+                  </Typography>
                   <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
                     Change Supplier
                   </Button>
@@ -674,13 +672,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 Department Requisitions:
               </Typography>
               {deptRows.map((row, index) => (
-                <Stack
-                  direction="row"
-                  spacing={2}
-                  alignItems="center"
-                  key={index}
-                  sx={{ mb: 1 }}
-                >
+                <Stack direction="row" spacing={2} alignItems="center" key={index} sx={{ mb: 1 }}>
                   <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
                     <InputLabel id={`department-label-${index}`}>Department</InputLabel>
                     <Select
@@ -689,9 +681,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                       label="Department"
                       onChange={(e) => handleDeptChange(index, 'id', e.target.value)}
                     >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
+                      <MenuItem value=""><em>None</em></MenuItem>
                       {departmentList.length > 0 ? (
                         departmentList.map((dept) => (
                           <MenuItem key={dept.id} value={dept.id}>
@@ -717,9 +707,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     label="Buy"
                     type="number"
                     value={row.buy}
-                    onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
                     size="small"
                     fullWidth
+                    disabled
                   />
                   <IconButton
                     aria-label="delete department"
@@ -732,12 +722,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   </IconButton>
                 </Stack>
               ))}
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleAddDeptRow}
-                sx={{ mt: 1 }}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
                 Add Department
               </Button>
 
@@ -761,11 +746,17 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
                 </Typography>
                 <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</span>
+                  Price: <span style={{ color: '#1976d2' }}>
+                    {(formData.supplierPrice || 0).toLocaleString('vi-VN', {
+                      style: 'currency',
+                      currency: groupCurrency,
+                    })}
+                  </span>
                 </Typography>
               </Stack>
             </Paper>
 
+            {/* SỬA 3: Thêm inputProps={{ min: 0 }} */}
             <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
               <TextField
                 label="Daily Med Inventory"
@@ -775,6 +766,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 fullWidth
                 type="number"
                 sx={{ flex: 1 }}
+                inputProps={{ min: 0 }} // Không cho nhập số âm
               />
               <TextField
                 label="Safe Stock"
@@ -784,8 +776,14 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 fullWidth
                 type="number"
                 sx={{ flex: 1 }}
+                inputProps={{ min: 0 }} // Không cho nhập số âm
               />
             </Stack>
+            {inventoryError && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {inventoryError}
+              </Alert>
+            )}
 
             <TextField
               label="Reason"
@@ -813,9 +811,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 label="Remark Comparison"
                 onChange={handleChange('remarkComparison')}
               >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
+                <MenuItem value=""><em>None</em></MenuItem>
                 <MenuItem value="Old price">Old price</MenuItem>
                 <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
                   The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
@@ -828,13 +824,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
               <Stack direction="row" spacing={2} alignItems="center">
                 <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
                   Choose Image
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                  />
+                  <input hidden type="file" accept="image/*" multiple onChange={handleFileChange} />
                 </Button>
                 {files.length > 0 && (
                   <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
@@ -875,8 +865,8 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
           </Button>
           <Button
             variant="contained"
-            onClick={handleAddClick} // Updated to trigger confirmation
-            disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+            onClick={handleAddClick}
+            disabled={saving || deptErrors.some((error) => error) || loadingCurrency || !!inventoryError}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
           </Button>
@@ -896,6 +886,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
           </Alert>
         </Snackbar>
       </Dialog>
+
       <Dialog open={openConfirmDialog} onClose={handleCancelAdd}>
         <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Requisition</DialogTitle>
         <DialogContent>

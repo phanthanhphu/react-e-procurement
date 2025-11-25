@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -28,27 +28,26 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
-// Utility function to normalize currency codes
 const normalizeCurrencyCode = (code) => {
   const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
-  const currencyMap = {
-    EURO: 'EUR',
-  };
-
+  const currencyMap = { EURO: 'EUR' };
   if (!code) return 'VND';
   const normalizedCode = currencyMap[code.toUpperCase()] || code.toUpperCase();
   return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
 };
 
 export default function EditRequisitionMonthly({ open, item, onClose, onRefresh }) {
+  const isMounted = useRef(false);
+  const abortControllerRef = useRef(null); // For canceling fetch on unmount
+
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
     fullDescription: '',
     oldSAPCode: '',
     hanaSAPCode: '',
-    dailyMedInventory: '',
-    safeStock: '',
+    dailyMedInventory: 0,
+    safeStock: 0,
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -59,6 +58,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     unit: '',
     supplierPrice: 0,
   });
+
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -82,9 +82,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+  const [quantityError, setQuantityError] = useState('');
 
-  // Fetch currency from API
+  // === FETCH GROUP CURRENCY ===
   const fetchGroupCurrency = useCallback(async () => {
     if (!formData.groupId) {
       setCurrencyError('Invalid Group ID');
@@ -93,18 +94,32 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
     setLoadingCurrency(true);
     setCurrencyError(null);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${formData.groupId}`, {
         method: 'GET',
-        headers: { Accept: '*/*' },
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
       });
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text.substring(0, 100)}`);
       }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+
       const result = await response.json();
       const validatedCurrency = normalizeCurrencyCode(result.currency);
       setGroupCurrency(validatedCurrency);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Fetch group currency error:', err);
       setCurrencyError('Failed to fetch group currency. Using default (VND).');
       setGroupCurrency('VND');
@@ -113,35 +128,47 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   }, [formData.groupId]);
 
-  useEffect(() => {
-    console.log('EditRequisitionMonthly opened with item:', item);
-    if (open && item && item.id) {
-      fetchData();
-    } else {
-      resetForm();
-      setShowSupplierSelector(true);
-    }
-    if (open) {
-      fetchProductType1List();
-      fetchDepartmentList();
-      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
-    }
-  }, [open, item]);
-
-  useEffect(() => {
-    if (formData.groupId) {
-      fetchGroupCurrency();
-    }
-  }, [formData.groupId, fetchGroupCurrency]);
-
+  // === FETCH MAIN DATA (FIXED JSON PARSING ERROR) ===
   const fetchData = async () => {
+    if (!item?.id) return;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const res = await fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`, {
-        headers: { accept: '*/*' },
+        headers: { accept: 'application/json' },
+        signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+
+      if (!res.ok) {
+        let errorMsg = `HTTP ${res.status}`;
+        try {
+          const text = await res.text();
+          errorMsg += `: ${text.substring(0, 150)}`;
+          if (res.status === 401 || res.status === 403) {
+            errorMsg = 'Session expired. Please log in again.';
+          }
+        } catch (e) {
+          errorMsg += ' (Failed to read response)';
+        }
+        throw new Error(errorMsg);
+      }
+
+    const contentType = res.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        const text = await res.text();
+
+        // AUTO RETRY ONCE IF SESSION EXPIRED
+        if (text.includes('session has been expired') || text.includes('login')) {
+          console.log('Session expired → retrying once...');
+          return fetchData(); // AUTO RETRY
+        }
+
+        throw new Error(`Invalid data: ${text.substring(0, 100)}`);
+      }
+
       const data = await res.json();
-      console.log('API response:', data);
 
       setFormData({
         itemDescriptionEN: data.itemDescriptionEN || '',
@@ -149,8 +176,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         fullDescription: data.fullDescription || '',
         oldSAPCode: data.oldSAPCode || '',
         hanaSAPCode: data.hanaSAPCode || '',
-        dailyMedInventory: data.dailyMedInventory?.toString() || '',
-        safeStock: data.safeStock?.toString() || '',
+        dailyMedInventory: data.dailyMedInventory ?? 0,
+        safeStock: data.safeStock ?? 0,
         reason: data.reason || '',
         remark: data.remark || '',
         remarkComparison: data.remarkComparison || '',
@@ -162,21 +189,17 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         supplierPrice: parseFloat(data.price) || 0,
       });
 
-      setDeptRows(
-        data.departmentRequisitions && Array.isArray(data.departmentRequisitions)
-          ? data.departmentRequisitions.map((dept) => ({
-              id: dept.id || '',
-              name: dept.name || '',
-              qty: dept.qty?.toString() || '',
-              buy: dept.buy?.toString() || '',
-            }))
-          : [{ id: '', name: '', qty: '', buy: '' }]
-      );
-      setDeptErrors(
-        data.departmentRequisitions && Array.isArray(data.departmentRequisitions)
-          ? data.departmentRequisitions.map(() => '')
-          : ['']
-      );
+      const depts = data.departmentRequisitions && Array.isArray(data.departmentRequisitions)
+        ? data.departmentRequisitions.map((dept) => ({
+            id: dept.id || '',
+            name: dept.name || '',
+            qty: dept.qty?.toString() || '',
+            buy: dept.buy?.toString() || '',
+          }))
+        : [{ id: '', name: '', qty: '', buy: '' }];
+
+      setDeptRows(depts);
+      setDeptErrors(depts.map(() => ''));
 
       setImageUrls(data.imageUrls || []);
       setImagesToDelete([]);
@@ -198,12 +221,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setIsEnManuallyEdited(false);
       setInitialVNDescription(data.itemDescriptionVN || '');
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Fetch error:', err);
-      setSnackbarMessage(`Failed: ${err.message}`);
+      setSnackbarMessage(`Failed to load data: ${err.message}`);
       setSnackbarOpen(true);
     }
   };
 
+  // === RESET FORM ===
   const resetForm = () => {
     setFormData({
       itemDescriptionEN: '',
@@ -211,8 +236,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       fullDescription: '',
       oldSAPCode: '',
       hanaSAPCode: '',
-      dailyMedInventory: '',
-      safeStock: '',
+      dailyMedInventory: 0,
+      safeStock: 0,
       reason: '',
       remark: '',
       remarkComparison: '',
@@ -235,45 +260,35 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setInitialVNDescription('');
     setGroupCurrency('VND');
     setCurrencyError(null);
-    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+    setOpenConfirmDialog(false);
+    setQuantityError('');
   };
 
+  // === AUTO TRANSLATE VI → EN ===
   const translateText = async (text) => {
     if (!text) {
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Vietnamese description has been cleared.');
+      setSnackbarMessage('Vietnamese description cleared.');
       setSnackbarOpen(true);
       setIsEnManuallyEdited(false);
       return;
     }
-
     setTranslating(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'accept': '*/*',
-        },
+        headers: { 'Content-Type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ text }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Translation failed with status ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Translation failed: ${response.status}`);
       const data = await response.json();
-      if (!data.translatedText && !data.text) {
-        throw new Error('Invalid translation response: missing translated text');
-      }
-
-      const translatedText = data.translatedText || data.text;
+      const translatedText = data.translatedText || data.text || '';
       setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
       setIsEnManuallyEdited(false);
     } catch (error) {
       console.error('Translation error:', error.message);
       setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Unable to translate text. Please try again or enter manually.');
+      setSnackbarMessage('Translation failed. Please enter manually.');
       setSnackbarOpen(true);
     } finally {
       setTranslating(false);
@@ -296,32 +311,64 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     return () => debouncedTranslate.cancel();
   }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
 
+  // === CLEANUP PREVIEWS ON CLOSE ===
   useEffect(() => {
     return () => {
       if (!open) {
         previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
         setFiles([]);
         setPreviews([]);
-        console.log('Cleanup: Files and previews cleared');
       }
     };
-  }, [open]);
+  }, [open, previews]);
 
+  // === FETCH PRODUCT TYPE 1 WITH ONE RETRY ===
   const fetchProductType1List = async () => {
     setLoadingType1(true);
-    try {
+
+    // API call function (wrapped to reuse for retry)
+    const callApi = async () => {
       const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
-      if (!res.ok) throw new Error('Failed to load product type 1 list');
+
+      console.log("STATUS:", res.status);
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.log("Response text:", text);
+        throw new Error(`Failed: ${res.status}`);
+      }
+
       const data = await res.json();
+      console.log("DATA:", data);
+
+      return data;
+    };
+
+    try {
+      // First attempt
+      const data = await callApi();
       setProductType1List(data.content || data);
     } catch (error) {
-      console.error(error);
-      setProductType1List([]);
+      console.warn("⚠️ First request failed. Retrying...", error);
+
+      try {
+        // Retry attempt
+        const data = await callApi();
+        setProductType1List(data.content || data);
+      } catch (retryError) {
+        console.error("❌ Retry failed:", retryError);
+        setProductType1List([]);
+        setSnackbarMessage("Failed to load product types.");
+        setSnackbarOpen(true);
+      }
     } finally {
       setLoadingType1(false);
     }
   };
 
+
+
+  // === FETCH PRODUCT TYPE 2 ===
   const fetchProductType2List = async (type1Id) => {
     setLoadingType2(true);
     try {
@@ -348,30 +395,51 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   }, [formData.productType1Id]);
 
+  // === FETCH DEPARTMENTS WITH ONE RETRY ===
   const fetchDepartmentList = async () => {
     setLoadingDepartments(true);
-    try {
+
+    // API call function
+    const callApi = async () => {
       const res = await fetch(`${API_BASE_URL}/api/departments`, {
-        headers: { accept: '*/*' },
+        headers: { accept: "application/json" },
       });
-      if (!res.ok) throw new Error('Failed to load department list');
-      const data = await res.json();
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    };
+
+    try {
+      // First attempt
+      const data = await callApi();
       setDepartmentList(data || []);
     } catch (error) {
-      console.error('Error loading department list:', error);
-      setDepartmentList([]);
+      console.warn("⚠️ First API call failed. Retrying...", error);
+
+      try {
+        // Second attempt (retry)
+        const data = await callApi();
+        setDepartmentList(data || []);
+      } catch (retryError) {
+        console.error("❌ Retry failed:", retryError);
+        setDepartmentList([]);
+        setSnackbarMessage("Failed to load departments.");
+        setSnackbarOpen(true);
+      }
     } finally {
       setLoadingDepartments(false);
     }
   };
 
+
+  // === HANDLE SUPPLIER SELECTION ===
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
-        fullDescription: supplierData.fullItemDescriptionVN,
-        oldSAPCode: supplierData.oldSapCode,
-        supplierId: supplierData.supplierId,
+        fullDescription: supplierData.fullItemDescriptionVN || '',
+        oldSAPCode: supplierData.oldSapCode || '',
+        supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
@@ -408,9 +476,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   };
 
+  // === HANDLE INPUT CHANGE ===
   const handleChange = (field) => (e) => {
     const value = ['dailyMedInventory', 'safeStock'].includes(field)
-      ? parseFloat(e.target.value) || ''
+      ? parseFloat(e.target.value) || 0
       : e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (field === 'itemDescriptionEN') {
@@ -427,6 +496,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
   };
 
+  // === DEPARTMENT ROW HANDLERS ===
   const handleDeptChange = (index, field, value) => {
     const updatedRows = [...deptRows];
     if (field === 'id') {
@@ -437,15 +507,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         name: selectedDept ? selectedDept.departmentName : '',
       };
     } else {
-      updatedRows[index][field] = parseFloat(value) || '';
+      updatedRows[index][field] = value;
     }
     setDeptRows(updatedRows);
 
     const updatedErrors = deptRows.map((row, i) => {
       if (i === index && field === 'id' && value) {
         const isDuplicate = deptRows.some(
-          (otherRow, otherIndex) =>
-            otherIndex !== i && otherRow.id === value && value !== ''
+          (otherRow, otherIndex) => otherIndex !== i && otherRow.id === value && value !== ''
         );
         return isDuplicate ? 'This department is already selected' : '';
       }
@@ -466,40 +535,50 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
   };
 
+  // === CALCULATE TOTALS ===
   const calcTotalRequestQty = () => {
-    return deptRows.reduce((sum, row) => {
-      const q = parseFloat(row.qty) || 0;
-      return sum + q;
-    }, 0);
+    return deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
   };
 
-  const calcTotalBuy = () => {
-    return deptRows.reduce((sum, row) => {
-      const b = parseFloat(row.buy) || 0;
-      return sum + b;
-    }, 0);
+  const calcTotalStock = () => {
+    return (parseFloat(formData.dailyMedInventory) || 0) + (parseFloat(formData.safeStock) || 0);
   };
 
-  const calcTotalPrice = () => {
-    return calcTotalBuy() * (formData.supplierPrice || 0);
-  };
+  // === AUTO CALCULATE BUY FIELD ===
+  useEffect(() => {
+    const totalQty = calcTotalRequestQty();
+    const totalStock = calcTotalStock();
 
-  const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    console.log('Selected files:', selectedFiles.map(file => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      isFile: file instanceof File,
-    })));
-    if (selectedFiles.length === 0) {
-      console.warn('No files selected');
+    let error = '';
+    if (totalQty > 0 && totalStock > 0 && totalQty !== totalStock) {
+      error = `Total request quantity (${totalQty}) must equal Daily Med Inventory + Safe Stock (${totalStock})`;
+    }
+    setQuantityError(error);
+
+    if (totalQty === 0 || totalStock === 0 || error) {
+      setDeptRows((rows) =>
+        rows.map((row) => ({
+          ...row,
+          buy: error ? '' : row.qty,
+        }))
+      );
       return;
     }
 
-    const validFiles = selectedFiles.filter(file => 
-      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
-    );
+    const ratio = totalStock / totalQty;
+    const updatedRows = deptRows.map((row) => ({
+      ...row,
+      buy: row.qty ? Math.round(parseFloat(row.qty) * ratio).toString() : '',
+    }));
+    setDeptRows(updatedRows);
+  }, [deptRows.map(r => r.qty).join(','), formData.dailyMedInventory, formData.safeStock]);
+
+  // === IMAGE HANDLERS ===
+  const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    if (selectedFiles.length === 0) return;
+
+    const validFiles = selectedFiles.filter(file => file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024);
     if (validFiles.length !== selectedFiles.length) {
       setSnackbarMessage('Only image files under 5MB are accepted.');
       setSnackbarOpen(true);
@@ -517,23 +596,15 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setFiles(newFiles);
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
     setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map(file => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })));
     e.target.value = null;
   };
 
   const handleRemoveImage = (index) => {
-    console.log('Removing image at index:', index);
     if (index < imageUrls.length) {
       const newImageUrls = [...imageUrls];
       const removedUrl = newImageUrls.splice(index, 1)[0];
       setImageUrls(newImageUrls);
       setImagesToDelete((prev) => [...prev, removedUrl]);
-      console.log('Updated imageUrls:', newImageUrls);
-      console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
     } else {
       const adjustedIndex = index - imageUrls.length;
       if (adjustedIndex >= 0 && adjustedIndex < previews.length) {
@@ -542,53 +613,52 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         const newPreviews = previews.filter((_, i) => i !== adjustedIndex);
         setFiles(newFiles);
         setPreviews(newPreviews);
-        console.log('Updated files:', newFiles.map(file => file.name));
       }
     }
   };
 
+  // === SAVE VALIDATION ===
   const handleSaveClick = () => {
-    // Perform validation from handleSave
-    if (!item || !item.id) {
+    if (!item?.id) {
       setSnackbarMessage('Cannot save: Missing requisition ID.');
       setSnackbarOpen(true);
       return;
     }
-
     if (!formData.itemDescriptionVN) {
       setSnackbarMessage('Product Description (VN) is required.');
       setSnackbarOpen(true);
       return;
     }
-
-    if (deptRows.every((row) => !row.id || !row.qty || !row.buy)) {
-      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
+    if (deptRows.every((row) => !row.id || !row.qty)) {
+      setSnackbarMessage('At least one department and quantity must be provided.');
       setSnackbarOpen(true);
       return;
     }
-
-    const departmentIds = deptRows
-      .filter((row) => row.id)
-      .map((row) => row.id);
+    const departmentIds = deptRows.filter((row) => row.id).map((row) => row.id);
     const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
     if (hasDuplicates) {
       setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
       setSnackbarOpen(true);
       return;
     }
-
-    setOpenConfirmDialog(true); // Show confirmation dialog
+    if (quantityError) {
+      setSnackbarMessage(quantityError);
+      setSnackbarOpen(true);
+      return;
+    }
+    setOpenConfirmDialog(true);
   };
 
   const handleConfirmSave = async () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    await handleSave(); // Execute the original save logic
+    setOpenConfirmDialog(false);
+    await handleSave();
   };
 
   const handleCancelSave = () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog without saving
+    setOpenConfirmDialog(false);
   };
 
+  // === SAVE TO SERVER ===
   const handleSave = async () => {
     const departmentRequisitions = deptRows
       .filter((row) => row.id && row.qty && row.buy)
@@ -620,14 +690,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       productType1Id: formData.productType1Id || undefined,
       productType2Id: formData.productType2Id || undefined,
     }).forEach(([key, value]) => {
-      if (value !== undefined) {
-        formDataToSend.append(key, value);
-      }
+      if (value !== undefined) formDataToSend.append(key, value);
     });
-
-    for (let [key, value] of formDataToSend.entries()) {
-      console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
-    }
 
     setSaving(true);
     try {
@@ -635,20 +699,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         method: 'PUT',
         body: formDataToSend,
       });
-
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Update failed: ${res.status} - ${errorText}`);
+        throw new Error(`Update failed: ${res.status} - ${errorText.substring(0, 200)}`);
       }
-
       const data = await res.json();
-      console.log('Save successful, response:', data);
-      setSnackbarMessage('Request updated successfully!');
+      setSnackbarMessage('Requisition updated successfully!');
       setSnackbarOpen(true);
-      if (data.imageUrls) {
-        setImageUrls(data.imageUrls);
-        console.log('Updated imageUrls from response:', data.imageUrls);
-      }
+      if (data.imageUrls) setImageUrls(data.imageUrls);
       previews.forEach(preview => preview && URL.revokeObjectURL(preview));
       setFiles([]);
       setPreviews([]);
@@ -657,55 +715,51 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       onClose();
     } catch (err) {
       console.error('Update error:', err);
-      setSnackbarMessage(`Unable to update item: ${err.message}`);
+      setSnackbarMessage(`Failed to update: ${err.message}`);
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
     }
   };
 
+  // === MAIN EFFECTS ===
+  useEffect(() => {
+    if (open && item?.id && !isMounted.current) {
+      isMounted.current = true;
+      fetchData();
+    } else if (!open) {
+      isMounted.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }
+
+    if (open) {
+      fetchProductType1List();
+      fetchDepartmentList();
+      setOpenConfirmDialog(false);
+    }
+  }, [open, item?.id]);
+
+  useEffect(() => {
+    if (formData.groupId) {
+      fetchGroupCurrency();
+    }
+  }, [formData.groupId, fetchGroupCurrency]);
+
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle
-          sx={{
-            bgcolor: (theme) => theme.palette.primary.main,
-            color: (theme) => theme.palette.primary.contrastText,
-            fontWeight: 'bold',
-            fontSize: '1.25rem',
-            textTransform: 'capitalize',
-            letterSpacing: 1,
-          }}
-        >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 'bold' }}>
           Edit Monthly Requisition
         </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            {currencyError && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {currencyError}
-              </Alert>
-            )}
+            {currencyError && <Alert severity="warning">{currencyError}</Alert>}
+
             <Stack direction="row" spacing={2}>
-              <TextField
-                label="Old SAP Code"
-                value={formData.oldSAPCode}
-                onChange={handleChange('oldSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
-              />
-              <TextField
-                label="Hana SAP Code"
-                value={formData.hanaSAPCode}
-                onChange={handleChange('hanaSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-              />
+              <TextField label="Old SAP Code" value={formData.oldSAPCode} onChange={handleChange('oldSAPCode')} size="small" fullWidth />
+              <TextField label="Hana SAP Code" value={formData.hanaSAPCode} onChange={handleChange('hanaSAPCode')} size="small" fullWidth />
             </Stack>
 
             <Stack direction="row" spacing={2}>
@@ -715,9 +769,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 onChange={handleChange('itemDescriptionVN')}
                 fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
               />
               <TextField
                 label="Product Description (EN)"
@@ -725,15 +776,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 onChange={handleChange('itemDescriptionEN')}
                 fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
                 disabled={translating}
-                InputProps={{
-                  endAdornment: translating ? (
-                    <CircularProgress size={16} />
-                  ) : null,
-                }}
+                InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }}
               />
             </Stack>
 
@@ -761,7 +805,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
                   <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
                   <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                  <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
+                  <Typography>
+                    Price: {(selectedSupplier.price || 0).toLocaleString('en-US', { style: 'currency', currency: groupCurrency })}
+                  </Typography>
                   <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
                     Change Supplier
                   </Button>
@@ -774,36 +820,16 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 Requested Quantity by Department:
               </Typography>
               {deptRows.map((row, index) => (
-                <Stack
-                  direction="row"
-                  spacing={2}
-                  alignItems="center"
-                  key={index}
-                  sx={{ mb: 1 }}
-                >
+                <Stack direction="row" spacing={2} alignItems="center" key={index} sx={{ mb: 1 }}>
                   <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
-                    <InputLabel id={`department-label-${index}`}>Department</InputLabel>
-                    <Select
-                      labelId={`department-label-${index}`}
-                      value={row.id}
-                      label="Department"
-                      onChange={(e) => handleDeptChange(index, 'id', e.target.value)}
-                    >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
-                      {departmentList.length > 0 ? (
-                        departmentList.map((dept) => (
-                          <MenuItem key={dept.id} value={dept.id}>
-                            {dept.departmentName}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>No departments available</MenuItem>
-                      )}
+                    <InputLabel>Department</InputLabel>
+                    <Select value={row.id} label="Department" onChange={(e) => handleDeptChange(index, 'id', e.target.value)}>
+                      <MenuItem value=""><em>None</em></MenuItem>
+                      {departmentList.map((dept) => (
+                        <MenuItem key={dept.id} value={dept.id}>{dept.departmentName}</MenuItem>
+                      ))}
                     </Select>
                     {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                    {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
                   </FormControl>
                   <TextField
                     label="Quantity"
@@ -812,64 +838,37 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                     onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
                     size="small"
                     fullWidth
+                    inputProps={{ min: 0 }}
                   />
-                  <TextField
-                    label="Buy"
-                    type="number"
-                    value={row.buy}
-                    onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
-                    size="small"
-                    fullWidth
-                  />
-                  <IconButton
-                    aria-label="delete department"
-                    onClick={() => handleDeleteDeptRow(index)}
-                    size="small"
-                    color="error"
-                    sx={{ ml: 1 }}
-                  >
+                  <TextField label="Buy" type="number" value={row.buy} size="small" fullWidth disabled />
+                  <IconButton onClick={() => handleDeleteDeptRow(index)} size="small" color="error">
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </Stack>
               ))}
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleAddDeptRow}
-                sx={{ mt: 1 }}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
                 Add Department
               </Button>
 
-              <Stack
-                direction="row"
-                spacing={4}
-                sx={{
-                  mt: 2,
-                  bgcolor: '#f5f5f5',
-                  p: 2,
-                  borderRadius: 1,
-                  boxShadow: 1,
-                  justifyContent: 'space-between',
-                  textTransform: 'capitalize',
-                }}
-              >
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Total Requested Quantity: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
+              <Stack direction="row" spacing={4} sx={{ mt: 2, bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Total Requested: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
                 </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
                 </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+                <Typography variant="subtitle1" fontWeight="bold">
                   Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
                 </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Price: <span style={{ color: '#1976d2' }}>{(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</span>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Price: <span style={{ color: '#1976d2' }}>
+                    {(formData.supplierPrice || 0).toLocaleString('en-US', { style: 'currency', currency: groupCurrency })}
+                  </span>
                 </Typography>
               </Stack>
             </Paper>
 
-            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Stack direction="row" spacing={2}>
               <TextField
                 label="Daily Med Inventory"
                 value={formData.dailyMedInventory}
@@ -877,7 +876,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 size="small"
                 fullWidth
                 type="number"
-                sx={{ flex: 1 }}
+                inputProps={{ min: 0 }}
               />
               <TextField
                 label="Safe Stock"
@@ -886,39 +885,17 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 size="small"
                 fullWidth
                 type="number"
-                sx={{ flex: 1 }}
+                inputProps={{ min: 0 }}
               />
             </Stack>
+            {quantityError && <Alert severity="error">{quantityError}</Alert>}
 
-            <TextField
-              label="Reason"
-              value={formData.reason}
-              onChange={handleChange('reason')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
-            <TextField
-              label="Remark"
-              value={formData.remark}
-              onChange={handleChange('remark')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
+            <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} fullWidth size="small" multiline rows={2} />
+            <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} fullWidth size="small" multiline rows={2} />
             <FormControl fullWidth size="small">
-              <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
-              <Select
-                labelId="remark-comparison-label"
-                value={formData.remarkComparison}
-                label="Remark Comparison"
-                onChange={handleChange('remarkComparison')}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
+              <InputLabel>Remark Comparison</InputLabel>
+              <Select value={formData.remarkComparison} label="Remark Comparison" onChange={handleChange('remarkComparison')}>
+                <MenuItem value=""><em>None</em></MenuItem>
                 <MenuItem value="Old price">Old price</MenuItem>
                 <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
                   The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
@@ -931,17 +908,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
               <Stack direction="row" spacing={2} alignItems="center">
                 <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
                   Select Images
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                  />
+                  <input hidden type="file" accept="image/*" multiple onChange={handleFileChange} />
                 </Button>
                 {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
                   <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    Selected {files.length + imageUrls.length - imagesToDelete.length} images
+                    {files.length + imageUrls.length - imagesToDelete.length} images selected
                   </Typography>
                 )}
               </Stack>
@@ -953,10 +924,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                         src={`${API_BASE_URL}${url}`}
                         alt={`Image ${index + 1}`}
                         style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                        onError={(e) => {
-                          console.error(`Failed to load image for ${url}`, e);
-                          e.target.style.display = 'none';
-                        }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
                       />
                       <IconButton
                         sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
@@ -968,11 +936,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   ))}
                   {previews.map((preview, index) => (
                     <Box key={`new-${index}`} sx={{ position: 'relative' }}>
-                      <img
-                        src={preview}
-                        alt={`New ${index + 1}`}
-                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      />
+                      <img src={preview} alt={`New ${index + 1}`} style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }} />
                       <IconButton
                         sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
                         onClick={() => handleRemoveImage(index + imageUrls.length)}
@@ -983,26 +947,20 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   ))}
                 </Box>
               )}
-              {files.length === 0 && imageUrls.length === imagesToDelete.length && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  No images selected
-                </Typography>
-              )}
             </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 1.5 }}>
-          <Button onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSaveClick}
-            disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+            disabled={saving || deptErrors.some(e => e) || loadingCurrency || !!quantityError}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>
+
         <Snackbar
           open={snackbarOpen}
           autoHideDuration={3000}
@@ -1018,30 +976,18 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           </Alert>
         </Snackbar>
       </Dialog>
+
+      {/* Confirm Dialog */}
       <Dialog open={openConfirmDialog} onClose={handleCancelSave}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Save Requisition</DialogTitle>
+        <DialogTitle>Confirm Save Requisition</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to update the requisition for item &quot;{formData.itemDescriptionVN || 'Unknown'}&quot;?
+          <Typography variant="body1">
+            Are you sure you want to update the requisition for item "{formData.itemDescriptionVN || 'Unknown'}"?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelSave} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmSave}
-            variant="contained"
-            sx={{
-              fontSize: '0.875rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={saving}
-          >
+          <Button onClick={handleCancelSave}>Cancel</Button>
+          <Button onClick={handleConfirmSave} variant="contained" disabled={saving}>
             Confirm
           </Button>
         </DialogActions>

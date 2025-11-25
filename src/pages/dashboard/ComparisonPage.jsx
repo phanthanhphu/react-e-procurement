@@ -60,7 +60,7 @@ const getLocaleForCurrency = (currency) => {
   }
 };
 
-// Updated table headers
+// === CẬP NHẬT HEADERS: THÊM CỘT UNIT SAU DEPARTMENT ===
 const getHeaders = (currency = 'VND') => [
   { label: 'No', key: 'no', sortable: false },
   { label: 'Product Type 1', key: 'type1Name', sortable: true },
@@ -72,7 +72,10 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Supplier Description', key: 'supplierName', sortable: true },
   { label: 'Supplier List', key: 'suppliers', sortable: false },
   { label: 'Best Price', key: 'bestPrice', sortable: false },
+  { label: 'Unit', key: 'unit', sortable: true },
+
   { label: 'Department', key: 'departmentRequests', sortable: false },
+  // THÊM CỘT UNIT Ở ĐÂY
   { label: 'Request Qty', key: 'requestQty', sortable: true },
   { label: 'Order Qty', key: 'orderQty', sortable: true },
   { label: `Price (${getDisplayCurrency(currency)})`, key: 'selectedPrice', sortable: true },
@@ -364,19 +367,14 @@ export default function ComparisonPage() {
           headers: { Accept: '*/*' },
         }
       );
-      console.log('Unfiltered totals response:', response.data);
       setUnfilteredTotals({
         totalAmt: response.data.totalAmt || 0,
         totalAmtDifference: response.data.totalAmtDifference || 0,
         totalDifferencePercentage: response.data.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      console.error('Error fetching unfiltered totals:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      setError('Failed to fetch unfiltered totals. Please try again.');
+      console.error('Error fetching unfiltered totals:', err);
+      setError('Failed to fetch unfiltered totals.');
     }
   }, [groupId]);
 
@@ -405,8 +403,6 @@ export default function ComparisonPage() {
         sort,
       };
 
-      console.log('Fetching data with params:', queryParams);
-
       const response = await axios.get(
         `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
         {
@@ -418,24 +414,20 @@ export default function ComparisonPage() {
         ...item,
         requestQty: Math.floor(item.requestQty || 0),
         orderQty: item.orderQty || 0,
+        unit: item.unit || '', // THÊM UNIT VÀO MAPPED DATA
       }));
       setData(mappedData);
       setOriginalData(mappedData);
       setTotalElements(response.data.page.totalElements);
     } catch (err) {
-      console.error('Error fetching data:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      setError('Failed to fetch data from API. Showing previously loaded data.');
+      console.error('Error fetching data:', err);
+      setError('Failed to fetch data from API.');
     } finally {
       setLoading(false);
     }
   }, [groupId]);
 
   useEffect(() => {
-    console.log('Group ID:', groupId);
     fetchUnfilteredTotals();
     fetchData({}, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
   }, [fetchUnfilteredTotals, fetchData, page, rowsPerPage, sortConfig]);
@@ -469,19 +461,16 @@ export default function ComparisonPage() {
   const handleDelete = async (oldSapCode) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
-      const response = await axios.delete(`${API_BASE_URL}/api/summary-requisitions/${oldSapCode}`, {
+      await axios.delete(`${API_BASE_URL}/api/summary-requisitions/${oldSapCode}`, {
         headers: { Accept: '*/*' },
       });
-      if (!(response.status >= 200 && response.status < 300)) {
-        throw new Error(`Delete failed with status ${response.status}`);
-      }
       await fetchUnfilteredTotals();
       await fetchData(searchValues, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete item. Please try again.');
+      alert('Failed to delete item.');
     }
   };
 
@@ -539,6 +528,7 @@ export default function ComparisonPage() {
     orderQty: item.orderQty || 0,
     currency: item.currency || 'VND',
     bestPrice: item.bestPrice ? 'Yes' : 'No',
+    unit: item.unit || '', // THÊM UNIT VÀO EXPORT
   }));
 
   return (
@@ -638,14 +628,14 @@ export default function ComparisonPage() {
               backgroundColor: '#fff',
             }}
           >
-            <Table stickyHeader size="small" sx={{ minWidth: 1780 }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1900 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {getHeaders(currency).map(({ label, key, sortable }) => (
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Supplier Description', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)', 'Best Price'].includes(label)
+                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Supplier Description', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)', 'Best Price', 'Unit'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -721,102 +711,22 @@ export default function ComparisonPage() {
                           '& > *': { borderBottom: 'none' },
                         }}
                       >
-                        <TableCell
-                          align="center"
-                          className="sticky-cell"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            position: 'sticky',
-                            left: 0,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            fontSize: '0.55rem',
-                            boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
-                            minWidth: 50,
-                          }}
-                        >
+                        <TableCell align="center" className="sticky-cell" sx={{ px: 0.4, py: 0.2, position: 'sticky', left: 0, zIndex: 1, backgroundColor: rowBackgroundColor, fontSize: '0.55rem', boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 50,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 50, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100 }}>
                           {item.type1Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 150,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 150, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100 }}>
                           {item.type2Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontWeight: 600,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 250,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem', position: 'sticky', left: 250, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 150 }}>
                           {item.vietnameseName || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 400,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 400, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 150 }}>
                           {item.englishName || ''}
                         </TableCell>
-                        <TableCell
-                          align="center"
-                          className="sticky-cell"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 550,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell align="center" className="sticky-cell" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 550, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100 }}>
                           {item.oldSapCode || ''}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
@@ -830,6 +740,10 @@ export default function ComparisonPage() {
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', fontWeight: 600, color: item.bestPrice ? '#4caf50' : theme.palette.error.main }}>
                           {item.bestPrice ? 'Yes' : 'No'}
+                        </TableCell>
+                                                {/* THÊM CỘT UNIT Ở ĐÂY */}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem', backgroundColor: rowBackgroundColor }}>
+                          {item.unit || '-'}
                         </TableCell>
                         <TableCell sx={{ px: 0.4, py: 0.2 }}>
                           <DeptRequestTable departmentRequests={item.departmentRequests} />

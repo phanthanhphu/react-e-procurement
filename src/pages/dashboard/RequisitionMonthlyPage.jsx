@@ -38,6 +38,7 @@ import EditRequisitionMonthly from './EditRequisitionMonthly';
 import AddRequisitionMonthly from './AddRequisitionMonthly';
 import RequisitionMonthlySearch from './RequisitionMonthlySearch';
 import { API_BASE_URL } from '../../config';
+import ImportExcelButtonMonthly from './ImportExcelButtonMonthly';
 
 // Cấu hình axios interceptor để tự động thêm token và xử lý lỗi 401
 axios.interceptors.request.use(
@@ -81,7 +82,6 @@ const headers = [
   { label: 'Amount', key: 'amount', sortable: true, backendKey: 'amount' },
   { label: 'Daily Med Inventory', key: 'dailyMedInventory', sortable: true, backendKey: 'dailyMedInventory' },
   { label: 'Safe Stock', key: 'safeStock', sortable: true, backendKey: 'safeStock' },
-  { label: 'Use Stock Qty', key: 'useStockQty', sortable: true, backendKey: 'useStockQty' },
   { label: 'Full Description', key: 'fullDescription', sortable: true, backendKey: 'fullDescription' },
   { label: 'Reason', key: 'reason', sortable: true, backendKey: 'reason' },
   { label: 'Remark', key: 'remark', sortable: true, backendKey: 'remark' },
@@ -319,7 +319,6 @@ export default function RequisitionMonthlyPage() {
         amount: item.amount || 0,
         dailyMedInventory: item.dailyMedInventory || 0,
         safeStock: item.safeStock || 0,
-        useStockQty: item.useStockQty || 0,
         fullDescription: item.fullDescription || '',
         reason: item.reason || '',
         remark: item.remark || '',
@@ -629,6 +628,39 @@ export default function RequisitionMonthlyPage() {
             </span>
           </Tooltip>
 
+                    <Tooltip title={isCompleted ? 'Import Excel is disabled for Completed groups' : 'Import data from Excel'}>
+            <span>
+              <ImportExcelButtonMonthly
+                groupId={groupId}
+                disabled={isCompleted}
+                onImport={() => {
+                  fetchData();
+                  setSnackbarMessage('Monthly file imported successfully!');
+                  setSnackbarOpen(true);
+                }}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1,
+                  px: 2,
+                  py: 0.6,
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  backgroundColor: isCompleted ? 'grey.300' : '#36c080',
+                  backgroundImage: isCompleted
+                    ? 'none'
+                    : 'linear-gradient(90deg, #36c080 0%, #25a363 100%)',
+                  color: isCompleted ? 'grey.700' : '#fff',
+                  '&:hover': {
+                    backgroundColor: isCompleted ? 'grey.300' : '#2fa16a',
+                    backgroundImage: isCompleted
+                      ? 'none'
+                      : 'linear-gradient(90deg, #2fa16a 0%, #1f7f4f 100%)',
+                  },
+                }}
+              />
+            </span>
+          </Tooltip>
+
           <Tooltip title={isCompleted ? 'Comparison is the only action available for Completed groups' : ''}>
             <Button
               variant="contained"
@@ -731,7 +763,7 @@ export default function RequisitionMonthlyPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Unit', 'Request Qty', 'Order Qty', 'Price', 'Currency', 'Amount', 'Daily Med Inventory', 'Safe Stock', 'Use Stock Qty', 'Images', 'Actions', 'Created Date', 'Updated Date'].includes(label)
+                        ['No', 'Unit', 'Request Qty', 'Order Qty', 'Price', 'Currency', 'Amount', 'Daily Med Inventory', 'Safe Stock', 'Images', 'Actions', 'Created Date', 'Updated Date'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -925,7 +957,6 @@ export default function RequisitionMonthlyPage() {
                         </TableCell>
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.dailyMedInventory || 0}</TableCell>
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.safeStock || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.useStockQty || 0}</TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.fullDescription || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.reason || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.remark || ''}</TableCell>

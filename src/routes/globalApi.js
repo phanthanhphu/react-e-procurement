@@ -1,186 +1,178 @@
 import axios from 'axios';
 
-// 🔧 AUTO CONFIG API BASE URL
+/* -----------------------------------------------------
+ * 1️⃣ SETUP API BASE URL
+ * ----------------------------------------------------- */
 const setupApiBaseUrl = () => {
   if (!window.API_BASE_URL) {
-    window.API_BASE_URL = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8080'
-      : `http://${window.location.hostname}:8080`;
+    window.API_BASE_URL =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:8080'
+        : `http://${window.location.hostname}:8080`;
   }
   console.log('🌐 API BASE URL:', window.API_BASE_URL);
 };
+
 setupApiBaseUrl();
 
-// 🔧 GLOBAL AXIOS INSTANCE
+/* -----------------------------------------------------
+ * 2️⃣ GLOBAL AXIOS INSTANCE
+ * ----------------------------------------------------- */
 export const apiClient = axios.create({
   baseURL: window.API_BASE_URL,
   timeout: 15000,
   withCredentials: true,
 });
 
-// 🔥 SMART REQUEST INTERCEPTOR - DETECT FILE UPLOADS
+/* -----------------------------------------------------
+ * 3️⃣ AXIOS REQUEST INTERCEPTOR
+ * ----------------------------------------------------- */
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    
-    // ✅ THÊM TOKEN
-    if (token && !config.headers.Authorization) {
+
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log(`🔑 Token sent: ${token.substring(0, 10)}...`);
-    } else if (!token) {
-      console.warn('⚠️ No token found in localStorage for request:', config.url);
     }
-    
-    // 🔥 SMART CONTENT-TYPE DETECTION
+
+    // Only set Content-Type when there is a body (not GET)
     if (config.data instanceof FormData) {
       config.headers['Content-Type'] = 'multipart/form-data';
-      console.log(`📎 [${config.method?.toUpperCase()}] ${config.url} → FORM-DATA (Files)`);
-    } else if (typeof config.data === 'object' && config.data !== null) {
+    } else if (config.data && config.method !== 'get') {
       config.headers['Content-Type'] = 'application/json';
-      console.log(`📄 [${config.method?.toUpperCase()}] ${config.url} → JSON`);
     }
-    
-    // USER INFO
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      console.log(`👤 User: ${user.email || 'Guest'} → ${config.url}`);
-    } catch (e) {}
 
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// 🔥 RESPONSE INTERCEPTOR
+/* -----------------------------------------------------
+ * 4️⃣ AXIOS RESPONSE INTERCEPTOR (FIXED)
+ * ----------------------------------------------------- */
 apiClient.interceptors.response.use(
-  (response) => {
-    console.log(`✅ [${response.status}] ${response.config.url} → OK`);
-    return response;
-  },
+  // ✔ Always return JSON body directly
+  (response) => response.data,
+
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url;
-    console.error(`❌ [${status}] ${url}:`, error.response?.data || error.message); // ✅ Log chi tiết lỗi 500
-    
+
+    console.error(`❌ [${status}] ${url}`, error.response?.data || error);
+
     if (status === 401) {
-      console.log('🔓 TOKEN EXPIRED OR INVALID → LOGOUT');
       localStorage.clear();
-      if (window.location.pathname !== '/react/login') { // ✅ Sửa thành /react/login
+      if (window.location.pathname !== '/react/login') {
         window.location.href = '/react/login?sessionExpired=true';
       }
-    } else if (status === 500) {
-      console.error('🚨 SERVER ERROR:', error.response?.data?.message || 'Internal Server Error');
     }
-    
+
     return Promise.reject(error);
   }
 );
 
-// 🌐 SUPER SMART FETCH OVERRIDE - FILE UPLOAD SUPPORT!
+/* -----------------------------------------------------
+ * 5️⃣ SAFE FETCH OVERRIDE (FIXED)
+ * ----------------------------------------------------- */
 const originalFetch = window.fetch;
-window.fetch = async function(input, init = {}) {
+
+window.fetch = async function (input, init = {}) {
   const url = typeof input === 'string' ? input : input.url;
   const token = localStorage.getItem('token');
-  const hasFiles = init?.body instanceof FormData;
-  
-  // 🔥 SMART HEADERS - DETECT FILES!
+  const hasFiles = init.body instanceof FormData;
+
   const headers = new Headers(init.headers || {});
-  
+
+  // Only set Content-Type when body exists and NOT FormData
   if (hasFiles) {
-    console.log(`📎 FETCH FILES → ${url} | FormData detected`);
-  } else {
+    // Browser will handle boundary
+  } else if (init.body && init.method !== 'GET') {
     headers.set('Content-Type', 'application/json');
   }
-  
-  // THÊM TOKEN
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-    console.log(`🔑 Token sent: ${token.substring(0, 10)}...`);
-  } else {
-    console.warn('⚠️ No token found in localStorage for fetch:', url);
-  }
-  
+
+  // Add token
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
   const config = {
     ...init,
     headers,
     credentials: 'include',
   };
-  
-  console.log(`🌐 FETCH → ${url} | Files: ${hasFiles ? '✓' : '✗'} | Token: ${token ? '✓' : '✗'}`);
-  
+
   try {
     const response = await originalFetch(input, config);
-    
+
+    // HANDLE 401
     if (response.status === 401) {
-      console.log('🔓 FETCH 401 → LOGOUT');
+      console.warn('🔓 FETCH 401 → force logout');
       localStorage.clear();
       if (window.location.pathname !== '/react/login') {
         window.location.href = '/react/login?sessionExpired=true';
       }
-    } else if (response.status === 500) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('🚨 FETCH SERVER ERROR:', errorData.message || 'Internal Server Error');
     }
-    
-    console.log(`✅ FETCH [${response.status}] ${url}`);
+
     return response;
-    
   } catch (error) {
     console.error('❌ FETCH ERROR:', url, error);
     throw error;
   }
 };
 
-// 🔧 AXIOS OVERRIDE
+/* -----------------------------------------------------
+ * 6️⃣ AXIOS CREATE OVERRIDE (optional support)
+ * ----------------------------------------------------- */
 if (window.axios) {
-  const originalAxiosCreate = window.axios.create;
-  window.axios.create = function(...args) {
-    const instance = originalAxiosCreate.call(this, ...args);
-    
+  const originalCreate = window.axios.create;
+
+  window.axios.create = function (...args) {
+    const instance = originalCreate.call(this, ...args);
+
     instance.interceptors.request.use((config) => {
       const token = localStorage.getItem('token');
-      if (token && !config.headers.Authorization) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+
       if (config.data instanceof FormData) {
         config.headers['Content-Type'] = 'multipart/form-data';
-      } else if (typeof config.data === 'object') {
+      } else if (config.data && config.method !== 'get') {
         config.headers['Content-Type'] = 'application/json';
       }
+
       return config;
     });
-    
+
     return instance;
   };
 }
 
-// 🔥 API HELPERS - FILE UPLOAD SUPPORT
+/* -----------------------------------------------------
+ * 7️⃣ SIMPLE API WRAPPER (auto returns response.data)
+ * ----------------------------------------------------- */
 export const api = {
   get: (url, params = {}) => apiClient.get(url, { params }),
   post: (url, data = {}) => apiClient.post(url, data),
-  postForm: (url, formData) => apiClient.post(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  upload: (url, formData) => apiClient.post(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
+  postForm: (url, formData) =>
+    apiClient.post(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  upload: (url, formData) =>
+    apiClient.post(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
-// 🛡️ GLOBAL ERROR HANDLER
+/* -----------------------------------------------------
+ * 8️⃣ GLOBAL ERROR HANDLER
+ * ----------------------------------------------------- */
 window.addEventListener('unhandledrejection', (event) => {
-  const error = event.reason;
-  if (error?.response?.status === 401) {
+  const err = event.reason;
+
+  if (err?.response?.status === 401) {
     localStorage.clear();
-    if (window.location.pathname !== '/react/login') {
-      window.location.href = '/react/login?globalError=true';
-    }
-  } else if (error?.response?.status === 500) {
-    console.error('🚨 GLOBAL SERVER ERROR:', error.response?.data?.message || 'Internal Server Error');
+    window.location.href = '/react/login?globalError=true';
   }
 });
 
-// INIT
-console.log('🚀🔥 GLOBAL API v2.2 - SERVER ERROR LOGGING!');
-console.log('✅ SMART HEADERS: JSON vs FormData');
-console.log('✅ READY FOR PRODUCTION! 🌟');
+/* -----------------------------------------------------
+ * INIT MESSAGE
+ * ----------------------------------------------------- */
+console.log('🚀 GLOBAL API v3 READY');

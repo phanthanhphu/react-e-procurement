@@ -12,13 +12,12 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
     totalSumRequestQty: 0,
     totalSumDailyMedInventory: 0,
     totalSumSafeStock: 0,
-    totalSumUseStockQty: 0,
     totalSumOrderQty: 0,
     totalSumAmount: 0,
     totalSumPrice: 0,
+    // ĐÃ XÓA totalSumUseStockQty
   });
 
-  // Fetch data from API
   useEffect(() => {
     if (!groupId) {
       console.warn('No groupId provided for export');
@@ -57,7 +56,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
           })),
           sumBuy: item.totalRequestQty || 0,
           dailyMedInventory: item.dailyMedInventory || 0,
-          useStockQty: item.useStockQty || 0,
+          safeStock: item.safeStock || 0,           // Safe Stock vẫn giữ nguyên
+          // ĐÃ XÓA useStockQty
           orderQty: item.orderQty || 0,
           price: item.price || 0,
           amount: item.amount || 0,
@@ -69,10 +69,10 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
           totalSumRequestQty: response.data.totalSumRequestQty || 0,
           totalSumDailyMedInventory: response.data.totalSumDailyMedInventory || 0,
           totalSumSafeStock: response.data.totalSumSafeStock || 0,
-          totalSumUseStockQty: response.data.totalSumUseStockQty || 0,
           totalSumOrderQty: response.data.totalSumOrderQty || 0,
           totalSumAmount: response.data.totalSumAmount || 0,
           totalSumPrice: response.data.totalSumPrice || 0,
+          // ĐÃ XÓA totalSumUseStockQty
         });
       } catch (error) {
         console.error('Error fetching data for export:', error);
@@ -88,10 +88,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       return;
     }
 
-    // Check for invalid data
     const invalidItems = data.filter((item) => item.itemDescriptionEN === 'BNH');
     if (invalidItems.length > 0) {
-      console.warn('Unexpected items found:', invalidItems);
       alert('Data contains unexpected items (e.g., BNH). Please refresh the page.');
       return;
     }
@@ -104,13 +102,15 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
 
     const wsData = [];
 
-    // Title row
-    const totalCols = 9 + allDeptKeys.length + 7;
+    // Bỏ 1 cột → +6 thay vì +7
+    const totalCols = 9 + allDeptKeys.length + 6;
+
+    // Title
     const titleRow = new Array(totalCols).fill('');
     titleRow[0] = 'REQUEST MONTHLY';
     wsData.push(titleRow);
 
-    // Header rows
+    // Header 1
     wsData.push([
       'No',
       'Product Type 1',
@@ -123,14 +123,14 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       ...Array(allDeptKeys.length).fill('Departments'),
       'Total Request',
       'Daily Med Inventory',
-      'Safe Stock',
-      'Use Stock Q\'ty',
+      'Safe Stock',        // Vẫn giữ
       'Order Q\'ty',
       'Price',
       'Amount',
       'Suppliers',
     ]);
 
+    // Header 2
     wsData.push([
       '',
       '',
@@ -148,7 +148,6 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       '',
       '',
       '',
-      '',
     ]);
 
     // Data rows
@@ -158,17 +157,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
         deptBuy[dept.name] = dept.buy || 0;
       });
 
-      // Format Price and Amount
-      const formattedPrice = (item.price || 0).toLocaleString('vi-VN', {
-        style: 'decimal',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      });
-      const formattedAmount = (item.amount || 0).toLocaleString('vi-VN', {
-        style: 'decimal',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      });
+      const formattedPrice = (item.price || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      const formattedAmount = (item.amount || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
       const row = [
         index + 1,
@@ -182,47 +172,36 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
         ...allDeptKeys.map((key) => deptBuy[key] || ''),
         item.sumBuy || 0,
         item.dailyMedInventory || 0,
-        item.useStockQty || 0,
-        item.useStockQty || 0, // Repeated for Actual In Hand (mapped to useStockQty)
+        item.safeStock || 0,        // Safe Stock vẫn hiển thị
         item.orderQty || 0,
         formattedPrice,
         formattedAmount,
         item.supplierName || '',
       ];
-
       wsData.push(row);
     });
 
-    // Insert total row
-    const formattedTotalPrice = (totals.totalSumPrice || 0).toLocaleString('vi-VN', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-    const formattedTotalAmount = (totals.totalSumAmount || 0).toLocaleString('vi-VN', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
+    // Total row
+    const formattedTotalPrice = (totals.totalSumPrice || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const formattedTotalAmount = (totals.totalSumAmount || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
     const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'Total';
     totalRow[8 + allDeptKeys.length] = totals.totalSumRequestQty || 0;
     totalRow[9 + allDeptKeys.length] = totals.totalSumDailyMedInventory || 0;
-    totalRow[10 + allDeptKeys.length] = totals.totalSumSafeStock || 0;
-    totalRow[11 + allDeptKeys.length] = totals.totalSumUseStockQty || 0;
-    totalRow[12 + allDeptKeys.length] = totals.totalSumOrderQty || 0;
-    totalRow[13 + allDeptKeys.length] = formattedTotalPrice;
-    totalRow[14 + allDeptKeys.length] = formattedTotalAmount;
+    totalRow[10 + allDeptKeys.length] = totals.totalSumSafeStock || 0;     // Safe Stock total vẫn có
+    totalRow[11 + allDeptKeys.length] = totals.totalSumOrderQty || 0;
+    totalRow[12 + allDeptKeys.length] = formattedTotalPrice;
+    totalRow[13 + allDeptKeys.length] = formattedTotalAmount;
     wsData.push(totalRow);
 
     const dataEndRow = 3 + data.length - 1;
     const totalRowIndex = 3 + data.length;
 
-    // Signature rows
+    // Signature (giữ nguyên)
+    const blankLine = new Array(totalCols).fill('');
     const signatureTitles = new Array(totalCols).fill('');
     const signatureNames = new Array(totalCols).fill('');
-    const blankLine = new Array(totalCols).fill('');
     const signBlank1 = [...blankLine];
     const signBlank2 = [...blankLine];
     const signBlank3 = [...blankLine];
@@ -254,73 +233,37 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
 
     wsData.push(blankLine, signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
 
-    // Create worksheet
+    // Worksheet + styles + merges (đã điều chỉnh chỉ số)
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Request Monthly');
 
-    // Styles
-    const commonBorder = {
-      top: { style: 'thin', color: { rgb: '000000' } },
-      bottom: { style: 'thin', color: { rgb: '000000' } },
-      left: { style: 'thin', color: { rgb: '000000' } },
-      right: { style: 'thin', color: { rgb: '000000' } },
-    };
+    const commonBorder = { top: { style: 'thin', color: { rgb: '000000' } }, bottom: { style: 'thin', color: { rgb: '000000' } }, left: { style: 'thin', color: { rgb: '000000' } }, right: { style: 'thin', color: { rgb: '000000' } } };
 
-    const titleStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 18 },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: commonBorder,
-    };
-
-    const boldHeaderStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: commonBorder,
-    };
-
-    const normalCellStyle = {
-      font: { name: 'Times New Roman', sz: 11 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: commonBorder,
-    };
-
-    const totalStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: commonBorder,
-    };
-
-    const signatureHeaderStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center' },
-    };
-
-    const signatureNameStyle = {
-      font: { name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center' },
-    };
+    const titleStyle = { font: { bold: true, name: 'Times New Roman', sz: 18 }, alignment: { horizontal: 'center', vertical: 'center' }, border: commonBorder };
+    const boldHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
+    const normalCellStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
+    const totalStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
+    const signatureHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
+    const signatureNameStyle = { font: { name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
 
     const totalRows = wsData.length;
     for (let r = 0; r < totalRows; r++) {
       for (let c = 0; c < totalCols; c++) {
         const cellRef = XLSX.utils.encode_cell({ r, c });
         if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
-
         if (r === 0) ws[cellRef].s = titleStyle;
         else if (r === 1 || r === 2) ws[cellRef].s = boldHeaderStyle;
         else if (r >= 3 && r <= dataEndRow) ws[cellRef].s = normalCellStyle;
         else if (r === totalRowIndex) ws[cellRef].s = totalStyle;
         else if (r === dataEndRow + 3) ws[cellRef].s = signatureHeaderStyle;
         else if (r === dataEndRow + 6) ws[cellRef].s = signatureNameStyle;
-        else ws[cellRef].s = signatureNameStyle;
       }
     }
 
-    // Merge cells
-    const merges = [
+    ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
-      { s: { r: totalRowIndex, c: 0 }, e: { r: totalRowIndex, c: 7 } }, // Merge Total to Unit column
+      { s: { r: totalRowIndex, c: 0 }, e: { r: totalRowIndex, c: 7 } },
       { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
       { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
       { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
@@ -335,28 +278,22 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       { s: { r: 1, c: 11 + allDeptKeys.length }, e: { r: 2, c: 11 + allDeptKeys.length } },
       { s: { r: 1, c: 12 + allDeptKeys.length }, e: { r: 2, c: 12 + allDeptKeys.length } },
       { s: { r: 1, c: 13 + allDeptKeys.length }, e: { r: 2, c: 13 + allDeptKeys.length } },
-      { s: { r: 1, c: 14 + allDeptKeys.length }, e: { r: 2, c: 14 + allDeptKeys.length } },
-      { s: { r: 1, c: 15 + allDeptKeys.length }, e: { r: 2, c: 15 + allDeptKeys.length } },
     ];
 
     startPositions.forEach((startCol) => {
       const endCol = Math.min(startCol + sigWidth - 1, totalCols - 1);
-      merges.push({ s: { r: dataEndRow + 3, c: startCol }, e: { r: dataEndRow + 3, c: endCol } });
-      merges.push({ s: { r: dataEndRow + 6, c: startCol }, e: { r: dataEndRow + 6, c: endCol } });
+      ws['!merges'].push({ s: { r: dataEndRow + 3, c: startCol }, e: { r: dataEndRow + 3, c: endCol } });
+      ws['!merges'].push({ s: { r: dataEndRow + 6, c: startCol }, e: { r: dataEndRow + 6, c: endCol } });
     });
-
-    ws['!merges'] = merges;
 
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
     ws['!cols'][0] = { wch: 5 };
     ws['!cols'][1] = { wch: 12 };
     ws['!cols'][2] = { wch: 12 };
     ws['!cols'][5] = { wch: 12 };
-    ws['!cols'][15] = { wch: 12 };
-    ws['!cols'][16] = { wch: 12 };
 
-    // Generate dynamic file name
-    const now = new Date('2025-10-01T16:01:00+07:00');
+    // Tên file theo giờ hiện tại
+    const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
@@ -375,14 +312,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId, searchVal
       onClick={exportToExcel}
       disabled={data.length === 0}
       startIcon={<img src={ExcelIcon} alt="Excel Icon" style={{ width: 20, height: 20 }} />}
-      sx={{
-        textTransform: 'none',
-        borderRadius: 1,
-        px: 2,
-        py: 0.6,
-        fontWeight: 600,
-        fontSize: '0.75rem',
-      }}
+      sx={{ textTransform: 'none', borderRadius: 1, px: 2, py: 0.6, fontWeight: 600, fontSize: '0.75rem' }}
     >
       Summary
     </Button>

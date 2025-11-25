@@ -133,7 +133,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setShowSupplierSelector(true);
       setIsEnManuallyEdited(false);
       setInitialVNDescription('');
-      setOpenConfirmDialog(false);
+      setOpenConfirmDialog(false);    
     }
   }, [open, groupId, fetchGroupCurrency]);
 
