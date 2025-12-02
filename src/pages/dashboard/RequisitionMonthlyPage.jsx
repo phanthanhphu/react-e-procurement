@@ -64,6 +64,7 @@ axios.interceptors.response.use(
 );
 
 // Define table headers for the requisition table
+// === CẬP NHẬT MẢNG HEADERS ===
 const headers = [
   { label: 'No', key: 'no', sortable: false },
   { label: 'Product Type 1', key: 'groupItem1', sortable: true, backendKey: 'productType1Name' },
@@ -75,13 +76,11 @@ const headers = [
   { label: 'Unit', key: 'unit', sortable: true, backendKey: 'unit' },
   { label: 'Department', key: 'departmentRequests', sortable: false },
   { label: 'Request Qty', key: 'totalRequestQty', sortable: true, backendKey: 'totalRequestQty' },
-  { label: 'Order Qty', key: 'orderQty', sortable: true, backendKey: 'orderQty' },
+  { label: 'Confirmed Med Qty', key: 'dailyMedInventory', sortable: true, backendKey: 'dailyMedInventory' },
   { label: 'Supplier Description', key: 'supplierName', sortable: true, backendKey: 'supplierName' },
   { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
   { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
   { label: 'Amount', key: 'amount', sortable: true, backendKey: 'amount' },
-  { label: 'Daily Med Inventory', key: 'dailyMedInventory', sortable: true, backendKey: 'dailyMedInventory' },
-  { label: 'Safe Stock', key: 'safeStock', sortable: true, backendKey: 'safeStock' },
   { label: 'Full Description', key: 'fullDescription', sortable: true, backendKey: 'fullDescription' },
   { label: 'Reason', key: 'reason', sortable: true, backendKey: 'reason' },
   { label: 'Remark', key: 'remark', sortable: true, backendKey: 'remark' },
@@ -92,7 +91,6 @@ const headers = [
   { label: 'Images', key: 'image', sortable: false },
   { label: 'Actions', key: 'actions', sortable: false },
 ];
-
 // Sub-component to display department requests in a nested table
 function DeptRequestTable({ departmentRequests }) {
   if (!departmentRequests || departmentRequests.length === 0) {
@@ -746,16 +744,18 @@ export default function RequisitionMonthlyPage() {
 
       {!loading && !error && (
         <>
-          <TableContainer
-            component={Paper}
-            elevation={4}
-            sx={{
-              overflowX: 'auto',
-              maxHeight: 480,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-              backgroundColor: '#fff',
-            }}
-          >
+            <TableContainer
+              component={Paper}
+              elevation={4}
+              sx={{
+                overflowX: 'auto',
+                overflowY: 'auto',  // Thêm dòng này để kích hoạt thanh cuộn dọc
+                maxHeight: 480,    // Đặt chiều cao cố định
+                height: 480,      // Đặt chiều cao cố định chính xác
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                backgroundColor: '#fff',
+              }}
+            >
             <Table stickyHeader size="small" sx={{ minWidth: 2300 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
@@ -763,7 +763,19 @@ export default function RequisitionMonthlyPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Unit', 'Request Qty', 'Order Qty', 'Price', 'Currency', 'Amount', 'Daily Med Inventory', 'Safe Stock', 'Images', 'Actions', 'Created Date', 'Updated Date'].includes(label)
+                        [
+                          'No',
+                          'Unit',
+                          'Request Qty',
+                          'Confirmed Med Qty',    // chỉ để cái này thôi
+                          'Price',
+                          'Currency',
+                          'Amount',
+                          'Images',
+                          'Actions',
+                          'Created Date',
+                          'Updated Date'
+                        ].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -944,7 +956,13 @@ export default function RequisitionMonthlyPage() {
                           <DeptRequestTable departmentRequests={row.departmentRequests} />
                         </TableCell>
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.totalRequestQty || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 100, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.orderQty || 0}</TableCell>
+                        {/* CỘT MỚI: Confirmed Med Qty – nổi bật đỏ đậm */}
+                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
+                          {row.dailyMedInventory != null 
+                            ? Number(row.dailyMedInventory).toLocaleString('vi-VN') 
+                            : '0'
+                          }
+                        </TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.supplierName || ''}</TableCell>
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
                           {formatCurrency(row.price, row.currency)}
@@ -955,8 +973,6 @@ export default function RequisitionMonthlyPage() {
                         <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>
                           {formatCurrency(row.amount, row.currency)}
                         </TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.dailyMedInventory || 0}</TableCell>
-                        <TableCell sx={{ minWidth: 80, textAlign: 'center', fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.safeStock || 0}</TableCell>
                         <TableCell sx={{ minWidth: 180, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.fullDescription || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.reason || ''}</TableCell>
                         <TableCell sx={{ minWidth: 100, fontSize: '0.55rem', py: 0.5, px: 0.8 }}>{row.remark || ''}</TableCell>

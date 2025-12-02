@@ -79,7 +79,6 @@ const headers = [
   { label: 'Price', key: 'price', sortable: true, backendKey: 'price' },
   { label: 'Currency', key: 'currency', sortable: true, backendKey: 'currency' },
   { label: 'Amount', key: 'amount', sortable: true, backendKey: 'totalPrice' },
-  { label: 'Stock', key: 'stock', sortable: true, backendKey: 'stock' },
   { label: 'Reason', key: 'reason', sortable: true, backendKey: 'reason' },
   { label: 'Remark', key: 'remark', sortable: true, backendKey: 'remark' },
   { label: 'Good Type', key: 'goodType', sortable: true, backendKey: 'goodType' },
@@ -681,7 +680,7 @@ export default function SummaryPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Price', 'Currency', 'Amount', 'Request Qty', 'Stock', 'Order Qty', 'Good Type', 'Created Date', 'Updated Date', 'Images', 'Actions', 'Unit'].includes(label)
+                        ['No', 'Price', 'Currency', 'Amount', 'Request Qty', 'Order Qty', 'Good Type', 'Created Date', 'Updated Date', 'Images', 'Actions', 'Unit'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -814,9 +813,6 @@ export default function SummaryPage() {
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
                           {amount ? formatCurrency(amount, currency) : '0'}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {requisition.stock || 0}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {requisition.reason || ''}

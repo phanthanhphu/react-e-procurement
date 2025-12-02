@@ -1,24 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Stack,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Typography,
-  Paper,
-  IconButton,
-  FormHelperText,
-  Box,
-  Snackbar,
-  Alert,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, TextField, Stack, CircularProgress, FormControl,
+  InputLabel, Select, MenuItem, Typography, Paper,
+  IconButton, FormHelperText, Box, Snackbar, Alert,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -28,26 +13,22 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
-// Utility function to normalize currency codes
 const normalizeCurrencyCode = (code) => {
-  const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
-  const currencyMap = { EURO: 'EUR' };
-
+  const valid = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
+  const map = { EURO: 'EUR' };
   if (!code) return 'VND';
-  const normalizedCode = currencyMap[code.toUpperCase()] || code.toUpperCase();
-  return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
+  const n = map[code.toUpperCase()] || code.toUpperCase();
+  return valid.includes(n) ? n : 'VND';
 };
 
 export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupId }) {
-  // SỬA 1: Đặt mặc định là 0 thay vì chuỗi rỗng
   const defaultFormData = {
     itemDescriptionEN: '',
     itemDescriptionVN: '',
     fullDescription: '',
     oldSAPCode: '',
     hanaSAPCode: '',
-    dailyMedInventory: 0,     // ĐÃ SỬA
-    safeStock: 0,             // ĐÃ SỬA
+    dailyMedInventory: '',
     reason: '',
     remark: '',
     remarkComparison: '',
@@ -61,298 +42,195 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
   const [formData, setFormData] = useState(defaultFormData);
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
-  const [deptErrors, setDeptErrors] = useState(['']);
+  const [deptErrors, setDeptErrors] = useState(['']); // lỗi trùng phòng
   const [saving, setSaving] = useState(false);
-  const [productType1List, setProductType1List] = useState([]);
-  const [productType2List, setProductType2List] = useState([]);
-  const [loadingType1, setLoadingType1] = useState(false);
-  const [loadingType2, setLoadingType2] = useState(false);
   const [departmentList, setDepartmentList] = useState([]);
-  const [loadingDepartments, setLoadingDepartments] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
-  const [initialVNDescription, setInitialVNDescription] = useState('');
   const [groupCurrency, setGroupCurrency] = useState('VND');
-  const [loadingCurrency, setLoadingCurrency] = useState(false);
-  const [currencyError, setCurrencyError] = useState(null);
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
-  const [inventoryError, setInventoryError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const fetchGroupCurrency = useCallback(async () => {
-    if (!groupId) {
-      setCurrencyError('Invalid Group ID');
-      setGroupCurrency('VND');
-      return;
+  const [itemNoForSearch, setItemNoForSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setItemNoForSearch(formData.itemDescriptionVN.trim());
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [formData.itemDescriptionVN]);
+
+  const totalRequestQty = deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
+
+  const orderQtyError = formData.dailyMedInventory && totalRequestQty > 0 &&
+    parseFloat(formData.dailyMedInventory) > totalRequestQty
+      ? `Confirmed MED Quantity cannot exceed total request (${totalRequestQty})`
+      : '';
+
+  const autoAllocateBuy = useCallback((rows, confirmedInput) => {
+    const confirmed = parseFloat(confirmedInput) || 0;
+    if (confirmed <= 0 || totalRequestQty === 0) {
+      return rows.map(r => ({ ...r, buy: '' }));
     }
-    setLoadingCurrency(true);
-    setCurrencyError(null);
+    const effective = Math.min(confirmed, totalRequestQty);
+
+    const sorted = rows
+      .map((r, i) => ({ ...r, idx: i }))
+      .filter(r => parseFloat(r.qty) > 0)
+      .sort((a, b) => (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.idx - b.idx);
+
+    const allocated = {};
+    let remain = effective;
+    for (const row of sorted) {
+      if (remain <= 0) break;
+      const req = parseFloat(row.qty) || 0;
+      const give = Math.min(req, remain);
+      allocated[row.id] = give;
+      remain -= give;
+    }
+
+    return rows.map(row => ({
+      ...row,
+      buy: allocated[row.id] !== undefined ? allocated[row.id].toString() : ''
+    }));
+  }, [totalRequestQty]);
+
+  useEffect(() => {
+    if (!orderQtyError && formData.dailyMedInventory) {
+      setDeptRows(prev => autoAllocateBuy(prev, formData.dailyMedInventory));
+    } else {
+      setDeptRows(prev => prev.map(r => ({ ...r, buy: '' })));
+    }
+  }, [formData.dailyMedInventory, autoAllocateBuy, orderQtyError]);
+
+  const fetchData = useCallback(async () => {
+    if (!groupId) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
-        method: 'GET',
-        headers: { Accept: '*/*' },
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const result = await response.json();
-      const validatedCurrency = normalizeCurrencyCode(result.currency);
-      setGroupCurrency(validatedCurrency);
+      const [currencyRes, deptRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`),
+        fetch(`${API_BASE_URL}/api/departments`)
+      ]);
+      if (currencyRes.ok) {
+        const c = await currencyRes.json();
+        setGroupCurrency(normalizeCurrencyCode(c.currency));
+      }
+      if (deptRes.ok) {
+        const d = await deptRes.json();
+        setDepartmentList(d || []);
+      }
     } catch (err) {
-      console.error('Fetch group currency error:', err);
-      setCurrencyError('Failed to fetch group currency. Using default (VND).');
+      console.error(err);
       setGroupCurrency('VND');
-    } finally {
-      setLoadingCurrency(false);
     }
   }, [groupId]);
 
   useEffect(() => {
     if (open) {
-      fetchProductType1List();
-      fetchDepartmentList();
-      fetchGroupCurrency();
-
-      // SỬA 2: Dùng object mới thay vì callback để reset đúng 0
-      setFormData({
-        ...defaultFormData,
-        groupId: groupId || '',
-      });
-
+      fetchData();
+      setFormData({ ...defaultFormData, groupId });
       setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
+      setFiles([]);
+      setPreviews(p => { p.forEach(URL.revokeObjectURL); return []; });
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
       setIsEnManuallyEdited(false);
-      setInitialVNDescription('');
-      previews.forEach((preview) => URL.revokeObjectURL(preview));
-      setFiles([]);
-      setPreviews([]);
-      setGroupCurrency('VND');
-      setCurrencyError(null);
-      setOpenConfirmDialog(false);
-      setInventoryError('');
+      setItemNoForSearch('');
+      setConfirmOpen(false);
     }
-  }, [open, groupId, fetchGroupCurrency]);
+  }, [open, groupId, fetchData]);
 
   const translateText = async (text) => {
-    if (!text) {
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Vietnamese description has been cleared.');
-      setSnackbarOpen(true);
-      setIsEnManuallyEdited(false);
+    if (!text || isEnManuallyEdited) return;
+    setTranslating(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      setFormData(prev => ({ ...prev, itemDescriptionEN: data.translatedText || '' }));
+    } catch { }
+    finally { setTranslating(false); }
+  };
+
+  const debouncedTranslate = useCallback(debounce(translateText, 600), [isEnManuallyEdited]);
+
+  useEffect(() => {
+    if (formData.itemDescriptionVN && !isEnManuallyEdited) {
+      debouncedTranslate(formData.itemDescriptionVN);
+    }
+  }, [formData.itemDescriptionVN, debouncedTranslate]);
+
+  const handleSelectSupplier = (supplierData) => {
+    if (!supplierData) {
+      setFormData(prev => ({
+        ...prev,
+        oldSAPCode: '', supplierId: '', unit: '', supplierPrice: 0,
+        productType1Id: '', productType2Id: ''
+      }));
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
       return;
     }
 
-    setTranslating(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'accept': '*/*',
-        },
-        body: JSON.stringify({ text }),
-      });
+    const price = parseFloat(supplierData.supplierPrice) || 0;
 
-      if (!response.ok) {
-        throw new Error(`Translation failed with status ${response.status}`);
-      }
+    setFormData(prev => ({
+      ...prev,
+      oldSAPCode: supplierData.oldSapCode || '',
+      supplierId: supplierData.supplierId || '',
+      unit: supplierData.unit || '',
+      supplierPrice: price,
+      productType1Id: supplierData.productType1Id || '',
+      productType2Id: supplierData.productType2Id || '',
+    }));
 
-      const data = await response.json();
-      if (!data.translatedText && !data.text) {
-        throw new Error('Invalid translation response: missing translated text');
-      }
+    setSelectedSupplier({
+      supplierName: supplierData.supplierName || 'Unknown',
+      sapCode: supplierData.oldSapCode || '',
+      price: price,
+      unit: supplierData.unit || '',
+      currency: supplierData.currency || groupCurrency,
+    });
 
-      const translatedText = data.translatedText || data.text;
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
-      setIsEnManuallyEdited(false);
-    } catch (error) {
-      console.error('Translation error:', error.message);
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Unable to translate text. Please try again or enter manually.');
-      setSnackbarOpen(true);
-    } finally {
-      setTranslating(false);
-    }
-  };
-
-  const debouncedTranslate = useCallback(
-    debounce((text) => {
-      if (text !== initialVNDescription && !isEnManuallyEdited) {
-        translateText(text);
-      }
-    }, 500),
-    [initialVNDescription, isEnManuallyEdited]
-  );
-
-  useEffect(() => {
-    if (formData.itemDescriptionVN !== initialVNDescription) {
-      debouncedTranslate(formData.itemDescriptionVN);
-    }
-    return () => debouncedTranslate.cancel();
-  }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
-
-  useEffect(() => {
-    return () => {
-      if (!open) {
-        previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
-        setFiles([]);
-        setPreviews([]);
-        console.log('Cleanup: Files and previews cleared');
-        setOpenConfirmDialog(false);
-      }
-    };
-  }, [open]);
-
-  const fetchProductType1List = async () => {
-    setLoadingType1(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
-      if (!res.ok) throw new Error('Failed to load product type 1 list');
-      const data = await res.json();
-      setProductType1List(data.content || data);
-    } catch (error) {
-      console.error(error);
-      setProductType1List([]);
-    } finally {
-      setLoadingType1(false);
-    }
-  };
-
-  const fetchProductType2List = async (type1Id) => {
-    setLoadingType2(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
-      );
-      if (!res.ok) throw new Error('Failed to load product type 2 list');
-      const data = await res.json();
-      setProductType2List(data.content || data);
-    } catch (error) {
-      console.error(error);
-      setProductType2List([]);
-    } finally {
-      setLoadingType2(false);
-    }
-  };
-
-  useEffect(() => {
-    if (formData.productType1Id) {
-      fetchProductType2List(formData.productType1Id);
-    } else {
-      setProductType2List([]);
-      setFormData((prev) => ({ ...prev, productType2Id: '' }));
-    }
-  }, [formData.productType1Id]);
-
-  const fetchDepartmentList = async () => {
-    setLoadingDepartments(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/departments`, {
-        headers: { accept: '*/*' },
-      });
-      if (!res.ok) throw new Error('Failed to load department list');
-      const data = await res.json();
-      setDepartmentList(data || []);
-    } catch (error) {
-      console.error('Error fetching department list:', error);
-      setDepartmentList([]);
-    } finally {
-      setLoadingDepartments(false);
-    }
-  };
-
-  const handleSelectSupplier = (supplierData) => {
-    if (supplierData) {
-      setFormData((prev) => ({
-        ...prev,
-        fullDescription: supplierData.fullItemDescriptionVN,
-        oldSAPCode: supplierData.oldSapCode,
-        supplierId: supplierData.supplierId,
-        unit: supplierData.unit || '',
-        supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
-        productType1Id: supplierData.productType1Id || '',
-        productType2Id: supplierData.productType2Id || '',
-      }));
-      setSelectedSupplier({
-        id: supplierData.supplierId,
-        sapCode: supplierData.oldSapCode || '',
-        price: supplierData.supplierPrice || 0,
-        unit: supplierData.unit || '',
-        supplierName: supplierData.supplierName || '',
-        fullDescription: supplierData.fullItemDescriptionVN || '',
-      });
-      setShowSupplierSelector(false);
-      if (supplierData.itemDescriptionVN) {
-        setFormData((prev) => ({ ...prev, itemDescriptionVN: supplierData.itemDescriptionVN }));
-        if (supplierData.itemDescriptionVN !== initialVNDescription && !isEnManuallyEdited) {
-          translateText(supplierData.itemDescriptionVN);
-        }
-      }
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        fullDescription: '',
-        oldSAPCode: '',
-        supplierId: '',
-        unit: '',
-        supplierPrice: 0,
-        productType1Id: '',
-        productType2Id: '',
-      }));
-      setSelectedSupplier(null);
-      setShowSupplierSelector(true);
-    }
+    setShowSupplierSelector(false);
   };
 
   const handleChange = (field) => (e) => {
-    const value = ['dailyMedInventory', 'safeStock'].includes(field)
-      ? parseFloat(e.target.value) || ''
+    const val = ['dailyMedInventory'].includes(field)
+      ? e.target.value === '' ? '' : parseFloat(e.target.value) || ''
       : e.target.value;
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (field === 'itemDescriptionEN') {
-      setIsEnManuallyEdited(true);
-    } else if (field === 'itemDescriptionVN') {
-      setIsEnManuallyEdited(false);
-    } else if (field === 'oldSAPCode') {
-      if (!value) {
-        setSelectedSupplier(null);
-        setShowSupplierSelector(true);
-      } else if (value !== formData.oldSAPCode) {
-        setShowSupplierSelector(true);
-      }
-    }
+    setFormData(prev => ({ ...prev, [field]: val }));
+    if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
+    if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
-  const handleDeptChange = (index, field, value) => {
-    const updatedRows = [...deptRows];
+  // CHỈ SỬA HÀM NÀY: KIỂM TRA TRÙNG PHÒNG VÀ CẬP NHẬT LỖI NGAY
+  const handleDeptChange = (i, field, val) => {
+    const updated = [...deptRows];
     if (field === 'id') {
-      const selectedDept = departmentList.find((dept) => dept.id === value);
-      updatedRows[index] = {
-        ...updatedRows[index],
-        id: value,
-        name: selectedDept ? selectedDept.departmentName : '',
-      };
+      const dept = departmentList.find(d => d.id === val);
+      updated[i] = { ...updated[i], id: val, name: dept?.departmentName || '' };
     } else {
-      updatedRows[index][field] = parseFloat(value) || '';
+      updated[i][field] = val;
     }
-    setDeptRows(updatedRows);
+    setDeptRows(updated);
 
-    const updatedErrors = deptRows.map((row, i) => {
-      if (i === index && field === 'id' && value) {
-        const isDuplicate = deptRows.some(
-          (otherRow, otherIndex) =>
-            otherIndex !== i && otherRow.id === value && value !== ''
-        );
-        return isDuplicate ? 'This department is already selected' : '';
-      }
-      return deptErrors[i] || '';
+    // Tính lỗi trùng phòng – hiện đỏ ngay dưới ô
+    const errors = updated.map((row, idx) => {
+      if (!row.id) return '';
+      const isDuplicate = updated.some((r, index) => r.id === row.id && index !== idx);
+      return isDuplicate ? 'This department is already selected' : '';
     });
-    setDeptErrors(updatedErrors);
+    setDeptErrors(errors);
   };
 
   const handleAddDeptRow = () => {
@@ -360,150 +238,68 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     setDeptErrors([...deptErrors, '']);
   };
 
-  const handleDeleteDeptRow = (index) => {
-    const updatedRows = deptRows.filter((_, i) => i !== index);
-    const updatedErrors = deptErrors.filter((_, i) => i !== index);
-    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ id: '', name: '', qty: '', buy: '' }]);
-    setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
-  };
-
-  const calcTotalBuy = () => {
-    return deptRows.reduce((sum, row) => {
-      const b = parseFloat(row.buy);
-      return sum + (isNaN(b) ? 0 : b);
-    }, 0);
-  };
-
-  const calcTotalPrice = () => {
-    return calcTotalBuy() * (formData.supplierPrice || 0);
+  const handleDeleteDeptRow = (i) => {
+    setDeptRows(deptRows.filter((_, idx) => idx !== i));
+    setDeptErrors(deptErrors.filter((_, idx) => idx !== i));
   };
 
   const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    if (selectedFiles.length === 0) {
-      console.warn('No files selected');
-      return;
-    }
-
-    const validFiles = selectedFiles.filter((file) =>
-      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
-    );
-    if (validFiles.length !== selectedFiles.length) {
-      setSnackbarMessage('Only image files under 5MB are allowed.');
+    const selected = Array.from(e.target.files).slice(0, 10 - files.length);
+    const valid = selected.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+    if (valid.length < selected.length) {
+      setSnackbarMessage('Only images ≤ 5MB allowed');
+      setSnackbarSeverity('warning');
       setSnackbarOpen(true);
-      return;
     }
-
-    const newFiles = [...files, ...validFiles];
-    if (newFiles.length > 10) {
-      setSnackbarMessage('You can upload a maximum of 10 images.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    previews.forEach((preview) => URL.revokeObjectURL(preview));
+    const newFiles = [...files, ...valid];
     setFiles(newFiles);
-    const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
-    setPreviews(newPreviewUrls);
+    setPreviews(newFiles.map(f => URL.createObjectURL(f)));
     e.target.value = null;
   };
 
-  const handleRemoveFile = (index) => {
-    URL.revokeObjectURL(previews[index]);
-    const newFiles = files.filter((_, i) => i !== index);
-    const newPreviews = previews.filter((_, i) => i !== index);
-    setFiles(newFiles);
-    setPreviews(newPreviews);
+  const handleRemoveFile = (i) => {
+    URL.revokeObjectURL(previews[i]);
+    setFiles(files.filter((_, idx) => idx !== i));
+    setPreviews(previews.filter((_, idx) => idx !== i));
   };
 
-  useEffect(() => {
-    const available = (parseFloat(formData.dailyMedInventory) || 0) + (parseFloat(formData.safeStock) || 0);
-    const totalQty = deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
-
-    let error = '';
-    if (deptRows.some(row => row.qty !== '') && totalQty !== available && totalQty > 0) {
-      error = `Tổng số lượng yêu cầu (${totalQty}) phải bằng Daily Med Inventory + Safe Stock (${available})`;
-    }
-    setInventoryError(error);
-
-    // KHÔNG GỌI setDeptRows Ở ĐÂY → TRÁNH VÒNG LẶP
-  }, [formData.dailyMedInventory, formData.safeStock, deptRows]);
-
   const handleAddClick = () => {
-    if (!groupId) {
-      setSnackbarMessage('Group ID is missing.');
+    if (!formData.itemDescriptionVN?.trim()) {
+      setSnackbarMessage('Item Description (VN) is required');
+      setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
     }
-    if (!formData.itemDescriptionVN) {
-      setSnackbarMessage('Item Description (VN) is required.');
+    if (totalRequestQty === 0) {
+      setSnackbarMessage('At least one department must have Qty');
+      setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
     }
-    if (deptRows.every((row) => !row.id || !row.qty || !row.buy)) {
-      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
+    if (orderQtyError) {
+      setSnackbarMessage(orderQtyError);
+      setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
     }
-
-    const departmentIds = deptRows.filter((row) => row.id).map((row) => row.id);
-    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
-    if (hasDuplicates) {
-      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
+    // Kiểm tra trùng phòng trước khi mở confirm
+    if (deptErrors.some(Boolean)) {
+      setSnackbarMessage('Please fix duplicate department selections');
+      setSnackbarSeverity('error');
       setSnackbarOpen(true);
       return;
     }
-
-    if (inventoryError) {
-      setSnackbarMessage(inventoryError);
-      setSnackbarOpen(true);
-      return;
-    }
-
-    setOpenConfirmDialog(true);
+    setConfirmOpen(true);
   };
 
   const handleConfirmAdd = async () => {
-    setOpenConfirmDialog(false);
-    await handleAdd();
-  };
-
-  const handleCancelAdd = () => {
-    setOpenConfirmDialog(false);
-  };
-
-  const handleAdd = async () => {
-    if (!groupId) {
-      setSnackbarMessage('Group ID is missing.');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (!formData.itemDescriptionVN) {
-      setSnackbarMessage('Item Description (VN) is required.');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (deptRows.every((row) => !row.id || !row.qty || !row.buy)) {
-      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const departmentIds = deptRows.filter((row) => row.id).map((row) => row.id);
-    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
-    if (hasDuplicates) {
-      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
-      setSnackbarOpen(true);
-      return;
-    }
-
     const departmentRequisitions = deptRows
-      .filter((row) => row.id && row.qty && row.buy)
-      .map((row) => ({
-        id: row.id,
-        name: row.name,
-        qty: parseFloat(row.qty) || 0,
-        buy: parseFloat(row.buy) || 0,
+      .filter(r => r.id && r.qty)
+      .map(r => ({
+        id: r.id,
+        name: r.name,
+        qty: parseFloat(r.qty) || 0,
+        buy: parseFloat(r.buy) || 0,
       }));
 
     const formDataToSend = new FormData();
@@ -512,409 +308,208 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     formDataToSend.append('fullDescription', formData.fullDescription || '');
     formDataToSend.append('oldSAPCode', formData.oldSAPCode || '');
     formDataToSend.append('hanaSAPCode', formData.hanaSAPCode || '');
-    formDataToSend.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
     formDataToSend.append('dailyMedInventory', parseFloat(formData.dailyMedInventory) || 0);
-    formDataToSend.append('safeStock', parseFloat(formData.safeStock) || 0);
     formDataToSend.append('reason', formData.reason || '');
     formDataToSend.append('remark', formData.remark || '');
     formDataToSend.append('remarkComparison', formData.remarkComparison || '');
     formDataToSend.append('supplierId', formData.supplierId || '');
-    formDataToSend.append('productType1Id', formData.productType1Id || '');
-    formDataToSend.append('productType2Id', formData.productType2Id || '');
-    formDataToSend.append('groupId', formData.groupId || '');
-    files.forEach((file) => {
-      formDataToSend.append('files', file);
-    });
+    formDataToSend.append('groupId', groupId || '');
+    formDataToSend.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
+    files.forEach(f => formDataToSend.append('files', f));
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/requisition-monthly`, {
         method: 'POST',
-        headers: { 'accept': '*/*' },
+        headers: { accept: '*/*' },
         body: formDataToSend,
       });
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || `Add failed with status ${res.status}`);
+        const error = await res.json();
+        throw new Error(error.message || 'Add failed');
       }
-
-      setSnackbarMessage('Request added successfully!');
+      setSnackbarMessage('Added successfully!');
+      setSnackbarSeverity('success');
       setSnackbarOpen(true);
-
-      if (typeof onRefresh === 'function') await onRefresh();
+      onRefresh?.();
       onClose();
-
-      setFormData(defaultFormData);
-      setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
-      setDeptErrors(['']);
-      setProductType1List([]);
-      setProductType2List([]);
-      setSelectedSupplier(null);
-      setShowSupplierSelector(true);
-      setGroupCurrency('VND');
-      setCurrencyError(null);
-      previews.forEach((preview) => URL.revokeObjectURL(preview));
-      setFiles([]);
-      setPreviews([]);
     } catch (err) {
-      console.error('Add error:', err);
-      setSnackbarMessage(`Add failed: ${err.message}`);
+      setSnackbarMessage(err.message || 'Add failed');
+      setSnackbarSeverity('error');
       setSnackbarOpen(true);
     } finally {
       setSaving(false);
+      setConfirmOpen(false);
     }
   };
 
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle
-          sx={{
-            bgcolor: (theme) => theme.palette.primary.main,
-            color: (theme) => theme.palette.primary.contrastText,
-            fontWeight: 'bold',
-            fontSize: '1.25rem',
-            textTransform: 'capitalize',
-            letterSpacing: 1,
-          }}
-        >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}>
           Add Monthly Requisition
         </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2}>
-            {currencyError && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {currencyError}
-              </Alert>
-            )}
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <Stack direction="row" spacing={2}>
-              <TextField
-                label="Old SAP Code"
-                value={formData.oldSAPCode}
-                onChange={handleChange('oldSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-                InputLabelProps={{ style: { color: 'inherit' } }}
-              />
-              <TextField
-                label="Hana SAP Code"
-                value={formData.hanaSAPCode}
-                onChange={handleChange('hanaSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-              />
+              <TextField label="Old SAP Code" value={formData.oldSAPCode} onChange={handleChange('oldSAPCode')} size="small" fullWidth />
+              <TextField label="Hana SAP Code" value={formData.hanaSAPCode} onChange={handleChange('hanaSAPCode')} size="small" fullWidth />
             </Stack>
 
             <Stack direction="row" spacing={2}>
-              <TextField
-                label="Item Description (VN)"
-                value={formData.itemDescriptionVN}
-                onChange={handleChange('itemDescriptionVN')}
-                fullWidth
-                size="small"
-                InputLabelProps={{ style: { color: 'inherit' } }}
-              />
-              <TextField
-                label="Item Description (EN)"
-                value={formData.itemDescriptionEN}
-                onChange={handleChange('itemDescriptionEN')}
-                fullWidth
-                size="small"
-                InputLabelProps={{ style: { color: 'inherit' } }}
-                disabled={translating}
-                InputProps={{
-                  endAdornment: translating ? <CircularProgress size={16} /> : null,
-                }}
-              />
+              <TextField label="Item Description (VN) *" value={formData.itemDescriptionVN} onChange={handleChange('itemDescriptionVN')} size="small" fullWidth required />
+              <TextField label="Item Description (EN)" value={formData.itemDescriptionEN} onChange={handleChange('itemDescriptionEN')} size="small" fullWidth disabled={translating} InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }} />
             </Stack>
 
-            <TextField
-              label="Full Description"
-              value={formData.fullDescription}
-              onChange={handleChange('fullDescription')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
+            <TextField label="Full Description" value={formData.fullDescription} onChange={handleChange('fullDescription')} size="small" fullWidth multiline rows={2} />
 
             {showSupplierSelector ? (
               <SupplierSelector
                 oldSapCode={formData.oldSAPCode}
+                itemNo={itemNoForSearch}
                 onSelectSupplier={handleSelectSupplier}
-                productType1List={productType1List}
-                productType2List={productType2List}
                 currency={groupCurrency}
-                disabled={loadingCurrency}
               />
-            ) : (
-              selectedSupplier && (
-                <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
-                  <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
-                  <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                  <Typography>
-                    Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', {
-                      style: 'currency',
-                      currency: groupCurrency,
-                    })}
-                  </Typography>
-                  <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
-                    Change Supplier
-                  </Button>
-                </Box>
-              )
-            )}
+            ) : selectedSupplier ? (
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa' }}>
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Selected Supplier:</Typography>
+                <Typography><strong>{selectedSupplier.supplierName}</strong></Typography>
+                <Typography>SAP Code: <strong>{selectedSupplier.sapCode || '—'}</strong></Typography>
+                <Typography>
+                  Price: <strong>
+                    {selectedSupplier.price > 0
+                      ? selectedSupplier.price.toLocaleString('vi-VN', { style: 'currency', currency: selectedSupplier.currency || groupCurrency })
+                      : '—'}
+                  </strong>
+                </Typography>
+                <Typography>Unit: <strong>{selectedSupplier.unit || '—'}</strong></Typography>
+                <Button size="small" variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
+                  Change Supplier
+                </Button>
+              </Paper>
+            ) : null}
 
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                Department Requisitions:
-              </Typography>
-              {deptRows.map((row, index) => (
-                <Stack direction="row" spacing={2} alignItems="center" key={index} sx={{ mb: 1 }}>
-                  <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
-                    <InputLabel id={`department-label-${index}`}>Department</InputLabel>
+            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Department Request Qty:</Typography>
+              {deptRows.map((row, i) => (
+                <Stack direction="row" spacing={2} alignItems="center" key={i} sx={{ mt: 1 }}>
+                  {/* CHỈ SỬA ĐOẠN NÀY: HIỆN LỖI ĐỎ DƯỚI Ô */}
+                  <FormControl fullWidth size="small" error={!!deptErrors[i]}>
+                    <InputLabel>Department</InputLabel>
                     <Select
-                      labelId={`department-label-${index}`}
                       value={row.id}
                       label="Department"
-                      onChange={(e) => handleDeptChange(index, 'id', e.target.value)}
+                      onChange={(e) => handleDeptChange(i, 'id', e.target.value)}
                     >
                       <MenuItem value=""><em>None</em></MenuItem>
-                      {departmentList.length > 0 ? (
-                        departmentList.map((dept) => (
-                          <MenuItem key={dept.id} value={dept.id}>
-                            {dept.departmentName}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>No departments available</MenuItem>
-                      )}
+                      {departmentList.map(d => (
+                        <MenuItem key={d.id} value={d.id}>{d.departmentName}</MenuItem>
+                      ))}
                     </Select>
-                    {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                    {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                    {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
                   </FormControl>
-                  <TextField
-                    label="Qty"
-                    type="number"
-                    value={row.qty}
-                    onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
-                    size="small"
-                    fullWidth
-                  />
-                  <TextField
-                    label="Buy"
-                    type="number"
-                    value={row.buy}
-                    size="small"
-                    fullWidth
-                    disabled
-                  />
-                  <IconButton
-                    aria-label="delete department"
-                    onClick={() => handleDeleteDeptRow(index)}
-                    size="small"
-                    color="error"
-                    sx={{ ml: 1 }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+
+                  <TextField label="Qty" type="number" size="small" value={row.qty} onChange={(e) => handleDeptChange(i, 'qty', e.target.value)} />
+                  <TextField label="Buy" type="number" size="small" value={row.buy || ''} disabled sx={{ bgcolor: '#f5f5f5' }} />
+                  <IconButton onClick={() => handleDeleteDeptRow(i)} color="error"><DeleteIcon /></IconButton>
                 </Stack>
               ))}
-              <Button variant="outlined" startIcon={<AddIcon />} onClick={handleAddDeptRow} sx={{ mt: 1 }}>
-                Add Department
-              </Button>
+              <Button startIcon={<AddIcon />} onClick={handleAddDeptRow} variant="outlined" size="small" sx={{ mt: 1 }}>Add Department</Button>
 
-              <Stack
-                direction="row"
-                spacing={4}
-                sx={{
-                  mt: 2,
-                  bgcolor: '#f5f5f5',
-                  p: 2,
-                  borderRadius: 1,
-                  boxShadow: 1,
-                  justifyContent: 'space-between',
-                  textTransform: 'capitalize',
-                }}
-              >
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
-                </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-                </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Price: <span style={{ color: '#1976d2' }}>
-                    {(formData.supplierPrice || 0).toLocaleString('vi-VN', {
-                      style: 'currency',
-                      currency: groupCurrency,
-                    })}
-                  </span>
-                </Typography>
-              </Stack>
+              <Box sx={{ mt: 2, p: 2, bgcolor: '#f0f7ff', borderRadius: 1 }}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between">
+                  <Typography><strong>Total Request:</strong> <span style={{ color: '#1976d2' }}>{totalRequestQty}</span></Typography>
+                  <Typography><strong>Total Buy:</strong> <span style={{ color: '#1976d2' }}>{formData.dailyMedInventory || 0}</span></Typography>
+                  <Typography><strong>Unit:</strong> {formData.unit || '-'}</Typography>
+                </Stack>
+              </Box>
             </Paper>
 
-            {/* SỬA 3: Thêm inputProps={{ min: 0 }} */}
-            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-              <TextField
-                label="Daily Med Inventory"
-                value={formData.dailyMedInventory}
-                onChange={handleChange('dailyMedInventory')}
-                size="small"
-                fullWidth
-                type="number"
-                sx={{ flex: 1 }}
-                inputProps={{ min: 0 }} // Không cho nhập số âm
-              />
-              <TextField
-                label="Safe Stock"
-                value={formData.safeStock}
-                onChange={handleChange('safeStock')}
-                size="small"
-                fullWidth
-                type="number"
-                sx={{ flex: 1 }}
-                inputProps={{ min: 0 }} // Không cho nhập số âm
-              />
-            </Stack>
-            {inventoryError && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {inventoryError}
-              </Alert>
-            )}
+            <TextField
+              label="Confirmed MED Quantity *"
+              type="number"
+              value={formData.dailyMedInventory}
+              onChange={handleChange('dailyMedInventory')}
+              size="small"
+              fullWidth
+              error={!!orderQtyError}
+              helperText={orderQtyError || `Total request: ${totalRequestQty}`}
+              inputProps={{ min: 0 }}
+            />
 
-            <TextField
-              label="Reason"
-              value={formData.reason}
-              onChange={handleChange('reason')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
-            <TextField
-              label="Remark"
-              value={formData.remark}
-              onChange={handleChange('remark')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
+            <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} size="small" fullWidth multiline rows={2} />
+            <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} size="small" fullWidth multiline rows={2} />
+
             <FormControl fullWidth size="small">
-              <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
-              <Select
-                labelId="remark-comparison-label"
-                value={formData.remarkComparison}
-                label="Remark Comparison"
-                onChange={handleChange('remarkComparison')}
-              >
+              <InputLabel>Remark Comparison</InputLabel>
+              <Select value={formData.remarkComparison} label="Remark Comparison" onChange={handleChange('remarkComparison')}>
                 <MenuItem value=""><em>None</em></MenuItem>
                 <MenuItem value="Old price">Old price</MenuItem>
-                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
-                  The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
-                </MenuItem>
+                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">The goods heavy and Small Q'ty. Only 1 Supplier can provide this type</MenuItem>
               </Select>
             </FormControl>
 
             <Box>
               <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                  Choose Image
-                  <input hidden type="file" accept="image/*" multiple onChange={handleFileChange} />
-                </Button>
-                {files.length > 0 && (
-                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    {files.length} image(s) selected
-                  </Typography>
-                )}
-              </Stack>
+              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+                Choose Images
+                <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
+              </Button>
+              {files.length > 0 && <Typography variant="body2" sx={{ mt: 1 }}>{files.length} image(s) selected</Typography>}
               {previews.length > 0 && (
-                <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  {previews.map((preview, index) => (
-                    <Box key={`new-${index}`} sx={{ position: 'relative' }}>
-                      <img
-                        src={preview}
-                        alt={`New ${index + 1}`}
-                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      />
-                      <IconButton
-                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                        onClick={() => handleRemoveFile(index)}
-                      >
-                        <CloseIcon color="error" />
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
+                  {previews.map((url, i) => (
+                    <Box key={i} sx={{ position: 'relative' }}>
+                      <img src={url} alt="" style={{ height: 120, borderRadius: 4, border: '1px solid #ddd' }} />
+                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.8)' }} onClick={() => handleRemoveFile(i)}>
+                        <CloseIcon fontSize="small" color="error" />
                       </IconButton>
                     </Box>
                   ))}
                 </Box>
               )}
-              {files.length === 0 && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 1 }}>
-                  No images selected
-                </Typography>
-              )}
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 1.5 }}>
-          <Button onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
+
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
+          {/* Thêm kiểm tra trùng phòng để disable nút Add */}
           <Button
             variant="contained"
             onClick={handleAddClick}
-            disabled={saving || deptErrors.some((error) => error) || loadingCurrency || !!inventoryError}
+            disabled={saving || !!orderQtyError || deptErrors.some(Boolean)}
           >
-            {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
+            {saving ? <CircularProgress size={20} /> : 'Add'}
           </Button>
         </DialogActions>
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={3000}
-          onClose={() => setSnackbarOpen(false)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <Alert
-            onClose={() => setSnackbarOpen(false)}
-            severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'}
-            sx={{ width: '100%' }}
-          >
-            {snackbarMessage}
-          </Alert>
-        </Snackbar>
       </Dialog>
 
-      <Dialog open={openConfirmDialog} onClose={handleCancelAdd}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Requisition</DialogTitle>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Confirm Add Requisition</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to add a new requisition with Item Description (VN) &quot;{formData.itemDescriptionVN || 'Unknown'}&quot;?
+          <Typography>
+            Are you sure to add "<strong>{formData.itemDescriptionVN || 'this item'}</strong>"?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelAdd} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmAdd}
-            variant="contained"
-            sx={{
-              fontSize: '0.875rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={saving}
-          >
-            Confirm
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleConfirmAdd} disabled={saving}>
+            {saving ? <CircularProgress size={20} /> : 'Confirm Add'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={5000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity={snackbarSeverity} onClose={() => setSnackbarOpen(false)}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

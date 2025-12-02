@@ -28,14 +28,20 @@ import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
+const normalizeCurrencyCode = (code) => {
+  const map = { EURO: 'EUR' };
+  if (!code) return 'VND';
+  const normalized = map[code.toUpperCase()] || code.toUpperCase();
+  return ['VND', 'USD', 'EUR', 'JPY', 'GBP'].includes(normalized) ? normalized : 'VND';
+};
+
 export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
-    fullDescription: '',
-    oldSAPCode: '',
-    hanaSAPCode: '',
-    stock: '',
+    fullItemDescriptionVN: '',
+    oldSapCode: '',
+    hanaSapCode: '',
     orderQty: '',
     reason: '',
     remark: '',
@@ -47,349 +53,209 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     unit: '',
     supplierPrice: 0,
   });
+
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
-  const [deptErrors, setDeptErrors] = useState([]);
+  const [deptErrors, setDeptErrors] = useState(['']);
   const [saving, setSaving] = useState(false);
-  const [productType1List, setProductType1List] = useState([]);
-  const [productType2List, setProductType2List] = useState([]);
-  const [loadingType1, setLoadingType1] = useState(false);
-  const [loadingType2, setLoadingType2] = useState(false);
   const [departmentList, setDepartmentList] = useState([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
-  const [imageUrls, setImageUrls] = useState([]);
+  const [translating, setTranslating] = useState(false);
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const [imageUrls, setImageUrls] = useState([]);
   const [imagesToDelete, setImagesToDelete] = useState([]);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [selectedSupplier, setSelectedSupplier] = useState(null);
-  const [showSupplierSelector, setShowSupplierSelector] = useState(false);
-  const [translating, setTranslating] = useState(false);
-  const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
-  const [initialVNDescription, setInitialVNDescription] = useState('');
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
-  const [currencyError, setCurrencyError] = useState(null);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [showSupplierSelector, setShowSupplierSelector] = useState(true);
+  const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
-const fetchGroupCurrency = useCallback(async () => {
-  if (!item?.requisition?.groupId) {
-    setCurrencyError('Invalid group ID');
-    setGroupCurrency('VND');
-    return;
-  }
+  const totalRequestQty = deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
 
-  setLoadingCurrency(true);
-  setCurrencyError(null);
+  const orderQtyError = formData.orderQty && totalRequestQty > 0 && parseFloat(formData.orderQty) > totalRequestQty
+    ? `Order Q'ty cannot exceed total request (${totalRequestQty})`
+    : '';
 
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`,
-      {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
+  const autoAllocateBuy = useCallback((rows, orderQtyInput) => {
+    const orderQty = parseFloat(orderQtyInput) || 0;
+    if (orderQty <= 0 || totalRequestQty === 0) {
+      return rows.map(r => ({ ...r, buy: '' }));
+    }
+    const effectiveQty = Math.min(orderQty, totalRequestQty);
+
+    const sorted = rows
+      .map((r, i) => ({ ...r, originalIndex: i }))
+      .filter(r => parseFloat(r.qty) > 0)
+      .sort((a, b) => (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex);
+
+    const allocated = {};
+    let remaining = effectiveQty;
+
+    for (const row of sorted) {
+      if (remaining <= 0) break;
+      const req = parseFloat(row.qty) || 0;
+      if (req > 0) {
+        const give = Math.min(req, remaining);
+        allocated[row.department] = give;
+        remaining -= give;
       }
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
     }
 
-    // Read JSON directly from response body
-    const result = await response.json();
-
-    const apiCurrency = result.currency || 'VND';
-
-    const currencyCodeMap = {
-      EURO: 'EUR',
-      VND: 'VND',
-      USD: 'USD',
-    };
-
-    const normalizedCurrency =
-      currencyCodeMap[apiCurrency.toUpperCase()] || apiCurrency;
-
-    try {
-      new Intl.NumberFormat('vi-VN', {
-        style: 'currency',
-        currency: normalizedCurrency,
-      }).format(0);
-
-      setGroupCurrency(normalizedCurrency);
-    } catch (err) {
-      console.error('Invalid currency code:', normalizedCurrency);
-      setCurrencyError(`Invalid currency code: ${normalizedCurrency}. Using default (VND).`);
-      setGroupCurrency('VND');
-    }
-  } catch (err) {
-    console.error('Error fetching currency:', err);
-    setCurrencyError('Cannot fetch currency. Using default (VND).');
-    setGroupCurrency('VND');
-  } finally {
-    setLoadingCurrency(false);
-  }
-}, [item]);
-
+    return rows.map(row => ({
+      ...row,
+      buy: allocated[row.department] ?? ''
+    }));
+  }, [totalRequestQty]);
 
   useEffect(() => {
-    console.log('EditDialog opened with item:', item);
-    if (open && item && item.requisition && item.requisition.id) {
-      fetchData();
-      fetchGroupCurrency();
-    } else {
-      resetForm();
-      setShowSupplierSelector(true);
+    if (!orderQtyError) {
+      setDeptRows(prev => autoAllocateBuy(prev, formData.orderQty));
     }
-    if (open) {
-      fetchProductType1List();
-      fetchDepartmentList();
+  }, [formData.orderQty, autoAllocateBuy, orderQtyError]);
+
+  const fetchGroupCurrency = useCallback(async () => {
+    if (!item?.requisition?.groupId) return setGroupCurrency('VND');
+    setLoadingCurrency(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGroupCurrency(normalizeCurrencyCode(data.currency));
+      }
+    } catch {
+      setGroupCurrency('VND');
+    } finally {
+      setLoadingCurrency(false);
     }
-    setOpenConfirmDialog(false);
-  }, [open, item, fetchGroupCurrency]);
+  }, [item]);
 
   const fetchData = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed: ${res.status} - ${text.substring(0, 100)}`);
-      }
-
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        throw new Error(`Expected JSON, received: ${text.substring(0, 100)}`);
-      }
-
-      const data = await res.json();  
-      console.log('API response:', data);
-      const requisition = data; // Since API now returns RequisitionMonthly directly
-      const supplierProduct = data.supplierProduct || {};
-      const vietnameseName = requisition.itemDescriptionVN || '';
+      if (!res.ok) throw new Error('Load failed');
+      const data = await res.json();
 
       setFormData({
-        itemDescriptionEN: requisition.itemDescriptionEN || '',
-        itemDescriptionVN: vietnameseName,
-        fullDescription: requisition.fullDescription || '',
-        oldSAPCode: requisition.oldSAPCode || '',
-        hanaSAPCode: requisition.hanaSAPCode || '',
-        stock: requisition.stock != null ? requisition.stock.toString() : '', // Use stock, synced with dailyMedInventory
-        orderQty: requisition.orderQty != null ? requisition.orderQty.toString() : '',
-        reason: requisition.reason || '',
-        remark: requisition.remark || '',
-        remarkComparison: requisition.remarkComparison || '',
-        supplierId: requisition.supplierId || '',
-        groupId: requisition.groupId || '',
-        productType1Id: requisition.productType1Id || '',
-        productType2Id: requisition.productType2Id || '',
-        unit: requisition.unit || '',
-        supplierPrice: requisition.price || 0,
+        itemDescriptionEN: data.itemDescriptionEN || '',
+        itemDescriptionVN: data.itemDescriptionVN || '',
+        fullItemDescriptionVN: data.fullDescription || '',
+        oldSapCode: data.oldSAPCode || '',
+        hanaSapCode: data.hanaSAPCode || '',
+        orderQty: data.orderQty?.toString() || '',
+        reason: data.reason || '',
+        remark: data.remark || '',
+        remarkComparison: data.remarkComparison || '',
+        supplierId: data.supplierId || '',
+        groupId: data.groupId || '',
+        productType1Id: data.productType1Id || '',
+        productType2Id: data.productType2Id || '',
+        unit: data.unit || '',
+        supplierPrice: data.price || 0,
       });
 
-      setDeptRows(
-        requisition.departmentRequisitions && Array.isArray(requisition.departmentRequisitions)
-          ? requisition.departmentRequisitions.map((dept) => ({
-              department: dept.id,
-              qty: dept.qty != null ? dept.qty.toString() : '',
-              buy: dept.buy != null ? dept.buy.toString() : '',
-            }))
-          : [{ department: '', qty: '', buy: '' }]
-      );
-      setDeptErrors(
-        requisition.departmentRequisitions && Array.isArray(requisition.departmentRequisitions)
-          ? requisition.departmentRequisitions.map(() => '')
-          : ['']
-      );
+      const depts = (data.departmentRequisitions || []).map(d => ({
+        department: d.id ? String(d.id) : '',
+        qty: d.qty ? String(d.qty) : '',
+        buy: d.buy ? String(d.buy) : '',
+      }));
 
-      setImageUrls(requisition.imageUrls || []);
-      setImagesToDelete([]);
+      if (depts.length === 0) depts.push({ department: '', qty: '', buy: '' });
+
+      setDeptRows(depts);
+      setDeptErrors(new Array(depts.length).fill(''));
+
+      setImageUrls(data.imageUrls || []);
       setFiles([]);
       setPreviews([]);
-      setSelectedSupplier(
-        requisition.supplierId
-          ? {
-              id: requisition.supplierId,
-              supplierName: requisition.supplierName || '',
-              sapCode: requisition.oldSAPCode || '',
-              itemDescription: requisition.itemDescriptionVN || '',
-              price: requisition.price || 0,
-              unit: requisition.unit || '',
-              fullDescription: requisition.fullDescription || '',
-              productType1Id: requisition.productType1Id || '',
-              productType2Id: requisition.productType2Id || '',
-            }
-          : null
-      );
-      if (requisition.supplierId) {
+      setImagesToDelete([]);
+
+      if (data.supplierId) {
+        setSelectedSupplier({
+          supplierName: data.supplierName || '',
+          sapCode: data.oldSAPCode || '',
+          price: data.price || 0,
+          unit: data.unit || '',
+        });
         setShowSupplierSelector(false);
+      } else {
+        setShowSupplierSelector(true);
       }
+
       setIsEnManuallyEdited(false);
-      setInitialVNDescription(vietnameseName);
     } catch (err) {
-      console.error('Fetch error:', err);
-      setSnackbarMessage(`Failed to load data: ${err.message}`);
-      setSnackbarOpen(true);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      itemDescriptionEN: '',
-      itemDescriptionVN: '',
-      fullDescription: '',
-      oldSAPCode: '',
-      hanaSAPCode: '',
-      stock: '',
-      orderQty: '',
-      reason: '',
-      remark: '',
-      remarkComparison: '',
-      supplierId: '',
-      groupId: '',
-      productType1Id: '',
-      productType2Id: '',
-      unit: '',
-      supplierPrice: 0,
-    });
-    setDeptRows([{ department: '', qty: '', buy: '' }]);
-    setDeptErrors(['']);
-    setImageUrls([]);
-    setImagesToDelete([]);
-    setFiles([]);
-    setPreviews([]);
-    setSelectedSupplier(null);
-    setShowSupplierSelector(true);
-    setIsEnManuallyEdited(false);
-    setInitialVNDescription('');
-    setGroupCurrency('VND');
-    setCurrencyError(null);
-    setOpenConfirmDialog(false);
-  };
-
-  const translateText = async (text) => {
-    if (!text) {
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Vietnamese description has been cleared.');
-      setSnackbarOpen(true);
-      setIsEnManuallyEdited(false);
-      return;
-    }
-
-    setTranslating(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          accept: '*/*',
-        },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Translation failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      const translatedText = data.translatedText || data.text;
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
-      setIsEnManuallyEdited(false);
-    } catch (error) {
-      console.error('Translation error:', error.message);
-      setFormData((prev) => ({ ...prev, itemDescriptionEN: '' }));
-      setSnackbarMessage('Unable to translate text. Please try again or enter manually.');
-      setSnackbarOpen(true);
-    } finally {
-      setTranslating(false);
-    }
-  };
-
-  const debouncedTranslate = useCallback(
-    debounce((text) => {
-      if (text !== initialVNDescription && !isEnManuallyEdited) {
-        translateText(text);
-      }
-    }, 500),
-    [initialVNDescription, isEnManuallyEdited]
-  );
-
-  useEffect(() => {
-    if (formData.itemDescriptionVN !== initialVNDescription) {
-      debouncedTranslate(formData.itemDescriptionVN);
-    }
-    return () => debouncedTranslate.cancel();
-  }, [formData.itemDescriptionVN, debouncedTranslate, initialVNDescription]);
-
-    useEffect(() => {
-      return () => {
-        previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
-      };
-    }, [previews]);
-
-
-  const fetchProductType1List = async () => {
-    setLoadingType1(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/product-type-1`);
-      if (!res.ok) throw new Error('Failed to load product type 1 list');
-      const data = await res.json();
-      setProductType1List(data.content || data);
-    } catch (error) {
-      console.error(error);
-      setProductType1List([]);
-    } finally {
-      setLoadingType1(false);
-    }
-  };
-
-  useEffect(() => {
-    if (formData.productType1Id) {
-      fetchProductType2List(formData.productType1Id);
-    } else {
-      setProductType2List([]);
-    }
-  }, [formData.productType1Id]);
-
-  const fetchProductType2List = async (type1Id) => {
-    setLoadingType2(true);
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=50`
-      );
-      if (!res.ok) throw new Error('Failed to load product type 2 list');
-      const data = await res.json();
-      setProductType2List(data.content || data);
-    } catch (error) {
-      console.error(error);
-      setProductType2List([]);
-    } finally {
-      setLoadingType2(false);
+      setErrorMessage('Failed to load data');
+      setErrorOpen(true);
     }
   };
 
   const fetchDepartmentList = async () => {
     setLoadingDepartments(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/departments`, {
-        headers: { accept: '*/*' },
-      });
-      if (!res.ok) throw new Error('Failed to load department list');
+      const res = await fetch(`${API_BASE_URL}/api/departments`);
       const data = await res.json();
       setDepartmentList(data || []);
-    } catch (error) {
-      console.error('Error loading department list:', error);
-      setDepartmentList([]);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoadingDepartments(false);
     }
   };
 
+  useEffect(() => {
+    if (open && item?.requisition?.id) {
+      fetchData();
+      fetchGroupCurrency();
+      fetchDepartmentList();
+    } else {
+      // reset khi đóng
+      setFormData(prev => ({ ...prev, orderQty: '', oldSapCode: '', itemDescriptionVN: '' }));
+      setDeptRows([{ department: '', qty: '', buy: '' }]);
+      setDeptErrors(['']);
+      setFiles([]);
+      setPreviews([]);
+      setImageUrls([]);
+      setImagesToDelete([]);
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
+    }
+  }, [open, item]);
+
+  const translateText = async (text) => {
+    if (!text || isEnManuallyEdited) return;
+    setTranslating(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, itemDescriptionEN: data.translatedText || '' }));
+      }
+    } catch { }
+    finally { setTranslating(false); }
+  };
+
+  const debouncedTranslate = useCallback(debounce(translateText, 600), [isEnManuallyEdited]);
+
+  useEffect(() => {
+    if (formData.itemDescriptionVN && !isEnManuallyEdited) {
+      debouncedTranslate(formData.itemDescriptionVN);
+    }
+  }, [formData.itemDescriptionVN, debouncedTranslate]);
+
+  const itemNoForSupplier = formData.itemDescriptionVN.trim();
+
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
-      setFormData((prev) => ({
+      setFormData(prev => ({
         ...prev,
-        fullDescription: supplierData.fullItemDescriptionVN || '',
-        oldSAPCode: supplierData.oldSapCode || '',
+        fullItemDescriptionVN: supplierData.fullItemDescriptionVN || '',
+        oldSapCode: supplierData.oldSapCode || '',
         supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
@@ -397,35 +263,17 @@ const fetchGroupCurrency = useCallback(async () => {
         productType2Id: supplierData.productType2Id || '',
       }));
       setSelectedSupplier({
-        id: supplierData.supplierId,
-        sapCode: supplierData.oldSapCode || '',
-        itemNo: supplierData.itemDescriptionEN || '',
-        itemDescription: supplierData.itemDescriptionVN || '',
-        supplierCode: supplierData.supplierCode || '',
         supplierName: supplierData.supplierName || '',
-        price: supplierData.supplierPrice || 0,
+        sapCode: supplierData.oldSapCode || '',
+        price: parseFloat(supplierData.supplierPrice) || 0,
         unit: supplierData.unit || '',
-        fullDescription: supplierData.fullItemDescriptionVN || '',
-        productType1Id: supplierData.productType1Id || '',
-        productType2Id: supplierData.productType2Id || '',
       });
       setShowSupplierSelector(false);
-      if (supplierData.itemDescriptionVN) {
-        setFormData((prev) => ({ ...prev, itemDescriptionVN: supplierData.itemDescriptionVN }));
-        if (supplierData.itemDescriptionVN !== initialVNDescription && !isEnManuallyEdited) {
-          translateText(supplierData.itemDescriptionVN);
-        }
-      }
     } else {
-      setFormData((prev) => ({
+      setFormData(prev => ({
         ...prev,
-        fullDescription: '',
-        oldSAPCode: '',
-        supplierId: '',
-        unit: '',
-        supplierPrice: 0,
-        productType1Id: '',
-        productType2Id: '',
+        oldSapCode: '', supplierId: '', unit: '', supplierPrice: 0,
+        productType1Id: '', productType2Id: '', fullItemDescriptionVN: ''
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -434,294 +282,118 @@ const fetchGroupCurrency = useCallback(async () => {
 
   const handleChange = (field) => (e) => {
     const value = e.target.value;
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData(prev => ({ ...prev, [field]: value }));
     if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
-    if (field === 'oldSAPCode') {
-      if (!value) {
-        setSelectedSupplier(null);
-        setShowSupplierSelector(true);
-      } else if (value !== item.oldSAPCode) { // So sánh với item gốc
-        setShowSupplierSelector(true);
-      }
-    }
   };
-
 
   const handleDeptChange = (index, field, value) => {
-    const updatedRows = [...deptRows];
-    updatedRows[index][field] = value;
-    setDeptRows(updatedRows);
+    const newRows = [...deptRows];
+    newRows[index][field] = value;
+    setDeptRows(newRows);
 
-    const updatedErrors = updatedRows.map((row, i) => {
+    const newErrors = newRows.map((row, i) => {
       if (i === index && field === 'department' && value) {
-        const isDuplicate = updatedRows.some(
-          (otherRow, otherIndex) =>
-            otherIndex !== i && otherRow.department === value && value !== ''
-        );
-        return isDuplicate ? 'This department is already selected' : '';
+        const dup = newRows.some((r, j) => j !== i && r.department === value && r.department);
+        return dup ? 'This department is already selected' : '';
       }
-      return deptErrors[i] || '';
+      return '';
     });
-    setDeptErrors(updatedErrors);
+    setDeptErrors(newErrors);
   };
-  
+
   const handleAddDeptRow = () => {
     setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
     setDeptErrors([...deptErrors, '']);
   };
 
   const handleDeleteDeptRow = (index) => {
-    const updatedRows = deptRows.filter((_, i) => i !== index);
-    const updatedErrors = deptErrors.filter((_, i) => i !== index);
-    setDeptRows(updatedRows.length > 0 ? updatedRows : [{ department: '', qty: '', buy: '' }]);
-    setDeptErrors(updatedErrors.length > 0 ? updatedErrors : ['']);
+    setDeptRows(deptRows.filter((_, i) => i !== index));
+    setDeptErrors(deptErrors.filter((_, i) => i !== index));
   };
 
-  const calcTotalRequestQty = () => {
-    return deptRows.reduce((sum, row) => {
-      const q = parseFloat(row.qty) || 0;
-      return sum + q;
-    }, 0);
-  };
-
-  const calcTotalBuy = () => {
-    return deptRows.reduce((sum, row) => {
-      const b = parseFloat(row.buy) || 0;
-      return sum + b;
-    }, 0);
-  };
-
-  const calcTotalPrice = () => {
-    return calcTotalBuy() * (formData.supplierPrice || 0);
-  };
+  const calcTotalRequestQty = () => deptRows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
+  const calcTotalBuy = () => deptRows.reduce((s, r) => s + (parseFloat(r.buy) || 0), 0);
 
   const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    console.log('Selected files:', selectedFiles.map(file => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      isFile: file instanceof File,
-    })));
-    if (selectedFiles.length === 0) {
-      console.warn('No files selected');
-      return;
+    const selected = Array.from(e.target.files);
+    const valid = selected.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+    if (valid.length < selected.length) {
+      setErrorMessage('Only images ≤ 5MB allowed');
+      setErrorOpen(true);
     }
-
-    const validFiles = selectedFiles.filter(file => 
-      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
-    );
-    if (validFiles.length !== selectedFiles.length) {
-      setSnackbarMessage('Only image files under 5MB are accepted.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const newFiles = [...files, ...validFiles];
-    if (newFiles.length + imageUrls.length - imagesToDelete.length > 10) {
-      setSnackbarMessage('You can only upload a maximum of 10 images.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    previews.forEach((preview) => preview && URL.revokeObjectURL(preview));
+    const newFiles = [...files, ...valid];
     setFiles(newFiles);
-    const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file));
-    setPreviews(newPreviewUrls);
-    console.log('Updated files state:', newFiles.map(file => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })));
+    setPreviews(newFiles.map(f => URL.createObjectURL(f)));
     e.target.value = null;
   };
 
-  const handleRemoveImage = (index) => {
-    console.log('Removing image at index:', index);
+  const handleRemoveFile = (index) => {
     if (index < imageUrls.length) {
-      const newImageUrls = [...imageUrls];
-      const removedUrl = newImageUrls.splice(index, 1)[0];
-      setImageUrls(newImageUrls);
-      setImagesToDelete((prev) => [...prev, removedUrl]);
-      console.log('Updated imageUrls:', newImageUrls);
-      console.log('Updated imagesToDelete:', [...imagesToDelete, removedUrl]);
+      setImageUrls(imageUrls.filter((_, i) => i !== index));
+      setImagesToDelete(prev => [...prev, imageUrls[index]]);
     } else {
-      const adjustedIndex = index - imageUrls.length;
-      if (adjustedIndex >= 0 && adjustedIndex < previews.length) {
-        URL.revokeObjectURL(previews[adjustedIndex]);
-        const newFiles = files.filter((_, i) => i !== adjustedIndex);
-        const newPreviews = previews.filter((_, i) => i !== adjustedIndex);
-        setFiles(newFiles);
-        setPreviews(newPreviews);
-        console.log('Updated files:', newFiles.map(file => file.name));
-      }
+      const i = index - imageUrls.length;
+      URL.revokeObjectURL(previews[i]);
+      setFiles(files.filter((_, j) => j !== i));
+      setPreviews(previews.filter((_, j) => j !== i));
     }
   };
 
   const handleSaveClick = () => {
-    console.log('Save button clicked. Starting handleSaveClick...');
-    if (!item || !item.requisition || !item.requisition.id) {
-      setSnackbarMessage('Cannot save: Missing item or requisition ID.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    if (!formData.itemDescriptionVN) {
-      setSnackbarMessage('Product Description (VN) is required.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
-      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const departmentIds = deptRows
-      .filter((row) => row.department)
-      .map((row) => row.department);
-    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
-    if (hasDuplicates) {
-      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
-      setSnackbarOpen(true);
-      return;
-    }
-
+    if (!formData.itemDescriptionVN) return setErrorMessage('Item Description (VN) is required'), setErrorOpen(true);
+    if (totalRequestQty === 0) return setErrorMessage('At least one department must have Qty'), setErrorOpen(true);
+    if (orderQtyError) return setErrorMessage(orderQtyError), setErrorOpen(true);
+    const deptIds = deptRows.filter(r => r.department).map(r => r.department);
+    if (new Set(deptIds).size !== deptIds.length) return setErrorMessage('Duplicate departments'), setErrorOpen(true);
     setOpenConfirmDialog(true);
   };
 
-  const handleConfirmSave = async () => {
-    console.log('Confirm save clicked');
-    setOpenConfirmDialog(false);
-    await handleSave();
-  };
-
-  const handleCancelSave = () => {
-    console.log('Cancel confirmation clicked');
-    setOpenConfirmDialog(false);
-  };
-
   const handleSave = async () => {
-    if (!item || !item.requisition || !item.requisition.id) {
-      setSnackbarMessage('Cannot save: Missing item or requisition ID.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    if (!formData.itemDescriptionVN) {
-      setSnackbarMessage('Product Description (VN) is required.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    if (deptRows.every((row) => !row.department || !row.qty || !row.buy)) {
-      setSnackbarMessage('At least one department, quantity, and buy must be provided.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const departmentIds = deptRows
-      .filter((row) => row.department)
-      .map((row) => row.department);
-    const hasDuplicates = new Set(departmentIds).size !== departmentIds.length;
-    if (hasDuplicates) {
-      setSnackbarMessage('Duplicate departments detected. Please select unique departments.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    // Validate stock for non-negative value
-    if (formData.stock && parseFloat(formData.stock) < 0) {
-      setSnackbarMessage('Stock value cannot be negative.');
-      setSnackbarOpen(true);
-      return;
-    }
-
-    const deptRequisitions = deptRows
-      .filter((row) => row.department && row.qty && row.buy)
-      .map((row) => ({
-        id: row.department,
-        name: departmentList.find((dept) => dept.id === row.department)?.departmentName || '',
-        qty: parseFloat(row.qty) || 0,
-        buy: parseFloat(row.buy) || 0,
+    const departmentRequisitions = deptRows
+      .filter(r => r.department && r.qty)
+      .map(r => ({
+        id: r.department,
+        name: departmentList.find(d => d.id === r.department)?.departmentName || '',
+        qty: parseFloat(r.qty) || 0,
+        buy: parseFloat(r.buy) || 0,
       }));
 
-    const formDataToSend = new FormData();
-    files.forEach(file => formDataToSend.append('files', file));
-    const cleanImagesToDelete = imagesToDelete.filter(url => url && url.trim() !== '');
-    formDataToSend.append('imagesToDelete', JSON.stringify(cleanImagesToDelete));
-    Object.entries({
-      englishName: formData.itemDescriptionEN || '',
-      vietnameseName: formData.itemDescriptionVN || '',
-      fullDescription: formData.fullDescription || '',
-      oldSapCode: formData.oldSAPCode || '',
-      hanaSapCode: formData.hanaSAPCode || '',
-      departmentRequisitions: JSON.stringify(deptRequisitions), // Updated key
-      stock: formData.stock ? parseFloat(formData.stock) : 0, // Send stock as number
-      orderQty: parseFloat(formData.orderQty) || 0,
-      reason: formData.reason || '',
-      remark: formData.remark || '',
-      remarkComparison: formData.remarkComparison || '',
-      supplierId: formData.supplierId || '',
-      groupId: formData.groupId || '',
-      productType1Id: formData.productType1Id || undefined,
-      productType2Id: formData.productType2Id || undefined,
-    }).forEach(([key, value]) => {
-      if (value !== undefined) {
-        formDataToSend.append(key, value);
-      }
-    });
-
-    for (let [key, value] of formDataToSend.entries()) {
-      console.log(`FormData entry: ${key}=${value instanceof File ? value.name : value}`);
-    }
+    const fd = new FormData();
+    fd.append('englishName', formData.itemDescriptionEN || '');
+    fd.append('vietnameseName', formData.itemDescriptionVN || '');
+    fd.append('fullDescription', formData.fullItemDescriptionVN || '');
+    fd.append('oldSapCode', formData.oldSapCode || '');
+    fd.append('hanaSapCode', formData.hanaSapCode || '');
+    fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
+    fd.append('orderQty', parseFloat(formData.orderQty) || 0);
+    fd.append('reason', formData.reason || '');
+    fd.append('remark', formData.remark || '');
+    fd.append('remarkComparison', formData.remarkComparison || '');
+    fd.append('supplierId', formData.supplierId || '');
+    fd.append('groupId', formData.groupId || '');
+    fd.append('productType1Id', formData.productType1Id || '');
+    fd.append('productType2Id', formData.productType2Id || '');
+    fd.append('unit', formData.unit || '');
+    fd.append('supplierPrice', formData.supplierPrice || 0);
+    files.forEach(f => fd.append('files', f));
+    fd.append('imagesToDelete', JSON.stringify(imagesToDelete));
 
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
         method: 'PUT',
-        body: formDataToSend,
+        body: fd,
       });
-
       if (!res.ok) {
-        const errorText = await res.text();
-        let errorData = {};
-        try {
-          errorData = JSON.parse(errorText);
-        } catch (e) {
-          console.warn('Error response is not JSON:', errorText);
-        }
-        const apiMessage = errorData.message || errorText || `Update failed with status ${res.status}`;
-        throw new Error(apiMessage);
+        const err = await res.json();
+        throw new Error(err.message || 'Update failed');
       }
-
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        throw new Error(`Server returned non-JSON: ${text.substring(0, 100)}`);
-      }
-
-      const data = await res.json();
-      console.log('Save successful, response:', data);
-      const successMessage = data.message || 'Request updated successfully!';
-      setSnackbarMessage(successMessage);
-      setSnackbarOpen(true);
-      if (data.imageUrls) {
-        setImageUrls(data.imageUrls);
-        console.log('Updated imageUrls from response:', data.imageUrls);
-      }
-      previews.forEach(preview => preview && URL.revokeObjectURL(preview));
-      setFiles([]);
-      setPreviews([]);
-      setImagesToDelete([]);
-      await onRefresh();
-      onClose(successMessage);
+      onClose?.('Updated successfully!');
+      onRefresh?.();
     } catch (err) {
-      console.error('Update error:', err);
-      setSnackbarMessage(err.message);
-      setSnackbarOpen(true);
+      setErrorMessage(err.message || 'Update failed');
+      setErrorOpen(true);
     } finally {
       setSaving(false);
     }
@@ -730,382 +402,202 @@ const fetchGroupCurrency = useCallback(async () => {
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle
-          sx={{
-            bgcolor: (theme) => theme.palette.primary.main,
-            color: (theme) => theme.palette.primary.contrastText,
-            fontWeight: 'bold',
-            fontSize: '1.25rem',
-            textTransform: 'capitalize',
-            letterSpacing: 1,
-          }}
-        >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}>
           Edit Request
         </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2}>
-            {currencyError && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {currencyError}
-              </Alert>
-            )}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+
             <Stack direction="row" spacing={2}>
-              <TextField
-                label="Old SAP Code"
-                value={formData.oldSAPCode}
-                onChange={handleChange('oldSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Hana SAP Code"
-                value={formData.hanaSAPCode}
-                onChange={handleChange('hanaSAPCode')}
-                size="small"
-                fullWidth
-                sx={{ flex: 1 }}
-              />
+              <TextField label="Old SAP Code" value={formData.oldSapCode} onChange={handleChange('oldSapCode')} size="small" fullWidth />
+              <TextField label="Hana SAP Code" value={formData.hanaSapCode} onChange={handleChange('hanaSapCode')} size="small" fullWidth />
             </Stack>
 
             <Stack direction="row" spacing={2}>
               <TextField
-                label="Item Description (VN)"
+                label="Item Description (VN) *"
                 value={formData.itemDescriptionVN}
                 onChange={handleChange('itemDescriptionVN')}
-                fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
+                fullWidth
+                required
               />
               <TextField
                 label="Item Description (EN)"
                 value={formData.itemDescriptionEN}
                 onChange={handleChange('itemDescriptionEN')}
-                fullWidth
                 size="small"
-                InputLabelProps={{
-                  style: { color: 'inherit' },
-                }}
+                fullWidth
                 disabled={translating}
-                InputProps={{
-                  endAdornment: translating ? (
-                    <CircularProgress size={16} />
-                  ) : null,
-                }}
+                InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }}
               />
             </Stack>
 
             <TextField
-              label="Full Description (VN)"
-              value={formData.fullDescription}
-              onChange={handleChange('fullDescription')}
-              fullWidth
+              label="Full Item Description (VN)"
+              value={formData.fullItemDescriptionVN}
+              onChange={handleChange('fullItemDescriptionVN')}
               size="small"
+              fullWidth
               multiline
               rows={2}
             />
 
             {showSupplierSelector ? (
               <SupplierSelector
-                oldSapCode={formData.oldSAPCode}
+                oldSapCode={formData.oldSapCode}
+                itemNo={itemNoForSupplier}
                 onSelectSupplier={handleSelectSupplier}
-                selectedSupplier={selectedSupplier}
-                productType1List={productType1List}
-                productType2List={productType2List}
                 currency={groupCurrency}
                 disabled={loadingCurrency}
               />
-            ) : (
-              selectedSupplier && (
-                <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 4 }}>
-                  <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
-                  <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                  <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency || 'VND' })}</Typography>
-                  <Button variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
-                    Change Supplier
-                  </Button>
-                </Box>
-              )
-            )}
+            ) : selectedSupplier ? (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography fontWeight="bold">Selected Supplier:</Typography>
+                <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
+                <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
+                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
+                <Typography>Unit: {selectedSupplier.unit || '-'}</Typography>
+                <Button variant="outlined" size="small" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
+                  Change Supplier
+                </Button>
+              </Paper>
+            ) : null}
 
-            <Paper variant="outlined" sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                Requested Quantity by Department:
-              </Typography>
-              {deptRows.map((row, index) => (
-                <Stack
-                  direction="row"
-                  spacing={2}
-                  alignItems="center"
-                  key={index}
-                  sx={{ mb: 1 }}
-                >
-                  <FormControl fullWidth size="small" disabled={loadingDepartments} error={!!deptErrors[index]}>
-                    <InputLabel id={`department-label-${index}`}>Department</InputLabel>
+            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Department Request Qty:</Typography>
+              {deptRows.map((row, i) => (
+                <Stack direction="row" spacing={2} alignItems="center" key={i} sx={{ mt: 1 }}>
+                  <FormControl fullWidth size="small" error={!!deptErrors[i]}>
+                    <InputLabel>Department</InputLabel>
                     <Select
-                      labelId={`department-label-${index}`}
                       value={row.department}
                       label="Department"
-                      onChange={(e) => handleDeptChange(index, 'department', e.target.value)}
+                      onChange={(e) => handleDeptChange(i, 'department', e.target.value)}
+                      disabled={loadingDepartments}
                     >
-                      <MenuItem value="">
-                        <em>None</em>
-                      </MenuItem>
-                      {departmentList.length > 0 ? (
-                        departmentList.map((dept) => (
-                          <MenuItem key={dept.id} value={dept.id}>
-                            {dept.departmentName}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>No departments available</MenuItem>
-                      )}
+                      <MenuItem value=""><em>None</em></MenuItem>
+                      {departmentList.map(d => (
+                        <MenuItem key={d.id} value={String(d.id)}>{d.departmentName}</MenuItem>
+                      ))}
                     </Select>
-                    {deptErrors[index] && <FormHelperText>{deptErrors[index]}</FormHelperText>}
-                    {loadingDepartments && <FormHelperText>Loading departments...</FormHelperText>}
+                    {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
                   </FormControl>
-                  <TextField
-                    label="Quantity"
-                    type="number"
-                    value={row.qty}
-                    onChange={(e) => handleDeptChange(index, 'qty', e.target.value)}
-                    size="small"
-                    fullWidth
-                  />
+
+                  <TextField label="Qty" type="number" size="small" value={row.qty} onChange={e => handleDeptChange(i, 'qty', e.target.value)} />
+
                   <TextField
                     label="Buy"
                     type="number"
-                    value={row.buy}
-                    onChange={(e) => handleDeptChange(index, 'buy', e.target.value)}
                     size="small"
-                    fullWidth
+                    value={row.buy || ''}
+                    disabled
+                    InputProps={{ readOnly: true, style: { backgroundColor: '#f5f5f5' } }}
                   />
-                  <IconButton
-                    aria-label="delete department"
-                    onClick={() => handleDeleteDeptRow(index)}
-                    size="small"
-                    color="error"
-                    sx={{ ml: 1 }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+
+                  <IconButton onClick={() => handleDeleteDeptRow(i)} color="error"><DeleteIcon /></IconButton>
                 </Stack>
               ))}
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleAddDeptRow}
-                sx={{ mt: 1 }}
-              >
+
+              <Button startIcon={<AddIcon />} onClick={handleAddDeptRow} variant="outlined" size="small" sx={{ mt: 1 }}>
                 Add Department
               </Button>
 
-              <Stack
-                direction="row"
-                spacing={4}
-                sx={{
-                  mt: 2,
-                  bgcolor: '#f5f5f5',
-                  p: 2,
-                  borderRadius: 1,
-                  boxShadow: 1,
-                  justifyContent: 'space-between',
-                  textTransform: 'capitalize',
-                }}
-              >
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Total Requested Q'ty: <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span>
-                </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Total Buy: <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span>
-                </Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
-                  Unit: <span style={{ color: '#1976d2' }}>{formData.unit || '-'}</span>
-                </Typography>
-              </Stack>
+              <Box sx={{ mt: 2, p: 2, bgcolor: '#f9f9f9', borderRadius: 1 }}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between">
+                  <Typography><strong>Total Qty:</strong> <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span></Typography>
+                  <Typography><strong>Total Buy:</strong> <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span></Typography>
+                  <Typography><strong>Unit:</strong> {formData.unit || '-'}</Typography>
+                  <Typography><strong>Price:</strong> {(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
+                </Stack>
+              </Box>
             </Paper>
 
-            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-              <TextField
-                label="Stock"
-                value={formData.stock}
-                onChange={handleChange('stock')}
-                size="small"
-                fullWidth
-                type="number"
-                sx={{ flex: 1 }}
-                error={formData.stock && parseFloat(formData.stock) < 0}
-                helperText={formData.stock && parseFloat(formData.stock) < 0 ? 'Stock cannot be negative' : ''}
-              />
-              <TextField
-                label="Order Q'ty"
-                value={formData.orderQty}
-                onChange={handleChange('orderQty')}
-                size="small"
-                fullWidth
-                type="number"
-                sx={{ flex: 1 }}
-              />
-            </Stack>
+            <TextField
+              label="Order Q'ty"
+              type="number"
+              value={formData.orderQty}
+              onChange={handleChange('orderQty')}
+              size="small"
+              fullWidth
+              sx={{ mt: 2 }}
+              error={!!orderQtyError}
+              helperText={orderQtyError || `Total request: ${totalRequestQty}`}
+            />
 
-            <TextField
-              label="Reason"
-              value={formData.reason}
-              onChange={handleChange('reason')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
-            <TextField
-              label="Remark"
-              value={formData.remark}
-              onChange={handleChange('remark')}
-              fullWidth
-              size="small"
-              multiline
-              rows={2}
-            />
+            <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} size="small" fullWidth multiline rows={2} />
+            <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} size="small" fullWidth multiline rows={2} />
+
             <FormControl fullWidth size="small">
-              <InputLabel id="remark-comparison-label">Remark Comparison</InputLabel>
-              <Select
-                labelId="remark-comparison-label"
-                value={formData.remarkComparison}
-                label="Remark Comparison"
-                onChange={handleChange('remarkComparison')}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
+              <InputLabel>Remark Comparison</InputLabel>
+              <Select value={formData.remarkComparison} label="Remark Comparison" onChange={handleChange('remarkComparison')}>
+                <MenuItem value=""><em>None</em></MenuItem>
                 <MenuItem value="Old price">Old price</MenuItem>
-                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">
-                  The goods heavy and Small Q'ty. Only 1 Supplier can provide this type
-                </MenuItem>
+                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">The goods heavy and Small Q'ty. Only 1 Supplier can provide this type</MenuItem>
               </Select>
             </FormControl>
 
             <Box>
-              <InputLabel sx={{ mb: 1 }}>Images (Maximum 10)</InputLabel>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                  Select Images
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileChange}
-                  />
-                </Button>
-                {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
-                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    Selected {files.length + imageUrls.length - imagesToDelete.length} images
-                  </Typography>
-                )}
-              </Stack>
+              <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
+              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
+                Choose Images
+                <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
+              </Button>
+              {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  {files.length + imageUrls.length - imagesToDelete.length} image(s)
+                </Typography>
+              )}
               {(previews.length > 0 || imageUrls.length > 0) && (
-                <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  {imageUrls.map((url, index) => (
-                    <Box key={`existing-${index}`} sx={{ position: 'relative' }}>
-                      <img
-                        src={`${API_BASE_URL}${url}`}
-                        alt={`Image ${index + 1}`}
-                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                        onError={(e) => {
-                          console.error(`Failed to load image for ${url}`, e);
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                      <IconButton
-                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                        onClick={() => handleRemoveImage(index)}
-                      >
-                        <CloseIcon color="error" />
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
+                  {imageUrls.map((url, i) => (
+                    <Box key={`old-${i}`} sx={{ position: 'relative' }}>
+                      <img src={`${API_BASE_URL}${url}`} alt="" style={{ height: 120, borderRadius: 4, border: '1px solid #ddd' }} />
+                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.8)' }} onClick={() => handleRemoveFile(i)}>
+                        <CloseIcon fontSize="small" color="error" />
                       </IconButton>
                     </Box>
                   ))}
-                  {previews.map((preview, index) => (
-                    <Box key={`new-${index}`} sx={{ position: 'relative' }}>
-                      <img
-                        src={preview}
-                        alt={`New ${index + 1}`}
-                        style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                      />
-                      <IconButton
-                        sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 10 }}
-                        onClick={() => handleRemoveImage(index + imageUrls.length)}
-                      >
-                        <CloseIcon color="error" />
+                  {previews.map((url, i) => (
+                    <Box key={`new-${i}`} sx={{ position: 'relative' }}>
+                      <img src={url} alt="" style={{ height: 120, borderRadius: 4, border: '1px solid #ddd' }} />
+                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.8)' }} onClick={() => handleRemoveFile(i + imageUrls.length)}>
+                        <CloseIcon fontSize="small" color="error" />
                       </IconButton>
                     </Box>
                   ))}
                 </Box>
               )}
-              {files.length === 0 && imageUrls.length === imagesToDelete.length && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  No images selected
-                </Typography>
-              )}
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 1.5 }}>
-          <Button onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
+
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSaveClick}
-            disabled={saving || deptErrors.some((error) => error) || loadingCurrency}
+            disabled={saving || deptErrors.some(Boolean) || !!orderQtyError}
           >
-            {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+            {saving ? <CircularProgress size={20} /> : 'Save'}
           </Button>
         </DialogActions>
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={3000}
-          onClose={() => setSnackbarOpen(false)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <Alert
-            onClose={() => setSnackbarOpen(false)}
-            severity={snackbarMessage.includes('failed') || snackbarMessage.includes('Duplicate') ? 'error' : 'success'}
-            sx={{ width: '100%' }}
-          >
-            {snackbarMessage}
-          </Alert>
-        </Snackbar>
       </Dialog>
-      <Dialog open={openConfirmDialog} onClose={handleCancelSave}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Request</DialogTitle>
+
+      <Dialog open={openConfirmDialog} onClose={() => setOpenConfirmDialog(false)}>
+        <DialogTitle>Confirm Edit</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to save changes to the request with Item Description (VN) &quot;{formData.itemDescriptionVN || 'Unknown'}&quot;?
-          </Typography>
+          <Typography>Are you sure to save changes for "<strong>{formData.itemDescriptionVN || 'this item'}</strong>"?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelSave} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmSave}
-            variant="contained"
-            sx={{
-              fontSize: '0.875rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={saving}
-          >
-            Confirm
-          </Button>
+          <Button onClick={() => setOpenConfirmDialog(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>Confirm</Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar open={errorOpen} autoHideDuration={6000} onClose={() => setErrorOpen(false)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <Alert severity="error" onClose={() => setErrorOpen(false)}>{errorMessage}</Alert>
+      </Snackbar>
     </>
   );
 }

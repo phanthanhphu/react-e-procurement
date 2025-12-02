@@ -18,13 +18,11 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
     }
     fetch(`${API_BASE_URL}/group-summary-requisitions/${groupId}`)
       .then((response) => {
-        if (!response.ok) {
-          throw new Error('Failed to fetch group data');
-        }
+        if (!response.ok) throw new Error('Failed to fetch group data');
         return response.json();
       })
       .then((result) => {
-        console.log('API stockDate:', result.stockDate); // Debug log
+        console.log('API stockDate:', result.stockDate);
         const dateArray = result.stockDate;
         if (dateArray && dateArray.length >= 3) {
           const [year, month, day] = dateArray;
@@ -60,11 +58,9 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
         method: 'GET',
         headers: { Accept: '*/*' },
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const result = await response.json();
-      console.log('Summary requisitions data:', result.content); // Debug log
+      console.log('Summary requisitions data:', result.content);
       return result.content || [];
     } catch (error) {
       console.error('Error fetching group data for export:', error);
@@ -74,19 +70,12 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
 
   const exportToExcel = async () => {
     const exportData = await fetchAllGroupData();
-    
     if (!exportData || exportData.length === 0) {
       alert('No data to export');
       return;
     }
 
-    // Debug stock values and stockDate
-    console.log('stockDate before export:', stockDate);
-    exportData.forEach((item, index) => {
-      console.log(`Stock value for item ${index + 1}:`, item.requisition?.stock);
-    });
-
-    // Generate department keys from departmentRequests array
+    // Generate department keys
     const allDeptKeysSet = new Set();
     exportData.forEach((item) => {
       const deptRequests = item.departmentRequests || [];
@@ -96,8 +85,10 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
 
     const wsData = [];
 
+    // Cột đã bỏ Stock → còn 4 cột cuối
+    const totalCols = 8 + allDeptKeys.length + 4;
+
     // Title row
-    const totalCols = 8 + allDeptKeys.length + 5; // Includes Product Type 1 and 2
     const titleRow = new Array(totalCols).fill('');
     titleRow[0] = 'SUMMARY REQUISITION';
     wsData.push(titleRow);
@@ -114,7 +105,6 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
       'Unit',
       ...Array(allDeptKeys.length).fill("Department"),
       'Request Qty',
-      `Stock (${stockDate || dayjs().format('DD/MM/YYYY')})`,
       'Order Qty',
       'Reason',
       'Remark',
@@ -134,15 +124,14 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
       '',
       '',
       '',
-      '',
     ]);
 
-    // Data rows
+    // Data rows – dùng qty thay vì buy
     exportData.forEach((item, index) => {
       const { requisition, supplierProduct, departmentRequests, totalRequestQty, productType1Name, productType2Name } = item;
-      const deptBuy = {};
+      const deptQty = {};
       (departmentRequests || []).forEach((dept) => {
-        deptBuy[dept.departmentName] = dept.buy;
+        deptQty[dept.departmentName] = dept.qty || 0;  // ĐÃ DÙNG qty
       });
 
       const row = [
@@ -154,20 +143,18 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
         requisition?.oldSapCode || '',
         requisition?.hanaSapCode || '',
         supplierProduct?.unit || item.unit || '',
-        ...allDeptKeys.map((key) => deptBuy[key] || ''),
-        totalRequestQty || 0, // Updated to use totalRequestQty
-        requisition?.stock || 0,
+        ...allDeptKeys.map((key) => deptQty[key] || ''),
+        totalRequestQty || 0,
         requisition?.orderQty || '',
         requisition?.reason || '',
         requisition?.remark || '',
       ];
-
       wsData.push(row);
     });
 
     const dataEndRow = 3 + exportData.length - 1;
 
-    // Signature rows
+    // Signature rows – COPY NGUYÊN BẢN TỪ CODE CŨ CỦA ANH
     const signatureTitles = new Array(totalCols).fill('');
     const signatureNames = new Array(totalCols).fill('');
     const blankLine = new Array(totalCols).fill('');
@@ -209,7 +196,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Summary');
 
-    // Styles
+    // Styles – COPY NGUYÊN BẢN TỪ CODE CŨ
     const commonBorder = {
       top: { style: 'thin', color: { rgb: '000000' } },
       bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -246,13 +233,10 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
     };
 
     const totalRows = wsData.length;
-
     for (let r = 0; r < totalRows; r++) {
       for (let c = 0; c < totalCols; c++) {
         const cellRef = XLSX.utils.encode_cell({ r, c });
-        if (!ws[cellRef]) {
-          ws[cellRef] = { t: 's', v: '' };
-        }
+        if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
 
         if (r === 0) ws[cellRef].s = titleStyle;
         else if (r === 1 || r === 2) ws[cellRef].s = boldHeaderStyle;
@@ -263,22 +247,21 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
       }
     }
 
-    // Merges
+    // Merges – đã điều chỉnh lại cho đúng khi bỏ cột Stock
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-      { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } }, // Product Type 1
-      { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } }, // Product Type 2
-      { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } }, // Description (EN, VN)
-      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } }, // Old SAP Code
-      { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } }, // Hana SAP Code
-      { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } }, // Unit
-      { s: { r: 1, c: 8 }, e: { r: 1, c: 8 + allDeptKeys.length - 1 } }, // Department
-      { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } }, // Request Qty
-      { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } }, // Stock
-      { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } }, // Order Qty
-      { s: { r: 1, c: 11 + allDeptKeys.length }, e: { r: 2, c: 11 + allDeptKeys.length } }, // Reason
-      { s: { r: 1, c: 12 + allDeptKeys.length }, e: { r: 2, c: 12 + allDeptKeys.length } }, // Remark
+      { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
+      { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
+      { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
+      { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } },
+      { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
+      { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } },
+      { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } },
+      { s: { r: 1, c: 8 }, e: { r: 1, c: 8 + allDeptKeys.length - 1 } },
+      { s: { r: 1, c: 8 + allDeptKeys.length }, e: { r: 2, c: 8 + allDeptKeys.length } },
+      { s: { r: 1, c: 9 + allDeptKeys.length }, e: { r: 2, c: 9 + allDeptKeys.length } },
+      { s: { r: 1, c: 10 + allDeptKeys.length }, e: { r: 2, c: 10 + allDeptKeys.length } },
+      { s: { r: 1, c: 11 + allDeptKeys.length }, e: { r: 2, c: 11 + allDeptKeys.length } },
     ];
 
     startPositions.forEach((startCol, index) => {
@@ -291,26 +274,23 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
 
     ws['!merges'] = merges;
 
+    // Độ rộng cột – giống hệt code cũ
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
-    ws['!cols'][0] = { wch: 5 }; // No
-    ws['!cols'][1] = { wch: 20 }; // Product Type 1
-    ws['!cols'][2] = { wch: 20 }; // Product Type 2
-    ws['!cols'][3] = { wch: 20 }; // EN
-    ws['!cols'][4] = { wch: 20 }; // VN
-    ws['!cols'][5] = { wch: 15 }; // Old SAP Code
-    ws['!cols'][6] = { wch: 15 }; // Hana SAP Code
-    ws['!cols'][7] = { wch: 10 }; // Unit
-    allDeptKeys.forEach((_, idx) => {
-      ws['!cols'][8 + idx] = { wch: 12 }; // Department columns
-    });
-    ws['!cols'][8 + allDeptKeys.length] = { wch: 12 }; // Request Qty
-    ws['!cols'][9 + allDeptKeys.length] = { wch: 12 }; // Stock
-    ws['!cols'][10 + allDeptKeys.length] = { wch: 12 }; // Order Qty
-    ws['!cols'][11 + allDeptKeys.length] = { wch: 20 }; // Reason
-    ws['!cols'][12 + allDeptKeys.length] = { wch: 20 }; // Remark
+    ws['!cols'][0] = { wch: 5 };
+    ws['!cols'][1] = { wch: 20 };
+    ws['!cols'][2] = { wch: 20 };
+    ws['!cols'][3] = { wch: 20 };
+    ws['!cols'][4] = { wch: 20 };
+    ws['!cols'][5] = { wch: 15 };
+    ws['!cols'][6] = { wch: 15 };
+    ws['!cols'][7] = { wch: 10 };
+    allDeptKeys.forEach((_, idx) => { ws['!cols'][8 + idx] = { wch: 12 }; });
+    ws['!cols'][8 + allDeptKeys.length] = { wch: 12 };
+    ws['!cols'][9 + allDeptKeys.length] = { wch: 12 };
+    ws['!cols'][10 + allDeptKeys.length] = { wch: 20 };
+    ws['!cols'][11 + allDeptKeys.length] = { wch: 20 };
 
-    // Generate file name
-    const sanitizedGroupName = groupName.replace(/\s+/g, '-');
+    // Tên file
     const currentDateTime = dayjs().format('DDMMYYYYHHmm');
     const fileName = `weekly_request_${currentDateTime}.xlsx`;
 

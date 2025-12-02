@@ -92,7 +92,7 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Best Price', key: 'isBestPrice' },
   { label: 'Department Requests', key: 'departmentRequests' },
   { label: 'Request Qty', key: 'totalRequestQty' },
-  { label: 'Order Qty', key: 'orderQty' },
+  { label: 'MED Confirmed', key: 'medConfirmed' },
   { label: `Price (${getDisplayCurrency(currency)})`, key: 'price' },
   { label: 'Currency', key: 'currency' },
   { label: `Amount (${getDisplayCurrency(currency)})`, key: 'amount' },
@@ -525,7 +525,7 @@ export default function RequestMonthlyComparisonPage() {
     remarkComparison: item.remarkComparison || '',
     unit: item.unit || '',
     totalRequestQty: item.totalRequestQty || 0,
-    orderQty: item.orderQty || 0,
+    medConfirmed: item.medConfirmed ?? item.orderQty ?? 0,
     currency: item.currency || 'VND',
     productType2Name: item.productType2Name || '',
   }));
@@ -634,7 +634,7 @@ export default function RequestMonthlyComparisonPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Best Price', 'Request Qty', 'Order Qty', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
+                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Best Price', 'Request Qty', 'MED Confirmed', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
                           ? 'center'
                           : 'left'
                       }
@@ -813,8 +813,8 @@ export default function RequestMonthlyComparisonPage() {
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.totalRequestQty != null ? item.totalRequestQty.toString() : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.orderQty != null ? item.orderQty.toString() : '0'}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', fontWeight: 600, color: '#d32f2f' }}>
+                          {item.medConfirmed ?? item.orderQty ?? 0}
                         </TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
                           {item.price ? formatCurrency(item.price, item.currency) : '0'}

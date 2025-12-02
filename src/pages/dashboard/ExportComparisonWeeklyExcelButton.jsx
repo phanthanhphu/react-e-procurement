@@ -18,17 +18,12 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch group summary to get currency
         const groupResponse = await axios.get(
           `${API_BASE_URL}/api/group-summary-requisitions/${groupId}`,
           { headers: { Accept: '*/*' } }
         );
-        if (!groupResponse.data?.currency) {
-          console.warn('Warning: Currency not found, using default VND');
-        }
         setCurrency(groupResponse.data.currency || 'VND');
 
-        // Fetch comparison data
         const response = await axios.get(
           `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
           {
@@ -43,7 +38,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
             headers: { Accept: '*/*' },
           }
         );
-        console.log('API Response:', response.data);
+
         if (!response.data?.page?.content) {
           throw new Error('Invalid API response: Missing page.content');
         }
@@ -63,9 +58,35 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     fetchData();
   }, [groupId]);
 
-  const formatCurrency = (value, currency) => {
-    const locale = currency === 'USD' ? 'en-US' : currency === 'EUR' ? 'de-DE' : 'vi-VN';
-    return value != null ? value.toLocaleString(locale, { style: 'currency', currency }) : '0';
+  // Hàm format tiền tệ an toàn - đã fix lỗi EURO
+  const formatCurrency = (value, curr) => {
+    if (value == null) return '0';
+
+    const code = (curr || 'VND').trim().toUpperCase();
+    let currencyCode = 'VND';
+    let locale = 'vi-VN';
+
+    if (code === 'USD') {
+      currencyCode = 'USD';
+      locale = 'en-US';
+    } else if (code === 'EUR' || code === 'EURO') {
+      currencyCode = 'EUR';
+      locale = 'de-DE'; // hoặc 'fr-FR', 'en-GB' đều hiển thị €
+    }
+
+    try {
+      return Number(value).toLocaleString(locale, {
+        style: 'currency',
+        currency: currencyCode,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+    } catch (e) {
+      const num = Number(value).toLocaleString('vi-VN');
+      if (code === 'USD') return `$ ${num}`;
+      if (code.includes('EUR')) return `€ ${num}`;
+      return `${num} ${currencyCode}`;
+    }
   };
 
   const exportToExcel = () => {
@@ -85,12 +106,12 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     const totalCols = 9 + allSupplierKeys.length + 6;
     const wsData = [];
 
-    // Header Row 1: COMPARISON PRICE (merged A to Z)
+    // Header Row 1
     const titleRow = new Array(totalCols).fill('');
     titleRow[0] = 'COMPARISON PRICE';
     wsData.push(titleRow);
 
-    // Header Row 2: Product Type 1, Product Type 2, Item Description (merge 3-4), other fixed columns, List of Suppliers, Selected Supplier, Difference, Remark
+    // Header Row 2 - đã sửa lỗi ghi đè trùng
     const headerRow2 = new Array(totalCols).fill('');
     headerRow2[0] = 'No';
     headerRow2[1] = 'Product Type 1';
@@ -101,25 +122,16 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     headerRow2[7] = 'Unit';
     headerRow2[8] = 'Order Qty';
     headerRow2[9] = 'SUPPLIER';
-    headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier';
-    headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier';
+    headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier'; // chỉ ghi 1 lần
     headerRow2[9 + allSupplierKeys.length + 3] = 'Difference';
     headerRow2[9 + allSupplierKeys.length + 5] = 'Remark';
     wsData.push(headerRow2);
 
-    // Header Row 3: Detailed columns
+    // Header Row 3 - giữ nguyên như cũ
     const fixedColumns = [
-      'No',
-      'Product Type 1',
-      'Product Type 2',
-      'EN',
-      'VN',
-      'Old SAP Code',
-      'SAP Code in New SAP',
-      'Unit',
-      'Order Qty',
+      'No', 'Product Type 1', 'Product Type 2', 'EN', 'VN',
+      'Old SAP Code', 'SAP Code in New SAP', 'Unit', 'Order Qty',
     ];
-    const dynamicColumns = allSupplierKeys;
     const finalColumns = [
       'Supplier Description',
       `Price (${currency})`,
@@ -128,49 +140,34 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       `% (${currency})`,
       '',
     ];
-    wsData.push([...fixedColumns, ...dynamicColumns, ...finalColumns]);
+    wsData.push([...fixedColumns, ...allSupplierKeys, ...finalColumns]);
 
-    // Data rows
+    // Data rows - dùng formatCurrency mới
     data.forEach((item, index) => {
-      const {
-        type1Name,
-        type2Name,
-        englishName,
-        vietnameseName,
-        oldSapCode,
-        hanaSapCode,
-        suppliers,
-        remarkComparison,
-        unit,
-        orderQty,
-        amtVnd,
-        amtDifference,
-        percentage,
-      } = item;
-      const selectedSupplier = suppliers?.find((sup) => sup.isSelected === 1) || null;
+      const selectedSupplier = (item.suppliers || []).find(s => s.isSelected === 1);
 
       const supplierInfo = {};
-      (suppliers || []).forEach((sup) => {
+      (item.suppliers || []).forEach(sup => {
         supplierInfo[sup.supplierName] = sup.price ? formatCurrency(sup.price, currency) : '';
       });
 
       const row = [
         index + 1,
-        type1Name || '',
-        type2Name || '',
-        englishName || '',
-        vietnameseName || '',
-        oldSapCode || '',
-        hanaSapCode || '',
-        unit || '',
-        orderQty != null ? orderQty : 0,
-        ...allSupplierKeys.map((key) => supplierInfo[key] || ''),
-        selectedSupplier ? selectedSupplier.supplierName : '',
-        selectedSupplier ? formatCurrency(selectedSupplier.price, currency) : '',
-        formatCurrency(amtVnd, currency),
-        formatCurrency(amtDifference, currency),
-        percentage != null ? `${parseFloat(percentage).toFixed(2)}%` : '0%',
-        remarkComparison || '',
+        item.type1Name || '',
+        item.type2Name || '',
+        item.englishName || '',
+        item.vietnameseName || '',
+        item.oldSapCode || '',
+        item.hanaSapCode || '',
+        item.unit || '',
+        item.orderQty ?? 0,
+        ...allSupplierKeys.map(key => supplierInfo[key] || ''),
+        selectedSupplier?.supplierName || '',
+        selectedSupplier?.price ? formatCurrency(selectedSupplier.price, currency) : '',
+        formatCurrency(item.amtVnd || 0, currency),
+        formatCurrency(item.amtDifference || 0, currency),
+        item.percentage != null ? `${parseFloat(item.percentage).toFixed(2)}%` : '0%',
+        item.remarkComparison || '',
       ];
       wsData.push(row);
     });
@@ -182,10 +179,12 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     totalRow[0] = 'TOTAL';
     totalRow[9 + allSupplierKeys.length + 2] = formatCurrency(totalAmt, currency);
     totalRow[9 + allSupplierKeys.length + 3] = formatCurrency(totalAmtDifference, currency);
-    totalRow[9 + allSupplierKeys.length + 4] = totalDifferencePercentage != null ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` : '0%';
+    totalRow[9 + allSupplierKeys.length + 4] = totalDifferencePercentage != null 
+      ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` 
+      : '0%';
     wsData.push(totalRow);
 
-    // Signature rows
+    // Signature - giữ nguyên 100% như cũ
     const signatureTitles = new Array(totalCols).fill('');
     const signatureNames = new Array(totalCols).fill('');
     const blankLine = new Array(totalCols).fill('');
@@ -205,7 +204,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     const startPositions = [];
 
     let currentCol = colStep;
-    signaturePositions.forEach((_, index) => {
+    signaturePositions.forEach(() => {
       if (currentCol + sigWidth - 1 < totalCols) {
         startPositions.push(currentCol);
         currentCol += sigWidth + colStep;
@@ -222,6 +221,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
 
     wsData.push(blankLine, signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
 
+    // Phần còn lại giữ nguyên 100% format cũ của bạn
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Comparison');
@@ -233,42 +233,14 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       right: { style: 'thin', color: { rgb: '000000' } },
     };
 
-    const titleStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 18 },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: commonBorder,
-    };
-
-    const boldHeaderStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: commonBorder,
-    };
-
-    const normalCellStyle = {
-      font: { name: 'Times New Roman', sz: 11 },
-      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-      border: commonBorder,
-    };
-
-    const totalStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center', vertical: 'center' },
-      border: commonBorder,
-    };
-
-    const signatureHeaderStyle = {
-      font: { bold: true, name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center' },
-    };
-
-    const signatureNameStyle = {
-      font: { name: 'Times New Roman', sz: 12 },
-      alignment: { horizontal: 'center' },
-    };
+    const titleStyle = { font: { bold: true, name: 'Times New Roman', sz: 18 }, alignment: { horizontal: 'center', vertical: 'center' }, border: commonBorder };
+    const boldHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
+    const normalCellStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
+    const totalStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center' }, border: commonBorder };
+    const signatureHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
+    const signatureNameStyle = { font: { name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
 
     const totalRows = wsData.length;
-
     for (let r = 0; r < totalRows; r++) {
       for (let c = 0; c < totalCols; c++) {
         const cellRef = XLSX.utils.encode_cell({ r, c });
@@ -302,26 +274,24 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       { s: { r: dataEndRow, c: 0 }, e: { r: dataEndRow, c: 8 } },
     ];
 
-    startPositions.forEach((startCol, index) => {
+    startPositions.forEach((startCol) => {
       const endCol = Math.min(startCol + sigWidth - 1, totalCols - 1);
       if (startCol < totalCols) {
-        merges.push({ s: { r: dataEndRow + 2, c: startCol }, e: { r: dataEndRow + 2, c: endCol } });
-        merges.push({ s: { r: dataEndRow + 5, c: startCol }, e: { r: dataEndRow + 5, c: endCol } });
+        merges.push(
+          { s: { r: dataEndRow + 2, c: startCol }, e: { r: dataEndRow + 2, c: endCol } },
+          { s: { r: dataEndRow + 5, c: startCol }, e: { r: dataEndRow + 5, c: endCol } }
+        );
       }
     });
 
     ws['!merges'] = merges;
 
+    // Độ rộng cột - giữ nguyên như cũ
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
     ws['!cols'][0] = { wch: 5 };
-    ws['!cols'][1] = { wch: 20 };
-    ws['!cols'][2] = { wch: 20 };
-    ws['!cols'][3] = { wch: 20 };
-    ws['!cols'][4] = { wch: 20 };
-    ws['!cols'][5] = { wch: 15 };
-    ws['!cols'][6] = { wch: 15 };
-    ws['!cols'][7] = { wch: 10 };
-    ws['!cols'][8] = { wch: 10 };
+    ws['!cols'][1] = ws['!cols'][2] = ws['!cols'][3] = ws['!cols'][4] = { wch: 20 };
+    ws['!cols'][5] = ws['!cols'][6] = { wch: 15 };
+    ws['!cols'][7] = ws['!cols'][8] = { wch: 10 };
     allSupplierKeys.forEach((_, idx) => { ws['!cols'][9 + idx] = { wch: 15 }; });
     ws['!cols'][9 + allSupplierKeys.length] = { wch: 20 };
     ws['!cols'][9 + allSupplierKeys.length + 1] = { wch: 15 };
@@ -353,11 +323,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       >
         Comparison
       </Button>
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={() => setSnackbarOpen(false)}
-      >
+      <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={() => setSnackbarOpen(false)}>
         <Alert onClose={() => setSnackbarOpen(false)} severity="error" sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
