@@ -536,7 +536,7 @@ export default function RequisitionMonthlyPage() {
   };
 
   const open = Boolean(anchorEl);
-  const isCompleted = groupStatus === 'Completed';
+  const isCompleted = (groupStatus || "").toLowerCase() === "completed";
   const displayData = data.slice(0, rowsPerPage);
 
   // Delete dialog handlers
