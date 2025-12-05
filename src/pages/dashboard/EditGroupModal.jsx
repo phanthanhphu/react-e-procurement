@@ -212,7 +212,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
             <Input />
           </Form.Item>
 
-          {/* Stock Date */}
+          {/* Stock Date
           <Form.Item
             label="Stock Date"
             name="stockDate"
@@ -223,7 +223,7 @@ const EditGroupModal = ({ open, onCancel, onOk, currentItem }) => {
               style={{ width: '100%' }}
               placeholder="Pick a date"
             />
-          </Form.Item>
+          </Form.Item> */}
 
           {/* Currency */}
           <Form.Item

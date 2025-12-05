@@ -36,7 +36,6 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
           name: currentItem.name || '',
           type: currentItem.type || 'Requisition_weekly',
           status: currentItem.status || 'Not Started',
-          stockDate: currentItem.stockDate ? dayjs(formatDate(currentItem.stockDate)) : null,
           currency: currentItem.currency || 'VND',
         });
       } else {
@@ -50,16 +49,6 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
       setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
     }
   }, [currentItem, form, open]);
-
-  // Convert date array to ISO string for dayjs
-  const formatDate = (dateArray) => {
-    if (!Array.isArray(dateArray) || dateArray.length < 3) {
-      console.warn('Invalid date array:', dateArray);
-      return null;
-    }
-    const [year, month, day, hour = 0, minute = 0, second = 0] = dateArray;
-    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
-  };
 
   // Convert ISO date to array [year, month, day, hour, minute, second]
   const toDateArray = (isoDate) => {
@@ -286,18 +275,6 @@ const AddGroupModal = ({ open, onCancel, onOk, currentItem }) => {
               <Select.Option value="Not Started">Not Started</Select.Option>
               <Select.Option value="In Progress">In Progress</Select.Option>
             </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="Stock Date"
-            name="stockDate"
-            rules={[{ required: true, message: 'Please select the stock date!' }]}
-          >
-            <DatePicker
-              format="YYYY-MM-DD"
-              style={{ width: '100%' }}
-              placeholder="Select stock date"
-            />
           </Form.Item>
 
           <Form.Item

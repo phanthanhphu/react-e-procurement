@@ -72,7 +72,6 @@ const headers = [
   { label: 'Status', key: 'status', sortable: true, hideOnSmall: false, backendKey: 'status' },
   { label: 'Created By', key: 'createdBy', sortable: true, hideOnSmall: true, backendKey: 'createdBy' },
   { label: 'Created Date', key: 'createdDate', sortable: true, hideOnSmall: false, backendKey: 'createdDate' },
-  { label: 'Stock Date', key: 'stockDate', sortable: true, hideOnSmall: true, backendKey: 'stockDate' },
   { label: 'Currency', key: 'currency', sortable: true, hideOnSmall: true, backendKey: 'currency' },
   { label: 'Actions', key: 'actions', sortable: false, hideOnSmall: false, backendKey: 'actions' },
 ];
@@ -104,8 +103,6 @@ const fetchGroups = async (
     });
     if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DD'));
     if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DD'));
-    if (stockStartDate && stockStartDate.isValid()) params.append('stockStartDate', stockStartDate.format('YYYY-MM-DD'));
-    if (stockEndDate && stockEndDate.isValid()) params.append('stockEndDate', stockEndDate.format('YYYY-MM-DD'));
 
     const response = await apiClient.get(`${API_BASE_URL}/api/group-summary-requisitions/filter`, { params });
     console.log('Raw fetched groups:', response.data.content.map(item => ({
@@ -218,7 +215,6 @@ export default function GroupRequestPage() {
     setLoading(true);
     setNotification({ open: false, message: '', severity: 'info' });
     const [startDate, endDate] = dateRange || [];
-    const [stockStartDate, stockEndDate] = stockDateRange || [];
     const sortParam = sortConfig.key
       ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
       : 'createdDate,desc';
@@ -232,8 +228,6 @@ export default function GroupRequestPage() {
       currencyFilter,
       startDate,
       endDate,
-      stockStartDate,
-      stockEndDate,
       sortParam
     );
     setData(content);
@@ -331,7 +325,6 @@ export default function GroupRequestPage() {
     setTypeFilter('');
     setCurrencyFilter('');
     setDateRange([]);
-    setStockDateRange([]);
     setPage(0);
     setSortConfig({ key: null, direction: null });
     fetchData();
@@ -601,16 +594,6 @@ export default function GroupRequestPage() {
                         </TableCell>
                         <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
                           {formatDate(group.createdDate) || 'N/A'}
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            fontSize: '0.65rem',
-                            display: { xs: headers.find(h => h.key === 'stockDate').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
-                          }}
-                        >
-                          {formatDate(group.stockDate) || 'N/A'}
                         </TableCell>
                         <TableCell
                           align="center"

@@ -46,6 +46,7 @@ const getCurrencyColor = c => ({ VND: '#4caf50', EURO: '#2196f3', USD: '#e57373'
 const getGoodTypeColor = t => ({ Common: '#4caf50', Special: '#2196f3', Electronics: '#e57373' }[t] || '#9e9e9e');
 
 // === HEADERS + STICKY ===
+// === HEADERS + STICKY ===
 const baseHeaders = [
   { label: 'No', key: 'no', align: 'center', width: 50, sticky: true },
   { label: 'Product Item 1', key: 'productType1Name', sortable: true, width: 120, sticky: true, wrap: true },
@@ -62,6 +63,11 @@ const baseHeaders = [
   { label: 'Currency', key: 'currency', sortable: true, align: 'center', width: 70 },
   { label: 'Good Type', key: 'goodType', sortable: true, align: 'center', width: 90 },
   { label: 'Images', key: 'image', align: 'center', width: 70 },
+
+  // 2 CỘT MỚI – NGAY TRƯỚC ACTION
+  { label: 'Created Date', key: 'createdAt', align: 'center', width: 100 },
+  { label: 'Updated Date', key: 'updatedAt', align: 'center', width: 100 },
+
   { label: 'Action', key: 'action', align: 'center', width: 100 },
 ];
 
@@ -215,6 +221,28 @@ function SupplierProductsTable({ supplierProducts, handleDelete, handleEdit, pag
                           <Typography fontSize="0.55rem" color="#999" textAlign="center">—</Typography>
                         )
                       )}
+                      {h.key === 'createdAt' && (
+                      <Box textAlign="center" fontSize="0.55rem">
+                        {p.createdAt 
+                          ? new Date(p.createdAt).toLocaleDateString('vi-VN', { 
+                              day: '2-digit', 
+                              month: '2-digit', 
+                              year: 'numeric' 
+                            })
+                          : '-'}
+                      </Box>
+                    )}
+                    {h.key === 'updatedAt' && (
+                      <Box textAlign="center" fontSize="0.55rem">
+                        {p.updatedAt 
+                          ? new Date(p.updatedAt).toLocaleDateString('vi-VN', { 
+                              day: '2-digit', 
+                              month: '2-digit', 
+                              year: 'numeric' 
+                            })
+                          : '-'}
+                      </Box>
+                    )}
                       {h.key === 'action' && (
                         <Stack direction="row" spacing={0.25} justifyContent="center">
                           <IconButton size="small" color="primary" onClick={() => handleEdit(p)} sx={{ p: 0.25 }}>

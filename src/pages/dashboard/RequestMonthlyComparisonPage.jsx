@@ -15,13 +15,14 @@ import {
   useTheme,
   Tooltip,
   Button,
+  IconButton, // <-- THÊM CHỈ 1 DÒNG NÀY
 } from '@mui/material';
+import { Edit as EditIcon } from '@mui/icons-material'; // <-- THÊM CHỈ 1 DÒNG NÀY
 import InboxIcon from '@mui/icons-material/Inbox';
 import axios from 'axios';
 import ExportComparisonMonthlyExcelButton from './ExportComparisonMonthlyExcelButton.jsx';
-import EditDialog from './EditDialog.jsx';
-import AddDialog from './AddDialog.jsx';
 import ComparisonSearch from './ComparisonSearch.jsx';
+import EditComparisonItemDialog from './EditComparisonItemDialog.jsx'; // <-- THÊM CHỈ 1 DÒNG NÀY
 import { API_BASE_URL } from '../../config.js';
 
 // Retry function for API calls
@@ -101,6 +102,7 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Difference (%)', key: 'percentage' },
   { label: 'Remark', key: 'remarkComparison' },
   { label: 'Good Type', key: 'productType2Name' },
+  { label: 'Action', key: 'action' }, // <-- THÊM CHỈ 1 DÒNG NÀY VÀO CUỐI
 ];
 
 function DeptRequestTable({ departmentRequests }) {
@@ -113,93 +115,26 @@ function DeptRequestTable({ departmentRequests }) {
 
   return (
     <div>
-      <Table
-        size="small"
-        sx={{
-          minWidth: 160,
-          border: '1px solid #ddd',
-          borderRadius: 1,
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
+      <Table size="small" sx={{ minWidth: 160, border: '1px solid #ddd', borderRadius: 1, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <TableHead>
           <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-            <TableCell
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '40%',
-              }}
-            >
-              Dept
-            </TableCell>
-            <TableCell
-              align="center"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '30%',
-              }}
-            >
-              Request
-            </TableCell>
-            <TableCell
-              align="center"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '30%',
-              }}
-            >
-              Buy
-            </TableCell>
+            <TableCell sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '40%' }}>Dept</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '30%' }}>Request</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '30%' }}>Buy</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {displayDepts.map((dept, idx) => (
-            <TableRow
-              key={dept.departmentId + idx}
-              sx={{
-                '&:nth-of-type(even)': { backgroundColor: '#f9fbff' },
-                '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' },
-                fontSize: '0.55rem',
-              }}
-            >
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '40%' }}>
-                {dept.departmentName}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>
-                {dept.qty || 0}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>
-                {dept.buy || 0}
-              </TableCell>
+            <TableRow key={dept.departmentId + idx} sx={{ '&:nth-of-type(even)': { backgroundColor: '#f9fbff' }, '&:hover': { backgroundColor: '#bbdefb', transition: 'background-color 0.3s' }, fontSize: '0.55rem' }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '40%' }}>{dept.departmentName}</TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>{dept.qty || 0}</TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '30%' }}>{dept.buy || 0}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {departmentRequests.length > 3 && (
-        <Button
-          size="small"
-          onClick={() => setShowAllDepts(!showAllDepts)}
-          sx={{
-            mt: 0.5,
-            fontSize: '0.65rem',
-            color: '#1976d2',
-            textTransform: 'none',
-            '&:hover': { backgroundColor: '#e3f2fd' },
-          }}
-        >
+        <Button size="small" onClick={() => setShowAllDepts(!showAllDepts)} sx={{ mt: 0.5, fontSize: '0.65rem', color: '#1976d2', textTransform: 'none', '&:hover': { backgroundColor: '#e3f2fd' } }}>
           {showAllDepts ? 'Show Less' : 'Show More'}
         </Button>
       )}
@@ -217,109 +152,28 @@ function SupplierTable({ suppliers, currency }) {
 
   return (
     <div>
-      <Table
-        size="small"
-        sx={{
-          minWidth: 180,
-          border: '1px solid #ddd',
-          borderRadius: 1,
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
+      <Table size="small" sx={{ minWidth: 180, border: '1px solid #ddd', borderRadius: 1, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <TableHead>
           <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-            <TableCell
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '50%',
-              }}
-            >
-              Supplier Name
-            </TableCell>
-            <TableCell
-              align="right"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '20%',
-              }}
-            >
-              Price ({getDisplayCurrency(currency)})
-            </TableCell>
-            <TableCell
-              align="center"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '15%',
-              }}
-            >
-              Unit
-            </TableCell>
-            <TableCell
-              align="center"
-              sx={{
-                fontWeight: 700,
-                fontSize: '0.55rem',
-                py: 0.2,
-                px: 0.3,
-                color: '#1976d2',
-                width: '15%',
-              }}
-            >
-              Selected
-            </TableCell>
+            <TableCell sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '50%' }}>Supplier Name</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '20%' }}>Price ({getDisplayCurrency(currency)})</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '15%' }}>Unit</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.55rem', py: 0.2, px: 0.3, color: '#1976d2', width: '15%' }}>Selected</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {displaySuppliers.map((supplier, idx) => (
-            <TableRow
-              key={idx}
-              sx={{
-                backgroundColor: supplier.isSelected === 1 ? '#d0f0c0' : idx % 2 === 0 ? '#fff' : '#f9fbff',
-                '&:hover': { backgroundColor: supplier.isSelected === 1 ? '#b8e6a3' : '#bbdefb', transition: 'background-color 0.3s' },
-                fontSize: '0.55rem',
-              }}
-            >
-              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '50%' }}>
-                {supplier.supplierName}
-              </TableCell>
-              <TableCell align="right" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '20%' }}>
-                {supplier.price ? formatCurrency(supplier.price, currency) : '0'}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '15%' }}>
-                {supplier.unit || ''}
-              </TableCell>
-              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '15%' }}>
-                {supplier.isSelected === 1 ? 'Yes' : 'No'}
-              </TableCell>
+            <TableRow key={idx} sx={{ backgroundColor: supplier.isSelected === 1 ? '#d0f0c0' : idx % 2 === 0 ? '#fff' : '#f9fbff', '&:hover': { backgroundColor: supplier.isSelected === 1 ? '#b8e6a3' : '#bbdefb', transition: 'background-color 0.3s' }, fontSize: '0.55rem' }}>
+              <TableCell sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, color: '#0d47a1', width: '50%' }}>{supplier.supplierName}</TableCell>
+              <TableCell align="right" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '20%' }}>{supplier.price ? formatCurrency(supplier.price, currency) : '0'}</TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, width: '15%' }}>{supplier.unit || ''}</TableCell>
+              <TableCell align="center" sx={{ fontSize: '0.55rem', py: 0.15, px: 0.3, fontWeight: 600, width: '15%' }}>{supplier.isSelected === 1 ? 'Yes' : 'No'}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {suppliers.length > 3 && (
-        <Button
-          size="small"
-          onClick={() => setShowAllSuppliers(!showAllSuppliers)}
-          sx={{
-            mt: 0.5,
-            fontSize: '0.65rem',
-            color: '#1976d2',
-            textTransform: 'none',
-            '&:hover': { backgroundColor: '#e3f2fd' },
-          }}
-        >
+        <Button size="small" onClick={() => setShowAllSuppliers(!showAllSuppliers)} sx={{ mt: 0.5, fontSize: '0.65rem', color: '#1976d2', textTransform: 'none', '&:hover': { backgroundColor: '#e3f2fd' } }}>
           {showAllSuppliers ? 'Show Less' : 'Show More'}
         </Button>
       )}
@@ -342,9 +196,11 @@ export default function RequestMonthlyComparisonPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [openEditDialog, setOpenEditDialog] = useState(false);
   const [currency, setCurrency] = useState('VND');
+
+  // <-- THÊM 2 STATE CHO EDIT
+  const [openEdit, setOpenEdit] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
 
   const [searchValues, setSearchValues] = useState({
     productType1Name: '',
@@ -357,7 +213,6 @@ export default function RequestMonthlyComparisonPage() {
     departmentName: '',
   });
 
-  // Extract currency from data
   useEffect(() => {
     if (data.length > 0 && data[0].currency) {
       setCurrency(data[0].currency);
@@ -365,41 +220,24 @@ export default function RequestMonthlyComparisonPage() {
   }, [data]);
 
   const fetchUnfilteredTotals = useCallback(async () => {
-    if (!groupId) {
-      console.error('Invalid Group ID');
-      return;
-    }
+    if (!groupId) return;
     try {
-      const response = await fetchWithRetry(
-        `${API_BASE_URL}/search/comparison-monthly`,
-        {
-          params: { groupId, filter: false },
-          headers: { Accept: '*/*' },
-        },
-        3,
-        1000
-      );
-      console.log('Unfiltered totals response:', response.data);
+      const response = await fetchWithRetry(`${API_BASE_URL}/search/comparison-monthly`, {
+        params: { groupId, filter: false },
+        headers: { Accept: '*/*' },
+      });
       setUnfilteredTotals({
         totalAmt: response.data.totalAmt || 0,
         totalAmtDifference: response.data.totalAmtDifference || 0,
         totalDifferencePercentage: response.data.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      console.error('Fetch unfiltered totals error:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      if (!data.length) {
-        setError('Failed to fetch unfiltered totals. Please try again.');
-      }
+      if (!data.length) setError('Failed to fetch unfiltered totals. Please try again.');
     }
   }, [groupId, data.length]);
 
   const fetchData = useCallback(async (filters = {}) => {
     if (!groupId) {
-      console.error('Invalid Group ID');
       setError('Invalid Group ID. Please check the URL.');
       setLoading(false);
       return;
@@ -420,27 +258,17 @@ export default function RequestMonthlyComparisonPage() {
         ...(filters.departmentName && { departmentName: filters.departmentName }),
       }).toString();
 
-      const response = await fetchWithRetry(
-        `${API_BASE_URL}/search/comparison-monthly?${queryParams}`,
-        {
-          headers: { Accept: '*/*' },
-        },
-        3,
-        1000
-      );
-      console.log('Fetch data response:', response.data);
+      const response = await fetchWithRetry(`${API_BASE_URL}/search/comparison-monthly?${queryParams}`, {
+        headers: { Accept: '*/*' },
+      });
       const mappedData = response.data.requisitions?.map(item => ({
         ...item,
+        id: item.id,
         productType2Name: item.goodtype || item.productType2Name || '',
       })) || [];
       setData(mappedData);
       setTotalElements(mappedData.length);
     } catch (err) {
-      console.error('Fetch data error:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
       if (!data.length) {
         setError('Failed to fetch data from API. Please try again.');
       } else {
@@ -456,15 +284,11 @@ export default function RequestMonthlyComparisonPage() {
     fetchData();
   }, [fetchUnfilteredTotals, fetchData]);
 
-  const handleSearchChange = (newSearchValues) => {
-    setSearchValues(newSearchValues);
-  };
-
+  const handleSearchChange = (newSearchValues) => setSearchValues(newSearchValues);
   const handleSearch = (filters) => {
     setPage(0);
     fetchData(filters);
   };
-
   const handleReset = () => {
     setSearchValues({
       productType1Name: '',
@@ -493,19 +317,8 @@ export default function RequestMonthlyComparisonPage() {
       const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
       if (page > maxPage) setPage(maxPage);
     } catch (error) {
-      console.error('Delete error:', error);
       alert('Delete failed. Please try again.');
     }
-  };
-
-  const handleOpenEditDialog = (item) => {
-    setSelectedItem(item);
-    setOpenEditDialog(true);
-  };
-
-  const handleCloseEditDialog = () => {
-    setOpenEditDialog(false);
-    setSelectedItem(null);
   };
 
   const handleChangePage = (event, newPage) => setPage(newPage);
@@ -530,114 +343,51 @@ export default function RequestMonthlyComparisonPage() {
     productType2Name: item.productType2Name || '',
   }));
 
+  // <-- THÊM 2 HÀM MỞ VÀ REFRESH SAU EDIT
+  const handleOpenEdit = (item) => {
+    setSelectedItem(item);
+    setOpenEdit(true);
+  };
+
+  const handleAfterSave = () => {
+    setOpenEdit(false);
+    setSelectedItem(null);
+    fetchData(searchValues);
+    fetchUnfilteredTotals();
+  };
+
   return (
-    <Box
-      sx={{
-        p: 1,
-        fontSize: '0.65rem',
-        fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-        backgroundColor: '#f5f8fa',
-        minHeight: '100vh',
-      }}
-    >
-      <ComparisonSearch
-        searchValues={searchValues}
-        onSearchChange={handleSearchChange}
-        onSearch={handleSearch}
-        onReset={handleReset}
-      />
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="flex-end"
-        mb={1}
-        sx={{ userSelect: 'none' }}
-      >
-        <ExportComparisonMonthlyExcelButton
-          data={mappedDataForExport}
-          disabled={loading}
-          groupId={groupId}
-        />
+    <Box sx={{ p: 1, fontSize: '0.65rem', fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
+      <ComparisonSearch searchValues={searchValues} onSearchChange={handleSearchChange} onSearch={handleSearch} onReset={handleReset} />
+      <Stack direction="row" alignItems="center" justifyContent="flex-end" mb={1} sx={{ userSelect: 'none' }}>
+        <ExportComparisonMonthlyExcelButton data={mappedDataForExport} disabled={loading} groupId={groupId} />
       </Stack>
 
-      {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
-          Loading data...
-        </Typography>
-      )}
-      {error && (
-        <Typography
-          align="center"
-          sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}
-        >
-          {error}
-        </Typography>
-      )}
+      {loading && <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>Loading data...</Typography>}
+      {error && <Typography align="center" sx={{ color: theme.palette.error.main, fontWeight: 700, fontSize: '0.7rem', mt: 1.5 }}>{error}</Typography>}
 
       {!loading && !error && (
         <>
-          <Box
-            sx={{
-              mb: 1,
-              p: 0.5,
-              backgroundColor: '#e3f2fd',
-              borderRadius: 2,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                color: '#1976d2',
-              }}
-            >
+          <Box sx={{ mb: 1, p: 0.5, backgroundColor: '#e3f2fd', borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#1976d2' }}>
               Total Amount ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmt ? formatCurrency(unfilteredTotals.totalAmt, currency) : '0'}
             </Typography>
-            <Typography
-              sx={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                color: unfilteredTotals.totalAmtDifference < 0 ? theme.palette.error.main : '#1976d2',
-              }}
-            >
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: unfilteredTotals.totalAmtDifference < 0 ? theme.palette.error.main : '#1976d2' }}>
               Total Difference ({getDisplayCurrency(currency)}): {unfilteredTotals.totalAmtDifference ? formatCurrency(unfilteredTotals.totalAmtDifference, currency) : '0'}
             </Typography>
-            <Typography
-              sx={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                color: unfilteredTotals.totalDifferencePercentage < 0 ? theme.palette.error.main : '#1976d2',
-              }}
-            >
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: unfilteredTotals.totalDifferencePercentage < 0 ? theme.palette.error.main : '#1976d2' }}>
               Total Difference (%): {unfilteredTotals.totalDifferencePercentage ? unfilteredTotals.totalDifferencePercentage.toFixed(2) + '%' : '0%'}
             </Typography>
           </Box>
 
-          <TableContainer
-            component={Paper}
-            elevation={4}
-            sx={{
-              overflowX: 'auto',
-              maxHeight: 450,
-              boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
-              backgroundColor: '#fff',
-            }}
-          >
+          <TableContainer component={Paper} elevation={4} sx={{ overflowX: 'auto', maxHeight: 450, boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)', backgroundColor: '#fff' }}>
             <Table stickyHeader size="small" sx={{ minWidth: 1800 }}>
               <TableHead>
                 <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
                   {getHeaders(currency).map(({ label, key }) => (
                     <TableCell
                       key={key}
-                      align={
-                        ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Best Price', 'Request Qty', 'MED Confirmed', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label)
-                          ? 'center'
-                          : 'left'
-                      }
+                      align={key === 'action' ? 'center' : ['No', 'Old SAP Code', 'Hana SAP Code', 'Unit', 'Best Price', 'Request Qty', 'MED Confirmed', `Price (${getDisplayCurrency(currency)})`, 'Currency', `Amount (${getDisplayCurrency(currency)})`, `Highest Price (${getDisplayCurrency(currency)})`, `Amount Difference (${getDisplayCurrency(currency)})`, 'Difference (%)'].includes(label) ? 'center' : 'left'}
                       sx={{
                         fontWeight: 'bold',
                         fontSize: '0.55rem',
@@ -675,177 +425,63 @@ export default function RequestMonthlyComparisonPage() {
                         key={item.oldSapCode + idx}
                         sx={{
                           backgroundColor: rowBackgroundColor,
-                          '&:hover': {
-                            backgroundColor: '#e1f0ff',
-                            transition: 'background-color 0.3s ease',
-                            '& .sticky-cell': {
-                              backgroundColor: '#e1f0ff',
-                            },
-                          },
+                          '&:hover': { backgroundColor: '#e1f0ff', transition: 'background-color 0.3s ease', '& .sticky-cell': { backgroundColor: '#e1f0ff' } },
                           fontSize: '0.55rem',
                           cursor: 'default',
                           userSelect: 'none',
-                          '& > *': { borderBottom: 'none' },
                         }}
                       >
-                        <TableCell
-                          align="center"
-                          className="sticky-cell"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            position: 'sticky',
-                            left: 0,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            fontSize: '0.55rem',
-                            boxShadow: '2px 0 5px rgba(0,0,0,0.1)',
-                            minWidth: 50,
-                          }}
-                        >
+                        {/* TẤT CẢ CÁC CỘT CŨ GIỮ NGUYÊN 100% */}
+                        <TableCell align="center" className="sticky-cell" sx={{ px: 0.4, py: 0.2, position: 'sticky', left: 0, zIndex: 1, backgroundColor: rowBackgroundColor, fontSize: '0.55rem', boxShadow: '2px 0 5px rgba(0,0,0,0.1)', minWidth: 50 }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 50,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 50, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100 }}>
                           {item.type1Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 150,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 150, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100 }}>
                           {item.type2Name || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontWeight: 600,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 250,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontWeight: 600, fontSize: '0.55rem', position: 'sticky', left: 250, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 150 }}>
                           {item.vietnameseName || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 400,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 150,
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 400, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 150 }}>
                           {item.englishName || ''}
                         </TableCell>
-                        <TableCell
-                          className="sticky-cell"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            position: 'sticky',
-                            left: 550,
-                            zIndex: 1,
-                            backgroundColor: rowBackgroundColor,
-                            minWidth: 100,
-                            textAlign: 'center',
-                          }}
-                        >
+                        <TableCell className="sticky-cell" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', position: 'sticky', left: 550, zIndex: 1, backgroundColor: rowBackgroundColor, minWidth: 100, textAlign: 'center' }}>
                           {item.oldSapCode || ''}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.hanaSapCode || ''}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.unit || ''}
-                        </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
-                          <SupplierTable suppliers={item.suppliers} currency={item.currency} />
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{
-                            px: 0.4,
-                            py: 0.2,
-                            fontSize: '0.55rem',
-                            fontWeight: 600,
-                            color: item.isBestPrice ? '#4caf50' : theme.palette.error.main,
-                          }}
-                        >
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.hanaSapCode || ''}</TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.unit || ''}</TableCell>
+                        <TableCell sx={{ px: 0.4, py: 0.2 }}><SupplierTable suppliers={item.suppliers} currency={item.currency} /></TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', fontWeight: 600, color: item.isBestPrice ? '#4caf50' : theme.palette.error.main }}>
                           {item.isBestPrice ? 'Yes' : 'No'}
                         </TableCell>
-                        <TableCell sx={{ px: 0.4, py: 0.2 }}>
-                          <DeptRequestTable departmentRequests={item.departmentRequests} />
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.totalRequestQty != null ? item.totalRequestQty.toString() : '0'}
-                        </TableCell>
+                        <TableCell sx={{ px: 0.4, py: 0.2 }}><DeptRequestTable departmentRequests={item.departmentRequests} /></TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.totalRequestQty != null ? item.totalRequestQty.toString() : '0'}</TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem', fontWeight: 600, color: '#d32f2f' }}>
                           {item.medConfirmed ?? item.orderQty ?? 0}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.price ? formatCurrency(item.price, item.currency) : '0'}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {getDisplayCurrency(item.currency) || 'VND'}
-                        </TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.price ? formatCurrency(item.price, item.currency) : '0'}</TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{getDisplayCurrency(item.currency) || 'VND'}</TableCell>
                         <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontWeight: 700, color: theme.palette.primary.dark, fontSize: '0.55rem' }}>
                           {item.amount ? formatCurrency(item.amount, item.currency) : '0'}
                         </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.highestPrice ? formatCurrency(item.highestPrice, item.currency) : '0'}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.amtDifference ? formatCurrency(item.amtDifference, item.currency) : '0'}
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.percentage ? item.percentage.toFixed(2) + '%' : '0%'}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.remarkComparison || ''}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>
-                          {item.productType2Name || ''}
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.highestPrice ? formatCurrency(item.highestPrice, item.currency) : '0'}</TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.amtDifference ? formatCurrency(item.amtDifference, item.currency) : '0'}</TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.percentage ? item.percentage.toFixed(2) + '%' : '0%'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'pre-wrap', px: 0.4, py: 0.2, fontSize: '0.55rem', minWidth: 280, maxWidth: 400 }}>{item.remarkComparison || ''}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', px: 0.4, py: 0.2, fontSize: '0.55rem' }}>{item.productType2Name || ''}</TableCell>
+                        <TableCell align="center" sx={{ px: 0.4, py: 0.2 }}>
+                          <IconButton size="small" color="primary" onClick={() => handleOpenEdit(item)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={getHeaders(currency).length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
+                    <TableCell colSpan={getHeaders(currency).length + 1} align="center" sx={{ py: 2, color: '#90a4ae' }}>
                       <Stack direction="column" alignItems="center" spacing={0.5}>
                         <InboxIcon fontSize="small" />
                         <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
@@ -868,27 +504,20 @@ export default function RequestMonthlyComparisonPage() {
             labelRowsPerPage="Rows per page:"
             sx={{
               mt: 1,
-              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                fontSize: '0.65rem',
-                color: theme.palette.text.secondary,
-              },
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { fontSize: '0.65rem', color: theme.palette.text.secondary },
               '.MuiTablePagination-select': { fontSize: '0.65rem' },
-              '.MuiTablePagination-actions > button': {
-                color: theme.palette.primary.main,
-              },
+              '.MuiTablePagination-actions > button': { color: theme.palette.primary.main },
             }}
           />
         </>
       )}
 
-      <EditDialog
-        open={openEditDialog}
+      {/* <-- THÊM POPUP Ở CUỐI */}
+      <EditComparisonItemDialog
+        open={openEdit}
+        onClose={() => setOpenEdit(false)}
         item={selectedItem}
-        onClose={handleCloseEditDialog}
-        onSave={() => {
-          fetchUnfilteredTotals();
-          fetchData(searchValues);
-        }}
+        onSaved={handleAfterSave}
       />
     </Box>
   );
