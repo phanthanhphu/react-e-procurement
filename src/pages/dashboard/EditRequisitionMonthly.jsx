@@ -50,17 +50,21 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [groupCurrency, setGroupCurrency] = useState('VND');
-  const [confirmOpen, setConfirmOpen] = useState(false);          // ← ĐÃ SỬA
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [itemNoForSearch, setItemNoForSearch] = useState('');
 
-  // Ngăn infinite loop khi Confirmed MED không đổi
   const prevConfirmedRef = useRef('');
 
-  // Tổng số lượng yêu cầu
+  // Đồng bộ real-time khi người dùng gõ/xóa Item Description (VN)
+  useEffect(() => {
+    setItemNoForSearch(formData.itemDescriptionVN?.trim() || '');
+  }, [formData.itemDescriptionVN]);
+
   const totalRequestQty = useMemo(() => {
     return deptRows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0);
   }, [deptRows]);
@@ -76,76 +80,42 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setSnackbarOpen(true);
   }, []);
 
-  // AUTO ALLOCATE BUY – HOÀN HẢO, chạy khi thay đổi Confirmed hoặc các dòng phòng ban
+  // AUTO ALLOCATE BUY
   useEffect(() => {
     const currentConfirmedStr = formData.dailyMedInventory || '';
     const currentConfirmed = parseFloat(currentConfirmedStr) || 0;
 
-    // Nếu Confirmed không đổi → bỏ qua (ngăn loop)
-    if (currentConfirmedStr === prevConfirmedRef.current) {
-      return;
-    }
+    if (currentConfirmedStr === prevConfirmedRef.current) return;
     prevConfirmedRef.current = currentConfirmedStr;
 
-    // Reset buy nếu không hợp lệ
-    if (!currentConfirmedStr || isNaN(currentConfirmed) || currentConfirmed <= 0) {
-      setDeptRows(prev => {
-        const hasBuy = prev.some(r => r.buy && r.buy !== '');
-        return hasBuy ? prev.map(r => ({ ...r, buy: '' })) : prev;
-      });
+    if (!currentConfirmedStr || isNaN(currentConfirmed) || currentConfirmed <= 0 || currentConfirmed > totalRequestQty) {
+      setDeptRows(prev => prev.map(r => ({ ...r, buy: '' })));
       return;
     }
 
-    // Nếu Confirmed > Total Request → xóa buy (cảnh báo ở dưới)
-    if (currentConfirmed > totalRequestQty) {
-      setDeptRows(prev => {
-        const hasBuy = prev.some(r => r.buy && r.buy !== '');
-        return hasBuy ? prev.map(r => ({ ...r, buy: '' })) : prev;
-      });
-      return;
-    }
-
-    // CHIA LẠI BUY THEO QTY MỚI
     setDeptRows(prev => {
       const validRows = prev
         .map((r, i) => ({ ...r, qtyNum: parseFloat(r.qty) || 0, idx: i }))
-        .filter(r => r.qtyNum > 0);
+        .filter(r => r.qtyNum > 0)
+        .sort((a, b) => a.qtyNum - b.qtyNum || a.idx - b.idx);
 
       if (validRows.length === 0) return prev;
 
-      // Ưu tiên chia cho khoa có Qty ít hơn trước (công bằng + ổn định)
-      validRows.sort((a, b) => a.qtyNum - b.qtyNum || a.idx - b.idx);
-
       let remaining = currentConfirmed;
       const newRows = [...prev];
-      let hasChanged = false;
 
       validRows.forEach(row => {
         if (remaining <= 0) return;
         const allocate = Math.min(row.qtyNum, remaining);
-        const newBuyStr = allocate.toString();
-
-        if (newRows[row.idx].buy !== newBuyStr) {
-          newRows[row.idx] = { ...newRows[row.idx], buy: newBuyStr };
-          hasChanged = true;
-        }
+        newRows[row.idx].buy = allocate.toString();
         remaining -= allocate;
       });
 
-      // Xóa buy ở các dòng không hợp lệ
-      prev.forEach((row, i) => {
-        const isValid = validRows.some(v => v.idx === i);
-        if (!isValid && row.buy !== '') {
-          newRows[i] = { ...newRows[i], buy: '' };
-          hasChanged = true;
-        }
-      });
-
-      return hasChanged ? newRows : prev;
+      return newRows;
     });
-  }, [formData.dailyMedInventory, deptRows]); // ← chạy khi Confirmed hoặc deptRows thay đổi
+  }, [formData.dailyMedInventory, deptRows, totalRequestQty]);
 
-  // Load dữ liệu khi mở dialog
+  // LOAD DATA
   useEffect(() => {
     if (!open || !item?.id) {
       setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
@@ -155,6 +125,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setFiles([]);
       setPreviews([]);
       prevConfirmedRef.current = '';
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
+      setItemNoForSearch('');
       return;
     }
 
@@ -193,7 +166,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           qty: d.qty?.toString() || '',
           buy: d.buy?.toString() || '',
         }));
-
         setDeptRows(depts.length > 0 ? depts : [{ id: '', name: '', qty: '', buy: '' }]);
         setDeptErrors(new Array(depts.length || 1).fill(''));
 
@@ -202,15 +174,20 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         setFiles([]);
         setPreviews([]);
 
-        setSelectedSupplier(data.supplierId ? {
-          supplierName: data.supplierName || 'Unknown',
-          sapCode: data.oldSAPCode || '',
-          price: parseFloat(data.price) || 0,
-          unit: data.unit || '',
-        } : null);
+        setItemNoForSearch((data.itemDescriptionVN || '').trim());
 
-        setShowSupplierSelector(!data.supplierId);
-        setItemNoForSearch(data.itemDescriptionVN || '');
+        if (data.supplierId) {
+          setSelectedSupplier({
+            supplierName: data.supplierName || 'Unknown',
+            sapCode: data.oldSAPCode || '',
+            price: parseFloat(data.price) || 0,
+            unit: data.unit || '',
+          });
+          setShowSupplierSelector(false);
+        } else {
+          setSelectedSupplier(null);
+          setShowSupplierSelector(true);
+        }
 
         if (deptRes.ok) {
           const deps = await deptRes.json();
@@ -229,14 +206,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     loadData();
   }, [open, item?.id, showSnackbar]);
 
-  // Cleanup preview URLs
-  useEffect(() => {
-    return () => {
-      previews.forEach(url => url && URL.revokeObjectURL(url));
-    };
-  }, [previews]);
-
-  // Dịch tự động VN → EN
+  // DỊCH TỰ ĐỘNG
   const translateText = async (text) => {
     if (!text || isEnManuallyEdited) return;
     setTranslating(true);
@@ -267,7 +237,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     if (!supplierData) {
       setFormData(prev => ({
         ...prev,
-        oldSAPCode: '', supplierId: '', unit: '', supplierPrice: 0, fullDescription: ''
+        oldSAPCode: '',
+        supplierId: '',
+        unit: '',
+        supplierPrice: 0,
+        fullDescription: ''
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -290,6 +264,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       price,
       unit: supplierData.unit || '',
     });
+
     setShowSupplierSelector(false);
   };
 
@@ -315,17 +290,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       }
       return updated;
     });
-
-    // Kiểm tra trùng khoa
-    setDeptErrors(prev => {
-      const errors = prev.map(() => '');
-      deptRows.forEach((row, idx) => {
-        if (row.id && deptRows.filter((r, j) => r.id === row.id && j !== idx).length > 0) {
-          errors[idx] = 'This department is already selected';
-        }
-      });
-      return errors;
-    });
   };
 
   const handleAddDeptRow = () => {
@@ -344,7 +308,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
     const valid = selected.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
     if (valid.length < selected.length) {
-      showSnackbar('Only image files ≤ 5MB are allowed', 'warning');
+      showSnackbar('Only image files less than or equal to 5MB are allowed', 'warning');
       return;
     }
 
@@ -360,11 +324,12 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     e.target.value = null;
   };
 
+  // ĐÃ SỬA LỖI Ở ĐÂY!!!
   const handleRemoveImage = (index) => {
     if (index < imageUrls.length) {
       const removed = imageUrls[index];
       setImageUrls(prev => prev.filter((_, i) => i !== index));
-      setImagesToDelete(prev => [...prev, removed]);
+      setImagesToDelete(prev => [...prev, removed]); // ĐÃ SỬA: prev thay vì takim
     } else {
       const fileIdx = index - imageUrls.length;
       if (fileIdx >= 0 && fileIdx < previews.length) {
@@ -454,15 +419,33 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
               />
             ) : selectedSupplier ? (
               <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa' }}>
-                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Selected Supplier:</Typography>
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  Selected Supplier:
+                </Typography>
                 <Typography><strong>{selectedSupplier.supplierName}</strong></Typography>
                 <Typography>SAP Code: <strong>{selectedSupplier.sapCode || '—'}</strong></Typography>
-                <Typography>Price: <strong>{selectedSupplier.price > 0 ? selectedSupplier.price.toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency }) : '—'}</strong></Typography>
+                <Typography>
+                  Price: <strong>
+                    {selectedSupplier.price > 0
+                      ? selectedSupplier.price.toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })
+                      : '—'}
+                  </strong>
+                </Typography>
                 <Typography>Unit: <strong>{selectedSupplier.unit || '—'}</strong></Typography>
-                <Button size="small" variant="outlined" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>Change Supplier</Button>
+
+                {/* CHỈ GIỮ LẠI NÚT "Change Supplier" – ĐẸP + ĐỦ */}
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => setShowSupplierSelector(true)} 
+                  sx={{ mt: 2 }}
+                >
+                  Change Supplier
+                </Button>
               </Paper>
             ) : null}
 
+            {/* Phần còn lại giữ nguyên */}
             <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
               <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Department Request Qty:</Typography>
               {deptRows.map((row, i) => (

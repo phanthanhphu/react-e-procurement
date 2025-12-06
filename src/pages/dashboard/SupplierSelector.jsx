@@ -55,19 +55,21 @@ export default function SupplierSelector({
         size: '100',
       });
 
-      // GỌI CẢ 2 THAM SỐ NẾU CÓ → ĐÚNG YÊU CẦU MỚI
+      // Chỉ thêm sapCode nếu có nội dung thực sự
       if (sapCodeValue?.trim()) {
         queryParams.append('sapCode', sapCodeValue.trim());
       }
+
+      // CHỈ thêm itemNo nếu thực sự có nội dung (đúng yêu cầu của bạn)
       if (itemNoValue?.trim()) {
         queryParams.append('itemNo', itemNoValue.trim());
       }
 
-      // Nếu cả 2 đều trống → vẫn gọi API để lấy tất cả theo currency
+      // Luôn thêm currency
       queryParams.append('currency', currencyFilter || 'VND');
 
       const endpoint = `${API_BASE_URL}/api/supplier-products/filter-by-sapcode?${queryParams.toString()}`;
-      console.log('Calling API:', endpoint); // Dễ debug
+      console.log('Calling API:', endpoint); // Debug dễ nhìn
 
       const res = await fetch(endpoint, { headers: { accept: '*/*' } });
       if (!res.ok) throw new Error('Failed to load suppliers');
@@ -83,7 +85,7 @@ export default function SupplierSelector({
     }
   };
 
-  // Gọi lại mỗi khi có thay đổi ở SAP Code HOẶC Item Description (VN) HOẶC currency
+  // Gọi lại khi oldSapCode, itemNo, hoặc currency thay đổi
   useEffect(() => {
     searchSupplier(oldSapCode, itemNo, currency);
   }, [oldSapCode, itemNo, currency]);
@@ -115,11 +117,14 @@ export default function SupplierSelector({
     <Paper variant="outlined" sx={{ mb: 1, p: 1 }}>
       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
         Select Supplier
-        {hasSapCode && hasItemNo ? ` (SAP: ${oldSapCode} + Item: "${itemNo}")` : 
-         hasSapCode ? ` (SAP Code: ${oldSapCode})` :
-         hasItemNo ? ` (Item No: "${itemNo}")` :
-         ' (All products)'}
-        {' '} | Currency: <strong>{currency}</strong>
+        {hasSapCode && hasItemNo
+          ? ` (SAP: ${oldSapCode} + Item: "${itemNo}")`
+          : hasSapCode
+          ? ` (SAP Code: ${oldSapCode})`
+          : hasItemNo
+          ? ` (Item No: "${itemNo}")`
+          : ' (All products)'}{' '}
+        | Currency: <strong>{currency}</strong>
       </Typography>
 
       {searchLoading ? (
