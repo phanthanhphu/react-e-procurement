@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,117 +7,395 @@ import {
   Typography,
   TextField,
   Button,
+  Snackbar,
+  Alert,
+  CircularProgress,
+  Stack,
+  Box,
+  IconButton,
+  Chip,
+  Divider,
+  Tooltip,
+  useMediaQuery,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
+import CloseIcon from '@mui/icons-material/Close';
+import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 
-export default function AddDepartmentDialog({ open, onClose, onAdd }) {
+export default function AddDepartmentDialog({
+  open,
+  onClose,
+  onAdd,
+  disabled = false, // optional: truyền loading từ parent
+}) {
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [departmentName, setDepartmentName] = useState('');
   const [division, setDivision] = useState('');
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
 
-  const handleAdd = () => {
-    if (!departmentName.trim() || !division.trim()) {
-      return; // Validation already handled by disabling the button
-    }
-    setOpenConfirmDialog(true); // Show confirmation dialog
+  const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  const locked = saving || disabled;
+
+  const toast = (msg, severity = 'success') => {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
   };
 
-  const handleConfirmAdd = () => {
-    onAdd({ departmentName, division }); // Call the onAdd callback with department details
+  useEffect(() => {
+    if (!open) return;
+    // reset state mỗi lần mở dialog
     setDepartmentName('');
     setDivision('');
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    onClose(); // Close the main dialog
-  };
-
-  const handleCancelAdd = () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog without action
-  };
+    setSaving(false);
+    setConfirmOpen(false);
+    setSnackbarOpen(false);
+    setSnackbarMessage('');
+    setSnackbarSeverity('success');
+  }, [open]);
 
   const handleClose = () => {
-    setDepartmentName('');
-    setDivision('');
-    setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
-    onClose();
+    if (locked) return;
+    setConfirmOpen(false);
+    onClose?.();
+  };
+
+  const canSubmit = division.trim() && departmentName.trim();
+
+  const handleSubmit = () => {
+    if (!division.trim()) return toast('Division is required.', 'error');
+    if (!departmentName.trim()) return toast('Department Name is required.', 'error');
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async () => {
+    setConfirmOpen(false);
+    setSaving(true);
+
+    try {
+      await onAdd?.({
+        departmentName: departmentName.trim(),
+        division: division.trim(),
+      });
+
+      // Nếu parent đã show notification riêng thì bạn có thể bỏ toast này
+      toast('Department added successfully!', 'success');
+
+      onClose?.();
+      setDepartmentName('');
+      setDivision('');
+    } catch (err) {
+      console.error(err);
+      toast(err?.message || 'Add department failed.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ====== Style tokens (match ProfileEditDialog vibe) ======
+  const paperSx = useMemo(
+    () => ({
+      borderRadius: fullScreen ? 0 : 4,
+      overflow: 'hidden',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.25)}`,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background:
+        theme.palette.mode === 'dark'
+          ? alpha(theme.palette.background.paper, 0.72)
+          : alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+    }),
+    [fullScreen, theme]
+  );
+
+  const headerSx = useMemo(
+    () => ({
+      position: 'relative',
+      py: 2,
+      px: 2.5,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    }),
+    [theme]
+  );
+
+  const subtleCardSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+      background: alpha(theme.palette.common.white, 0.6),
+      backdropFilter: 'blur(10px)',
+      boxShadow: `0 10px 30px ${alpha('#000', 0.08)}`,
+    }),
+    [theme]
+  );
+
+  const fieldSx = useMemo(
+    () => ({
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 3,
+        backgroundColor: alpha(theme.palette.common.white, 0.65),
+        '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
+        '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
+        '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
+      },
+    }),
+    [theme]
+  );
+
+  const gradientBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1.1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      boxShadow: `0 10px 24px ${alpha(theme.palette.primary.main, 0.28)}`,
+      transform: 'translateY(0)',
+      transition: 'transform .15s ease, box-shadow .15s ease',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: `0 14px 30px ${alpha(theme.palette.primary.main, 0.34)}`,
+        backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+      },
+    }),
+    [theme]
+  );
+
+  const outlineBtnSx = {
+    borderRadius: 999,
+    px: 2.2,
+    py: 1.1,
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   };
 
   return (
     <>
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>Add New Department</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1, color: '#374151' }}>
-            Enter the new department details:
-          </Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            size="small"
-            value={division}
-            onChange={(e) => setDivision(e.target.value)}
-            placeholder="Division"
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            fullWidth
-            variant="outlined"
-            size="small"
-            value={departmentName}
-            onChange={(e) => setDepartmentName(e.target.value)}
-            placeholder="Department Name"
-            sx={{ mb: 2 }}
-          />
+      {/* Main dialog */}
+      <Dialog
+        open={open}
+        onClose={locked ? undefined : handleClose}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: paperSx }}
+      >
+        <DialogTitle sx={headerSx}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  fontSize: { xs: 18, sm: 20 },
+                }}
+              >
+                Add Department
+              </Typography>
+              <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 13 }}>
+                Create a new department in your organization
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                size="small"
+                icon={<AddCircleRoundedIcon />}
+                label="New"
+                sx={{
+                  color: 'common.white',
+                  bgcolor: alpha('#000', 0.18),
+                  border: `1px solid ${alpha('#fff', 0.22)}`,
+                  fontWeight: 700,
+                }}
+              />
+              <Tooltip title="Close">
+                <span>
+                  <IconButton
+                    onClick={handleClose}
+                    disabled={locked}
+                    sx={{
+                      color: 'common.white',
+                      bgcolor: alpha('#000', 0.18),
+                      border: `1px solid ${alpha('#fff', 0.22)}`,
+                      '&:hover': { bgcolor: alpha('#000', 0.28) },
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ ...subtleCardSx, p: 2 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>
+                Details
+              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                Fill in division and department name
+              </Typography>
+
+              <Divider sx={{ my: 1.6 }} />
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 1.8,
+                }}
+              >
+                <TextField
+                  label="Division"
+                  value={division}
+                  onChange={(e) => setDivision(e.target.value)}
+                  disabled={locked}
+                  size="small"
+                  fullWidth
+                  sx={fieldSx}
+                  placeholder="e.g., Operations"
+                />
+
+                <TextField
+                  label="Department Name"
+                  value={departmentName}
+                  onChange={(e) => setDepartmentName(e.target.value)}
+                  disabled={locked}
+                  size="small"
+                  fullWidth
+                  sx={fieldSx}
+                  placeholder="e.g., Procurement"
+                />
+              </Box>
+
+              <Box
+                sx={{
+                  mt: 1.8,
+                  p: 1.4,
+                  borderRadius: 3,
+                  bgcolor: alpha(theme.palette.primary.main, 0.06),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="flex-start">
+                  <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
+                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    <b>Tip:</b> Use short names for better filtering (e.g., “HR”, “Finance”, “Ops”).
+                  </Typography>
+                </Stack>
+              </Box>
+            </Box>
+          </Stack>
         </DialogContent>
-        <DialogActions>
+
+        <DialogActions sx={{ px: { xs: 2, sm: 2.5 }, py: 2, gap: 1 }}>
           <Button
             onClick={handleClose}
+            disabled={locked}
             variant="outlined"
-            sx={{ textTransform: 'none', fontWeight: 500, borderRadius: '8px', px: 3, fontSize: '0.875rem' }}
+            sx={outlineBtnSx}
           >
             Cancel
           </Button>
+
           <Button
-            onClick={handleAdd}
+            onClick={handleSubmit}
+            disabled={locked || !canSubmit}
             variant="contained"
-            disabled={!departmentName.trim() || !division.trim()} // Disable button if inputs are empty
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              px: 3,
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
+            sx={gradientBtnSx}
           >
-            Add
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
           </Button>
         </DialogActions>
+
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={5000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </Dialog>
-      <Dialog open={openConfirmDialog} onClose={handleCancelAdd}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Department</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to add a department with name &quot;{departmentName || 'Unknown'}&quot; and division &quot;{division || 'Unknown'}&quot;?
+
+      {/* Confirm dialog */}
+      <Dialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+            background: alpha('#FFFFFF', 0.92),
+            backdropFilter: 'blur(14px)',
+            boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm Add</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>
+            Add department <b>{departmentName.trim() || '—'}</b> under division{' '}
+            <b>{division.trim() || '—'}</b>?
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelAdd} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmAdd}
-            variant="contained"
+
+          <Box
             sx={{
-              fontSize: '0.875rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+              mt: 2,
+              p: 1.4,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
             }}
           >
-            Confirm
+            <Stack spacing={0.6}>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Division: <b>{division.trim() || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Department: <b>{departmentName.trim() || '—'}</b>
+              </Typography>
+            </Stack>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button
+            onClick={() => setConfirmOpen(false)}
+            disabled={locked}
+            variant="outlined"
+            sx={outlineBtnSx}
+          >
+            No
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={locked}
+            variant="contained"
+            sx={{ ...gradientBtnSx, px: 2.4 }}
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
           </Button>
         </DialogActions>
       </Dialog>

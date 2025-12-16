@@ -1,24 +1,17 @@
-// material-ui
-import { styled } from '@mui/material/styles';
+import { styled, alpha } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 
-// ==============================|| DRAWER HEADER - STYLED ||============================== //
-
-const DrawerHeaderStyled = styled(Box, { shouldForwardProp: (prop) => prop !== 'open' })(({ theme }) => ({
+const DrawerHeaderStyled = styled(Box, { shouldForwardProp: (prop) => prop !== 'open' })(({ theme, open }) => ({
   ...theme.mixins.toolbar,
+  minHeight: 64,
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center',
-  paddingLeft: theme.spacing(0),
-  variants: [
-    {
-      props: ({ open }) => open,
-      style: {
-        justifyContent: 'flex-start',
-        paddingLeft: theme.spacing(3)
-      }
-    }
-  ]
+  justifyContent: open ? 'flex-start' : 'center',
+
+  paddingLeft: open ? theme.spacing(2) : theme.spacing(0),
+  paddingRight: theme.spacing(2),
+
+  borderBottom: `1px solid ${alpha('#fff', 0.08)}`
 }));
 
 export default DrawerHeaderStyled;

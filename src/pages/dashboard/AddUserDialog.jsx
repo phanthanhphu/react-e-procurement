@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -17,139 +17,234 @@ import {
   Select,
   MenuItem,
   FormControl,
+  Chip,
+  Divider,
+  Tooltip,
+  Switch,
+  useMediaQuery,
 } from '@mui/material';
+
+import { alpha, useTheme } from '@mui/material/styles';
+
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+
 import { API_BASE_URL } from '../../config';
 
+const initialForm = {
+  username: '',
+  email: '',
+  password: '',
+  address: '',
+  phone: '',
+  role: 'User',
+  isEnabled: true,
+};
+
 const AddUserDialog = ({ open, onClose, onAdd }) => {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    address: '',
-    phone: '',
-    role: 'User',
-    isEnabled: true, // THÊM: bật/tắt user khi tạo mới
-  });
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const [formData, setFormData] = useState(initialForm);
+
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+
   const [saving, setSaving] = useState(false);
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
   const [emailError, setEmailError] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+  const locked = saving;
 
   // Email validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  // Clean up image preview when dialog closes or image changes
+  // ====== Style tokens (same vibe) ======
+  const paperSx = useMemo(
+    () => ({
+      borderRadius: fullScreen ? 0 : 4,
+      overflow: 'hidden',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.25)}`,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background:
+        theme.palette.mode === 'dark'
+          ? alpha(theme.palette.background.paper, 0.72)
+          : alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+    }),
+    [fullScreen, theme]
+  );
+
+  const headerSx = useMemo(
+    () => ({
+      position: 'relative',
+      py: 2,
+      px: 2.5,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    }),
+    [theme]
+  );
+
+  const subtleCardSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+      background: alpha(theme.palette.common.white, 0.6),
+      backdropFilter: 'blur(10px)',
+      boxShadow: `0 10px 30px ${alpha('#000', 0.08)}`,
+    }),
+    [theme]
+  );
+
+  const fieldSx = useMemo(
+    () => ({
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 3,
+        backgroundColor: alpha(theme.palette.common.white, 0.65),
+        '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
+        '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
+        '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
+      },
+      '& .MuiInputLabel-root': { fontWeight: 700 },
+    }),
+    [theme]
+  );
+
+  const gradientBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1.1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      boxShadow: `0 10px 24px ${alpha(theme.palette.primary.main, 0.28)}`,
+      transform: 'translateY(0)',
+      transition: 'transform .15s ease, box-shadow .15s ease',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: `0 14px 30px ${alpha(theme.palette.primary.main, 0.34)}`,
+        backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+      },
+    }),
+    [theme]
+  );
+
+  const outlineBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1.1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    }),
+    []
+  );
+
+  const toast = (msg, severity = 'success') => {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  const handleClose = () => {
+    if (locked) return;
+    onClose?.();
+  };
+
+  // Clean up image preview
   useEffect(() => {
     return () => {
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-      }
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
-  }, [imagePreview, open]);
+  }, [imagePreview]);
+
+  // Reset state when open/close
+  useEffect(() => {
+    if (!open) return;
+    setAttemptedSubmit(false);
+    setConfirmOpen(false);
+    setSnackbarOpen(false);
+    setSnackbarMessage('');
+    setSnackbarSeverity('success');
+  }, [open]);
 
   // Handle input changes with email validation
   const handleChange = (field) => (e) => {
     const value = e.target.value;
     setFormData((prev) => ({ ...prev, [field]: value }));
+
     if (field === 'email') {
-      if (value && !emailRegex.test(value)) {
-        setEmailError('Invalid email format');
-      } else {
-        setEmailError('');
-      }
+      if (value && !emailRegex.test(value)) setEmailError('Invalid email format');
+      else setEmailError('');
     }
   };
 
   // Handle file input
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) {
-      setSnackbarMessage('No file selected.');
-      setSnackbarSeverity('warning');
-      setSnackbarOpen(true);
-      return;
-    }
+    const file = e.target.files?.[0];
+    if (!file) return toast('No file selected.', 'warning');
+
     if (!file.type.startsWith('image/')) {
-      setSnackbarMessage('Please select an image file (e.g., .jpg, .png).');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      e.target.value = null;
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setSnackbarMessage('Image file size must be under 5MB.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      toast('Please select an image file (e.g., .jpg, .png).', 'error');
       e.target.value = null;
       return;
     }
 
-    // Clean up previous preview
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Image file size must be under 5MB.', 'error');
+      e.target.value = null;
+      return;
     }
+
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
 
     setProfileImage(file);
     setImagePreview(URL.createObjectURL(file));
     e.target.value = null;
   };
 
-  // Remove profile image
   const handleRemoveImage = () => {
-    if (imagePreview) {
-      URL.revokeObjectURL(imagePreview);
-    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
     setProfileImage(null);
     setImagePreview(null);
   };
 
-  // Trigger confirmation
+  const validate = () => {
+    if (!formData.username?.trim()) return 'Username is required.';
+    if (!formData.email?.trim()) return 'Email is required.';
+    if (!formData.password?.trim()) return 'Password is required.';
+    if (formData.email && !emailRegex.test(formData.email)) return 'Invalid email format.';
+    return '';
+  };
+
   const handleSubmit = () => {
-    if (!formData.username) {
-      setSnackbarMessage('Username is required.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (!formData.email) {
-      setSnackbarMessage('Email is required.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (!formData.password) {
-      setSnackbarMessage('Password is required.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
-    if (formData.email && !emailRegex.test(formData.email)) {
-      setSnackbarMessage('Invalid email format.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-      return;
-    }
+    setAttemptedSubmit(true);
+    const err = validate();
+    if (err) return toast(err, 'error');
     setConfirmOpen(true);
   };
 
-  // Confirm and proceed with API call
   const handleConfirmSubmit = async () => {
     setConfirmOpen(false);
+
     const formDataToSend = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') {
-        formDataToSend.append(key, value);
-      }
+      if (value !== undefined && value !== '') formDataToSend.append(key, value);
     });
-    if (profileImage) {
-      formDataToSend.append('profileImage', profileImage);
-    }
+    if (profileImage) formDataToSend.append('profileImage', profileImage);
 
     // Debug: Log FormData entries
     console.log('FormData entries:');
@@ -161,9 +256,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/users/add`, {
         method: 'POST',
-        headers: {
-          accept: '*/*',
-        },
+        headers: { accept: '*/*' },
         body: formDataToSend,
       });
 
@@ -173,7 +266,7 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
         try {
           const errorData = JSON.parse(errorText);
           message = errorData.message || message;
-        } catch (parseError) {
+        } catch {
           message = errorText || message;
         }
         throw new Error(message);
@@ -181,251 +274,392 @@ const AddUserDialog = ({ open, onClose, onAdd }) => {
 
       const text = await res.text();
       let message = 'User added successfully';
+
       try {
         const data = JSON.parse(text);
         message = data.message || message;
-        onAdd(data);
-      } catch (parseError) {
+        onAdd?.(data);
+      } catch {
         console.warn('Response is not JSON:', text);
-        onAdd({ message });
+        onAdd?.({ message });
       }
 
-      setSnackbarMessage(message);
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-      setFormData({ username: '', email: '', password: '', address: '', phone: '', role: 'User dex', isEnabled: true });
+      toast(message, 'success');
+
+      setFormData(initialForm);
       setEmailError('');
-      handleRemoveImage(); // Clean up image and preview
-      onClose();
+      setAttemptedSubmit(false);
+      handleRemoveImage();
+
+      onClose?.();
     } catch (err) {
       console.error('Add user error:', err);
-      setSnackbarMessage(err.message);
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      toast(err?.message || 'Add user failed.', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  // Cancel confirmation
-  const handleCancelConfirm = () => {
-    setConfirmOpen(false);
-  };
+  const titleName = formData.username?.trim() || 'Unknown';
 
-  // Close snackbar
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
-  };
+  const showUsernameError = attemptedSubmit && !formData.username?.trim();
+  const showEmailError = (attemptedSubmit && !formData.email?.trim()) || !!emailError;
+  const showPasswordError = attemptedSubmit && !formData.password?.trim();
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle
-        sx={{
-          bgcolor: (theme) => theme.palette.primary.main,
-          color: (theme) => theme.palette.primary.contrastText,
-          fontWeight: 'bold',
-          fontSize: '1.25rem',
-          textTransform: 'capitalize',
-          letterSpacing: 1,
-        }}
+    <>
+      <Dialog
+        open={open}
+        onClose={locked ? undefined : handleClose}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: paperSx }}
       >
-        Add New User
-      </DialogTitle>
-      <DialogContent dividers sx={{ pt: 3 }}>
-        <Stack spacing={3}>
-          <TextField
-            label="Username"
-            value={formData.username}
-            onChange={handleChange('username')}
-            fullWidth
-            size="small"
-            required
-            error={formData.username === '' && snackbarOpen}
-            helperText={formData.username === '' && snackbarOpen ? 'Username is required' : ''}
-            disabled={saving}
-          />
-          <TextField
-            label="Email"
-            value={formData.email}
-            onChange={handleChange('email')}
-            fullWidth
-            size="small"
-            required
-            error={!!emailError || (formData.email === '' && snackbarOpen)}
-            helperText={emailError || (formData.email === '' && snackbarOpen ? 'Email is required' : '')}
-            disabled={saving}
-          />
-          <TextField
-            label="Password"
-            type="password"
-            value={formData.password}
-            onChange={handleChange('password')}
-            fullWidth
-            size="small"
-            required
-            error={formData.password === '' && snackbarOpen}
-            helperText={formData.password === '' && snackbarOpen ? 'Password is required' : ''}
-            disabled={saving}
-          />
-          <TextField
-            label="Address"
-            value={formData.address}
-            onChange={handleChange('address')}
-            fullWidth
-            size="small"
-            disabled={saving}
-          />
-          <TextField
-            label="Phone"
-            value={formData.phone}
-            onChange={handleChange('phone')}
-            fullWidth
-            size="small"
-            disabled={saving}
-          />
-          <Box>
-            <InputLabel sx={{ mb: 1 }}>Role</InputLabel>
-            <Select
-              value={formData.role}
-              onChange={handleChange('role')}
-              fullWidth
-              size="small"
-              displayEmpty
-              renderValue={(selected) => selected || 'User'}
-              disabled={saving}
-            >
-              <MenuItem value="User">User</MenuItem>
-              <MenuItem value="Leader">Leader</MenuItem>
-              <MenuItem value="Admin">Admin</MenuItem>
-            </Select>
-          </Box>
-
-          {/* THÊM: BẬT/TẮT USER KHI TẠO MỚI */}
-          <FormControl component="fieldset" sx={{ mt: 1 }}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <input
-                type="checkbox"
-                checked={formData.isEnabled}
-                onChange={(e) => setFormData(prev => ({ ...prev, isEnabled: e.target.checked }))}
-                disabled={saving}
-              />
-              <Typography variant="body2">
-                {formData.isEnabled ? 'Enabled' : 'Disabled'}
-              </Typography>
-            </Stack>
-          </FormControl>
-
-          <Box>
-            <InputLabel sx={{ mb: 1 }}>Profile Image</InputLabel>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Button
-                variant="outlined"
-                component="label"
-                startIcon={<PhotoCamera />}
-                disabled={saving}
+        {/* Header */}
+        <DialogTitle sx={headerSx}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  fontSize: { xs: 18, sm: 20 },
+                }}
               >
-                Select Image
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                />
-              </Button>
-              {profileImage && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  1 image selected
-                </Typography>
-              )}
-            </Stack>
-            {imagePreview && (
-              <Box mt={2} sx={{ position: 'relative', display: 'inline-block' }}>
-                <img
-                  src={imagePreview}
-                  alt="Profile Preview"
-                  style={{ maxHeight: '150px', borderRadius: 4, border: '1px solid #ddd' }}
-                  onError={(e) => {
-                    console.error(`Failed to load image: ${imagePreview}`);
-                    setSnackbarMessage('Failed to load image preview.');
-                    setSnackbarSeverity('error');
-                    setSnackbarOpen(true);
-                    e.target.style.display = 'none';
-                  }}
-                />
-                <IconButton
-                  sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
-                  onClick={handleRemoveImage}
-                  disabled={saving}
-                >
-                  <CloseIcon color="error" />
-                </IconButton>
-                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
-                  {profileImage.name}
-                </Typography>
-              </Box>
-            )}
-            {!imagePreview && (
-              <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-                No image selected
+                Add New User
               </Typography>
-            )}
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} disabled={saving} variant="outlined" color="secondary">
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={saving}
-          variant="contained"
-          color="primary"
+              <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 13 }}>
+                Create a user with role and profile image
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                size="small"
+                icon={<CheckCircleRoundedIcon />}
+                label="Creating"
+                sx={{
+                  color: 'common.white',
+                  bgcolor: alpha('#000', 0.18),
+                  border: `1px solid ${alpha('#fff', 0.22)}`,
+                  fontWeight: 700,
+                }}
+              />
+              <Tooltip title="Close">
+                <span>
+                  <IconButton
+                    onClick={handleClose}
+                    disabled={locked}
+                    sx={{
+                      color: 'common.white',
+                      bgcolor: alpha('#000', 0.18),
+                      border: `1px solid ${alpha('#fff', 0.22)}`,
+                      '&:hover': { bgcolor: alpha('#000', 0.28) },
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+          <Stack spacing={2}>
+            <Box sx={{ ...subtleCardSx, p: 2 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>
+                Details
+              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                Fill required fields. Keep role naming consistent.
+              </Typography>
+
+              <Divider sx={{ my: 1.6 }} />
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 1.8,
+                }}
+              >
+                <TextField
+                  label="Username"
+                  value={formData.username}
+                  onChange={handleChange('username')}
+                  fullWidth
+                  size="small"
+                  required
+                  disabled={locked}
+                  sx={fieldSx}
+                  error={showUsernameError}
+                  helperText={showUsernameError ? 'Username is required' : ' '}
+                  placeholder="e.g., bao.chau"
+                />
+
+                <TextField
+                  label="Email"
+                  value={formData.email}
+                  onChange={handleChange('email')}
+                  fullWidth
+                  size="small"
+                  required
+                  disabled={locked}
+                  sx={fieldSx}
+                  error={showEmailError}
+                  helperText={emailError || (attemptedSubmit && !formData.email?.trim() ? 'Email is required' : ' ')}
+                  placeholder="e.g., user@mail.com"
+                />
+
+                <TextField
+                  label="Password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange('password')}
+                  fullWidth
+                  size="small"
+                  required
+                  disabled={locked}
+                  sx={fieldSx}
+                  error={showPasswordError}
+                  helperText={showPasswordError ? 'Password is required' : ' '}
+                  placeholder="••••••••"
+                />
+
+                <FormControl fullWidth size="small" disabled={locked} sx={fieldSx}>
+                  <InputLabel sx={{ fontWeight: 700 }}>Role</InputLabel>
+                  <Select
+                    value={formData.role}
+                    label="Role"
+                    onChange={handleChange('role')}
+                  >
+                    <MenuItem value="User">User</MenuItem>
+                    <MenuItem value="Leader">Leader</MenuItem>
+                    <MenuItem value="Admin">Admin</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  label="Address"
+                  value={formData.address}
+                  onChange={handleChange('address')}
+                  fullWidth
+                  size="small"
+                  disabled={locked}
+                  sx={fieldSx}
+                  placeholder="Optional"
+                />
+
+                <TextField
+                  label="Phone"
+                  value={formData.phone}
+                  onChange={handleChange('phone')}
+                  fullWidth
+                  size="small"
+                  disabled={locked}
+                  sx={fieldSx}
+                  placeholder="Optional"
+                />
+              </Box>
+
+              {/* Enabled toggle */}
+              <Box
+                sx={{
+                  mt: 1.6,
+                  p: 1.3,
+                  borderRadius: 3,
+                  bgcolor: alpha(theme.palette.primary.main, 0.06),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                }}
+              >
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <InfoRoundedIcon sx={{ fontSize: 18, color: alpha(theme.palette.primary.main, 0.8) }} />
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      <b>Status:</b> {formData.isEnabled ? 'Enabled' : 'Disabled'}
+                    </Typography>
+                  </Stack>
+                  <Switch
+                    checked={formData.isEnabled}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, isEnabled: e.target.checked }))}
+                    disabled={locked}
+                  />
+                </Stack>
+              </Box>
+            </Box>
+
+            {/* Image card */}
+            <Box sx={{ ...subtleCardSx, p: 2 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>
+                Profile Image
+              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                Optional. JPG/PNG under 5MB.
+              </Typography>
+
+              <Divider sx={{ my: 1.6 }} />
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<PhotoCamera />}
+                  disabled={locked}
+                  sx={outlineBtnSx}
+                >
+                  Select Image
+                  <input hidden type="file" accept="image/*" onChange={handleFileChange} />
+                </Button>
+
+                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                  {profileImage ? (
+                    <>
+                      <b>1 image selected:</b> {profileImage.name}
+                    </>
+                  ) : (
+                    'No image selected'
+                  )}
+                </Typography>
+              </Stack>
+
+              {imagePreview && (
+                <Box
+                  sx={{
+                    mt: 1.6,
+                    position: 'relative',
+                    display: 'inline-block',
+                    borderRadius: 3,
+                    overflow: 'hidden',
+                    border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                    background: alpha('#fff', 0.55),
+                  }}
+                >
+                  <img
+                    src={imagePreview}
+                    alt="Profile Preview"
+                    style={{ display: 'block', maxHeight: 160, width: 'auto' }}
+                    onError={(e) => {
+                      console.error(`Failed to load image: ${imagePreview}`);
+                      toast('Failed to load image preview.', 'error');
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+
+                  <Tooltip title="Remove">
+                    <span>
+                      <IconButton
+                        onClick={handleRemoveImage}
+                        disabled={locked}
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          bgcolor: alpha('#000', 0.18),
+                          border: `1px solid ${alpha('#fff', 0.22)}`,
+                          color: 'common.white',
+                          '&:hover': { bgcolor: alpha('#000', 0.28) },
+                        }}
+                      >
+                        <CloseIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </Box>
+              )}
+            </Box>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: { xs: 2, sm: 2.5 }, py: 2, gap: 1 }}>
+          <Button onClick={handleClose} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+
+          <Button onClick={handleSubmit} disabled={locked} variant="contained" sx={gradientBtnSx}>
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
+          </Button>
+        </DialogActions>
+
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
-        </Button>
-      </DialogActions>
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbarSeverity}
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+          <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </Dialog>
+
+      {/* Confirm dialog (same vibe) */}
       <Dialog
         open={confirmOpen}
-        onClose={handleCancelConfirm}
+        onClose={locked ? undefined : () => setConfirmOpen(false)}
         maxWidth="xs"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+            background: alpha('#FFFFFF', 0.92),
+            backdropFilter: 'blur(14px)',
+            boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+          },
+        }}
       >
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to add user &quot;{formData.username || 'Unknown'}&quot;?
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm Add</DialogTitle>
+
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>
+            Are you sure you want to add user <b>{titleName}</b>?
           </Typography>
+
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.4,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+            }}
+          >
+            <Stack spacing={0.6}>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Email: <b>{formData.email?.trim() || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Role: <b>{formData.role || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Status: <b>{formData.isEnabled ? 'Enabled' : 'Disabled'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Image: <b>{profileImage ? profileImage.name : 'None'}</b>
+              </Typography>
+            </Stack>
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 1.5 }}>
-          <Button onClick={handleCancelConfirm} disabled={saving} variant="outlined" color="secondary">
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={() => setConfirmOpen(false)} disabled={locked} variant="outlined" sx={outlineBtnSx}>
             No
           </Button>
           <Button
             onClick={handleConfirmSubmit}
-            disabled={saving}
+            disabled={locked}
             variant="contained"
-            color="primary"
+            sx={{ ...gradientBtnSx, px: 2.4 }}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
           </Button>
         </DialogActions>
       </Dialog>
-    </Dialog>
+    </>
   );
 };
 

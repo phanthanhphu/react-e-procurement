@@ -14,16 +14,20 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
   const [currency, setCurrency] = useState('VND');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [stockDate, setStockDate] = useState('');
+  const [groupName, setGroupName] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // API 1: Group info
         const groupResponse = await axios.get(
           `${API_BASE_URL}/api/group-summary-requisitions/${groupId}`,
           { headers: { Accept: '*/*' } }
         );
         setCurrency(groupResponse.data.currency || 'VND');
 
+        // API 2: Comparison data
         const response = await axios.get(
           `${API_BASE_URL}/api/summary-requisitions/search/comparison`,
           {
@@ -42,50 +46,77 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
         if (!response.data?.page?.content) {
           throw new Error('Invalid API response: Missing page.content');
         }
+
         setData(response.data.page.content || []);
         setTotalAmt(response.data.totalAmt || 0);
         setTotalAmtDifference(response.data.totalAmtDifference || 0);
         setTotalDifferencePercentage(response.data.totalDifferencePercentage || 0);
+
+        // API 3: weekly info
+        await axios
+          .get(`${API_BASE_URL}/api/group-summary-requisitions/weekly-info/${groupId}`)
+          .then((res) => {
+            setStockDate(res.data.createdDate || '');
+            setGroupName(res.data.weekly || '');
+          })
+          .catch((err) => {
+            console.error('Error fetching weekly info', err);
+          });
       } catch (error) {
         const errorMessage = error.response
           ? `Failed to fetch data for export: ${error.response.status} - ${error.response.data?.message || error.message}`
           : `Failed to fetch data for export: ${error.message}`;
+
         console.error(errorMessage, error);
         setSnackbarMessage(errorMessage);
         setSnackbarOpen(true);
       }
     };
+
     fetchData();
   }, [groupId]);
 
-  // Hàm format tiền tệ an toàn - đã fix lỗi EURO
-  const formatCurrency = (value, curr) => {
-    if (value == null) return '0';
+  // ===== helper: format date array [yyyy,MM,dd,HH,mm,ss,nano] =====
+  const formatLastPurchaseDate = (d) => {
+    if (!d) return '';
+    if (Array.isArray(d) && d.length >= 6) {
+      const [y, m, day, hh, mm, ss] = d;
+      const pad = (x) => String(x).padStart(2, '0');
+      return `${pad(day)}/${pad(m)}/${y} ${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+    }
+    try {
+      const dt = new Date(d);
+      if (!Number.isNaN(dt.getTime())) return dt.toLocaleString();
+      return String(d);
+    } catch {
+      return String(d);
+    }
+  };
+
+  // ✅ format number with comma thousands ONLY (no currency symbols)
+  // - VND: 0 decimals
+  // - USD/EUR: 2 decimals (bạn muốn 0 decimals cho tất cả thì đổi 2 -> 0)
+  const formatMoneyNumber = (value, curr) => {
+    if (value == null || value === '') return '0';
+
+    const num = Number(value);
+    if (Number.isNaN(num)) return String(value);
 
     const code = (curr || 'VND').trim().toUpperCase();
-    let currencyCode = 'VND';
-    let locale = 'vi-VN';
-
-    if (code === 'USD') {
-      currencyCode = 'USD';
-      locale = 'en-US';
-    } else if (code === 'EUR' || code === 'EURO') {
-      currencyCode = 'EUR';
-      locale = 'de-DE'; // hoặc 'fr-FR', 'en-GB' đều hiển thị €
-    }
+    const decimals = code === 'VND' ? 0 : 2;
 
     try {
-      return Number(value).toLocaleString(locale, {
-        style: 'currency',
-        currency: currencyCode,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
-    } catch (e) {
-      const num = Number(value).toLocaleString('vi-VN');
-      if (code === 'USD') return `$ ${num}`;
-      if (code.includes('EUR')) return `€ ${num}`;
-      return `${num} ${currencyCode}`;
+      return new Intl.NumberFormat('en-US', {
+        useGrouping: true,
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(num);
+    } catch {
+      // fallback
+      const fixed = decimals > 0 ? num.toFixed(decimals) : String(Math.round(num));
+      const [intPart, decPart] = fixed.split('.');
+      const withComma = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return decPart ? `${withComma}.${decPart}` : withComma;
     }
   };
 
@@ -96,22 +127,38 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       return;
     }
 
+    // build supplier columns
     const allSupplierKeysSet = new Set();
     data.forEach((item) => {
       const suppliers = item.suppliers || [];
-      suppliers.forEach((supplier) => allSupplierKeysSet.add(supplier.supplierName));
+      suppliers.forEach((supplier) => {
+        if (supplier?.supplierName) allSupplierKeysSet.add(supplier.supplierName);
+      });
     });
     const allSupplierKeys = Array.from(allSupplierKeysSet);
 
-    const totalCols = 9 + allSupplierKeys.length + 6;
+    // ✅ add 4 cols for LAST PURCHASE before SELECTED SUPPLIER
+    const LAST_PURCHASE_COLS = 4;
+
+    // fixed 9 + suppliers + (lastPurchase 4 + selected 3 + diff 2 + remark 1 = 10)
+    const totalCols = 9 + allSupplierKeys.length + (LAST_PURCHASE_COLS + 3 + 2 + 1);
     const wsData = [];
+
+    // indices
+    const supplierStartCol = 9;
+    const supplierEndCol = 8 + allSupplierKeys.length;
+
+    const lastPurchaseStartCol = 9 + allSupplierKeys.length;                // 4 cols
+    const selectedStartCol = lastPurchaseStartCol + LAST_PURCHASE_COLS;     // 3 cols
+    const differenceStartCol = selectedStartCol + 3;                        // 2 cols
+    const remarkCol = differenceStartCol + 2;                               // 1 col
 
     // Header Row 1
     const titleRow = new Array(totalCols).fill('');
-    titleRow[0] = 'COMPARISON PRICE';
+    titleRow[0] = `COMPARISON PRICE (${groupName || ''} – ${stockDate || ''})`;
     wsData.push(titleRow);
 
-    // Header Row 2 - đã sửa lỗi ghi đè trùng
+    // Header Row 2
     const headerRow2 = new Array(totalCols).fill('');
     headerRow2[0] = 'No';
     headerRow2[1] = 'Product Type 1';
@@ -121,34 +168,59 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     headerRow2[6] = 'Hana SAP Code';
     headerRow2[7] = 'Unit';
     headerRow2[8] = 'Order Qty';
-    headerRow2[9] = 'SUPPLIER';
-    headerRow2[9 + allSupplierKeys.length] = 'Selected Supplier'; // chỉ ghi 1 lần
-    headerRow2[9 + allSupplierKeys.length + 3] = 'Difference';
-    headerRow2[9 + allSupplierKeys.length + 5] = 'Remark';
+
+    // group titles
+    if (allSupplierKeys.length > 0) headerRow2[supplierStartCol] = 'SUPPLIER';
+    headerRow2[lastPurchaseStartCol] = 'LAST PURCHASE';
+    headerRow2[selectedStartCol] = 'Selected Supplier';
+    headerRow2[differenceStartCol] = 'Difference';
+    headerRow2[remarkCol] = 'Remark';
     wsData.push(headerRow2);
 
-    // Header Row 3 - giữ nguyên như cũ
+    // Header Row 3
     const fixedColumns = [
       'No', 'Product Type 1', 'Product Type 2', 'EN', 'VN',
       'Old SAP Code', 'SAP Code in New SAP', 'Unit', 'Order Qty',
     ];
-    const finalColumns = [
+
+    const lastPurchaseColumns = [
+      'Last Supplier',
+      'Last Purchase Date',
+      `Last Price (${currency})`,
+      'Last Order Qty',
+    ];
+
+    const selectedColumns = [
       'Supplier Description',
       `Price (${currency})`,
       `Amount (${currency})`,
-      `Amount (${currency})`,
-      `% (${currency})`,
-      '',
     ];
-    wsData.push([...fixedColumns, ...allSupplierKeys, ...finalColumns]);
 
-    // Data rows - dùng formatCurrency mới
+    const differenceColumns = [
+      `Difference (${currency})`,
+      `%`,
+    ];
+
+    const remarkColumns = ['Remark'];
+
+    wsData.push([
+      ...fixedColumns,
+      ...allSupplierKeys,
+      ...lastPurchaseColumns,
+      ...selectedColumns,
+      ...differenceColumns,
+      ...remarkColumns,
+    ]);
+
+    // Data rows
     data.forEach((item, index) => {
-      const selectedSupplier = (item.suppliers || []).find(s => s.isSelected === 1);
+      const selectedSupplier = (item.suppliers || []).find((s) => s.isSelected === 1);
 
       const supplierInfo = {};
-      (item.suppliers || []).forEach(sup => {
-        supplierInfo[sup.supplierName] = sup.price ? formatCurrency(sup.price, currency) : '';
+      (item.suppliers || []).forEach((sup) => {
+        if (!sup?.supplierName) return;
+        supplierInfo[sup.supplierName] =
+          sup.price != null ? formatMoneyNumber(sup.price, currency) : '';
       });
 
       const row = [
@@ -161,14 +233,29 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
         item.hanaSapCode || '',
         item.unit || '',
         item.orderQty ?? 0,
-        ...allSupplierKeys.map(key => supplierInfo[key] || ''),
+
+        // supplier matrix
+        ...allSupplierKeys.map((key) => supplierInfo[key] || ''),
+
+        // last purchase
+        item.lastPurchaseSupplierName || '',
+        formatLastPurchaseDate(item.lastPurchaseDate),
+        item.lastPurchasePrice != null ? formatMoneyNumber(item.lastPurchasePrice, currency) : '',
+        item.lastPurchaseOrderQty ?? '',
+
+        // selected supplier
         selectedSupplier?.supplierName || '',
-        selectedSupplier?.price ? formatCurrency(selectedSupplier.price, currency) : '',
-        formatCurrency(item.amtVnd || 0, currency),
-        formatCurrency(item.amtDifference || 0, currency),
+        selectedSupplier?.price != null ? formatMoneyNumber(selectedSupplier.price, currency) : '',
+        formatMoneyNumber(item.amtVnd || 0, currency),
+
+        // difference
+        formatMoneyNumber(item.amtDifference || 0, currency),
         item.percentage != null ? `${parseFloat(item.percentage).toFixed(2)}%` : '0%',
+
+        // remark
         item.remarkComparison || '',
       ];
+
       wsData.push(row);
     });
 
@@ -177,14 +264,13 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
     // Total row
     const totalRow = new Array(totalCols).fill('');
     totalRow[0] = 'TOTAL';
-    totalRow[9 + allSupplierKeys.length + 2] = formatCurrency(totalAmt, currency);
-    totalRow[9 + allSupplierKeys.length + 3] = formatCurrency(totalAmtDifference, currency);
-    totalRow[9 + allSupplierKeys.length + 4] = totalDifferencePercentage != null 
-      ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` 
-      : '0%';
+    totalRow[selectedStartCol + 2] = formatMoneyNumber(totalAmt, currency);
+    totalRow[differenceStartCol] = formatMoneyNumber(totalAmtDifference, currency);
+    totalRow[differenceStartCol + 1] =
+      totalDifferencePercentage != null ? `${parseFloat(totalDifferencePercentage).toFixed(2)}%` : '0%';
     wsData.push(totalRow);
 
-    // Signature - giữ nguyên 100% như cũ
+    // Signature
     const signatureTitles = new Array(totalCols).fill('');
     const signatureNames = new Array(totalCols).fill('');
     const blankLine = new Array(totalCols).fill('');
@@ -211,9 +297,9 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       }
     });
 
-    signaturePositions.forEach((sig, index) => {
-      if (index < startPositions.length) {
-        const startCol = startPositions[index];
+    signaturePositions.forEach((sig, idx) => {
+      if (idx < startPositions.length) {
+        const startCol = startPositions[idx];
         signatureTitles[startCol] = sig.title;
         signatureNames[startCol] = sig.name;
       }
@@ -221,11 +307,12 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
 
     wsData.push(blankLine, signatureTitles, signBlank1, signBlank2, signatureNames, signBlank3);
 
-    // Phần còn lại giữ nguyên 100% format cũ của bạn
+    // Sheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Comparison');
 
+    // Styles
     const commonBorder = {
       top: { style: 'thin', color: { rgb: '000000' } },
       bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -233,10 +320,26 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       right: { style: 'thin', color: { rgb: '000000' } },
     };
 
-    const titleStyle = { font: { bold: true, name: 'Times New Roman', sz: 18 }, alignment: { horizontal: 'center', vertical: 'center' }, border: commonBorder };
-    const boldHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
-    const normalCellStyle = { font: { name: 'Times New Roman', sz: 11 }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: commonBorder };
-    const totalStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center', vertical: 'center' }, border: commonBorder };
+    const titleStyle = {
+      font: { bold: true, name: 'Times New Roman', sz: 18 },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: commonBorder,
+    };
+    const boldHeaderStyle = {
+      font: { bold: true, name: 'Times New Roman', sz: 12 },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: commonBorder,
+    };
+    const normalCellStyle = {
+      font: { name: 'Times New Roman', sz: 11 },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: commonBorder,
+    };
+    const totalStyle = {
+      font: { bold: true, name: 'Times New Roman', sz: 12 },
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: commonBorder,
+    };
     const signatureHeaderStyle = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
     const signatureNameStyle = { font: { name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
 
@@ -255,8 +358,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       }
     }
 
-    const supplierStartCol = 9;
-    const supplierEndCol = 8 + allSupplierKeys.length;
+    // Merges
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
       { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
@@ -267,10 +369,15 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } },
       { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } },
       { s: { r: 1, c: 8 }, e: { r: 2, c: 8 } },
-      { s: { r: 1, c: supplierStartCol }, e: { r: 1, c: supplierEndCol } },
-      { s: { r: 1, c: 9 + allSupplierKeys.length }, e: { r: 1, c: 9 + allSupplierKeys.length + 2 } },
-      { s: { r: 1, c: 9 + allSupplierKeys.length + 3 }, e: { r: 1, c: 9 + allSupplierKeys.length + 4 } },
-      { s: { r: 1, c: 9 + allSupplierKeys.length + 5 }, e: { r: 2, c: 9 + allSupplierKeys.length + 5 } },
+
+      ...(allSupplierKeys.length > 0
+        ? [{ s: { r: 1, c: supplierStartCol }, e: { r: 1, c: supplierEndCol } }]
+        : []),
+
+      { s: { r: 1, c: lastPurchaseStartCol }, e: { r: 1, c: lastPurchaseStartCol + 3 } },
+      { s: { r: 1, c: selectedStartCol }, e: { r: 1, c: selectedStartCol + 2 } },
+      { s: { r: 1, c: differenceStartCol }, e: { r: 1, c: differenceStartCol + 1 } },
+      { s: { r: 1, c: remarkCol }, e: { r: 2, c: remarkCol } },
       { s: { r: dataEndRow, c: 0 }, e: { r: dataEndRow, c: 8 } },
     ];
 
@@ -286,19 +393,30 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
 
     ws['!merges'] = merges;
 
-    // Độ rộng cột - giữ nguyên như cũ
+    // Column widths
     ws['!cols'] = new Array(totalCols).fill({ wch: 20 });
     ws['!cols'][0] = { wch: 5 };
     ws['!cols'][1] = ws['!cols'][2] = ws['!cols'][3] = ws['!cols'][4] = { wch: 20 };
     ws['!cols'][5] = ws['!cols'][6] = { wch: 15 };
     ws['!cols'][7] = ws['!cols'][8] = { wch: 10 };
-    allSupplierKeys.forEach((_, idx) => { ws['!cols'][9 + idx] = { wch: 15 }; });
-    ws['!cols'][9 + allSupplierKeys.length] = { wch: 20 };
-    ws['!cols'][9 + allSupplierKeys.length + 1] = { wch: 15 };
-    ws['!cols'][9 + allSupplierKeys.length + 2] = { wch: 20 };
-    ws['!cols'][9 + allSupplierKeys.length + 3] = { wch: 15 };
-    ws['!cols'][9 + allSupplierKeys.length + 4] = { wch: 10 };
-    ws['!cols'][9 + allSupplierKeys.length + 5] = { wch: 30 };
+
+    allSupplierKeys.forEach((_, idx) => {
+      ws['!cols'][9 + idx] = { wch: 15 };
+    });
+
+    ws['!cols'][lastPurchaseStartCol] = { wch: 22 };
+    ws['!cols'][lastPurchaseStartCol + 1] = { wch: 22 };
+    ws['!cols'][lastPurchaseStartCol + 2] = { wch: 16 };
+    ws['!cols'][lastPurchaseStartCol + 3] = { wch: 12 };
+
+    ws['!cols'][selectedStartCol] = { wch: 22 };
+    ws['!cols'][selectedStartCol + 1] = { wch: 16 };
+    ws['!cols'][selectedStartCol + 2] = { wch: 18 };
+
+    ws['!cols'][differenceStartCol] = { wch: 16 };
+    ws['!cols'][differenceStartCol + 1] = { wch: 10 };
+
+    ws['!cols'][remarkCol] = { wch: 30 };
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_${groupId}.xlsx`);
@@ -323,6 +441,7 @@ export default function ExportComparisonWeeklyExcelButton({ disabled, groupId })
       >
         Comparison
       </Button>
+
       <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={() => setSnackbarOpen(false)}>
         <Alert onClose={() => setSnackbarOpen(false)} severity="error" sx={{ width: '100%' }}>
           {snackbarMessage}

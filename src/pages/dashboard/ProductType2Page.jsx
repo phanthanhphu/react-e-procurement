@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Typography,
   Box,
@@ -11,21 +11,34 @@ import {
   Paper,
   Stack,
   IconButton,
-  TablePagination,
   useTheme,
   Button,
-  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Snackbar,
   Alert,
+  Container,
+  Divider,
+  Pagination,
+  Select,
+  MenuItem,
+  Tooltip,
 } from '@mui/material';
+
+import { alpha } from '@mui/material/styles';
+
 import { Add, Edit, Delete, ArrowUpward, ArrowDownward, ArrowBack } from '@mui/icons-material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ProductType2Search from './ProductType2Search';
 import { API_BASE_URL } from '../../config';
+
+import AddProductType2Dialog from './AddProductType2Dialog';
+import EditProductType2Dialog from './EditProductType2Dialog';
 
 const headers = [
   { label: 'No', key: 'no', sortable: false },
@@ -34,184 +47,282 @@ const headers = [
   { label: 'Action', key: 'action', sortable: false },
 ];
 
-function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort }) {
-  if (!productTypes || productTypes.length === 0) {
-    return (
-      <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
-        <Table size="small" sx={{ minWidth: 600 }}>
-          <TableHead>
-            <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-              {headers.map(({ label, key, sortable }) => (
-                <TableCell
-                  key={key}
-                  align={label === 'Action' ? 'center' : 'left'}
-                  sx={{
-                    fontWeight: 'bold',
-                    fontSize: '0.75rem',
-                    color: '#ffffff',
-                    py: 0.3,
-                    px: 0.5,
-                    whiteSpace: 'nowrap',
-                    borderRight: '1px solid rgba(255,255,255,0.15)',
-                    '&:last-child': { borderRight: 'none' },
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 1,
-                    backgroundColor: '#027aff',
-                    ...(key === 'no' && { left: 0, zIndex: 2 }),
-                    cursor: sortable ? 'pointer' : 'default',
-                    '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                  }}
-                  onClick={() => sortable && handleSort(key)}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' ? 'center' : 'flex-start' }}>
-                    <span>{label}</span>
-                    {sortable && (
-                      <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
-                        {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                          <ArrowUpward sx={{ fontSize: '1rem', color: '#fff' }} />
-                        ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                          <ArrowDownward sx={{ fontSize: '1rem', color: '#fff' }} />
-                        ) : (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <ArrowUpward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
-                            <ArrowDownward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
-                          </Box>
-                        )}
-                      </Box>
-                    )}
-                  </Box>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <TableCell colSpan={headers.length} align="center" sx={{ py: 4 }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#666' }}>
-                  <Typography sx={{ fontStyle: 'italic', fontSize: '1rem', mt: 1 }}>No Data Available</Typography>
-                </Box>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  }
+/* =========================
+   ✅ PaginationBar
+   ========================= */
+function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageChange, loading }) {
+  const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
+  const from = count === 0 ? 0 : page * rowsPerPage + 1;
+  const to = Math.min(count || 0, (page + 1) * rowsPerPage);
 
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mt: 1,
+        px: 1.25,
+        py: 0.9,
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        backgroundColor: '#fff',
+      }}
+    >
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1}
+        alignItems={{ xs: 'stretch', md: 'center' }}
+        justifyContent="space-between"
+      >
+        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+          Showing <span style={{ color: '#111827' }}>{from}-{to}</span> of{' '}
+          <span style={{ color: '#111827' }}>{count || 0}</span>
+        </Typography>
+
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+          <Button
+            variant="text"
+            startIcon={<ChevronLeftIcon fontSize="small" />}
+            disabled={loading || page <= 0}
+            onClick={() => onPageChange(page - 1)}
+            sx={{ textTransform: 'none', fontWeight: 400 }}
+          >
+            Prev
+          </Button>
+
+          <Pagination
+            size="small"
+            page={page + 1}
+            count={totalPages}
+            onChange={(_, p1) => onPageChange(p1 - 1)}
+            disabled={loading}
+            siblingCount={1}
+            boundaryCount={1}
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontSize: '0.8rem',
+                minWidth: 32,
+                height: 32,
+              },
+            }}
+          />
+
+          <Button
+            variant="text"
+            endIcon={<ChevronRightIcon fontSize="small" />}
+            disabled={loading || page >= totalPages - 1}
+            onClick={() => onPageChange(page + 1)}
+            sx={{ textTransform: 'none', fontWeight: 400 }}
+          >
+            Next
+          </Button>
+        </Stack>
+
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+          <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Page size</Typography>
+          <Select
+            size="small"
+            value={rowsPerPage}
+            onChange={(e) => onRowsPerPageChange(Number(e.target.value))}
+            disabled={loading}
+            sx={{
+              height: 32,
+              minWidth: 110,
+              borderRadius: 1.2,
+              '& .MuiSelect-select': { fontSize: '0.8rem' },
+            }}
+          >
+            {[5, 10, 25, 50].map((n) => (
+              <MenuItem key={n} value={n} sx={{ fontSize: '0.8rem' }}>
+                {n} / page
+              </MenuItem>
+            ))}
+          </Select>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+}
+
+/* =========================
+   ✅ Table (fixed layout + colgroup)
+   ========================= */
+function ProductType2Table({ productTypes, handleDelete, handleEdit, page, rowsPerPage, sortConfig, handleSort }) {
   const formatCreatedDate = (createdDateArray) => {
     if (!createdDateArray || createdDateArray.length < 3) return '';
     const [year, month, day] = createdDateArray;
-    const formattedDay = String(day).padStart(2, '0');
-    const formattedMonth = String(month).padStart(2, '0');
-    const formattedYear = year;
-    return `${formattedDay}/${formattedMonth}/${formattedYear}`;
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    return `${dd}/${mm}/${year}`;
+  };
+
+  const renderSortIndicator = (key) => {
+    const active = sortConfig.key === key && !!sortConfig.direction;
+    if (!active) {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+          <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
+          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
+        </Box>
+      );
+    }
+    if (sortConfig.direction === 'asc') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+          <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
+          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
+        </Box>
+      );
+    }
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
+        <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
+      </Box>
+    );
+  };
+
+  const cellEllipsisSx = {
+    fontSize: '0.8rem',
+    py: 0.55,
+    px: 0.8,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: 0,
   };
 
   return (
-    <TableContainer component={Paper} sx={{ height: 'calc(100vh - 320px)', overflowX: 'auto', boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)' }}>
-      <Table size="small" sx={{ minWidth: 600 }}>
+    <TableContainer
+      component={Paper}
+      elevation={0}
+      sx={{
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        maxHeight: 560,
+        overflowX: 'hidden',
+        backgroundColor: '#fff',
+      }}
+    >
+      <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '55%' }} />
+          <col style={{ width: '20%' }} />
+          <col style={{ width: '15%' }} />
+        </colgroup>
+
         <TableHead>
-          <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
+          <TableRow>
             {headers.map(({ label, key, sortable }) => (
               <TableCell
                 key={key}
-                align={label === 'Action' ? 'center' : 'left'}
-                sx={{
-                  fontWeight: 'bold',
-                  fontSize: '0.75rem',
-                  color: '#ffffff',
-                  py: 0.3,
-                  px: 0.5,
-                  whiteSpace: 'nowrap',
-                  borderRight: '1px solid rgba(255,255,255,0.15)',
-                  '&:last-child': { borderRight: 'none' },
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 1,
-                  backgroundColor: '#027aff',
-                  ...(key === 'no' && { left: 0, zIndex: 2 }),
-                  cursor: sortable ? 'pointer' : 'default',
-                  '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                }}
+                align={label === 'Action' || label === 'No' ? 'center' : 'left'}
                 onClick={() => sortable && handleSort(key)}
+                sx={{
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  color: '#111827',
+                  backgroundColor: '#f3f4f6',
+                  borderBottom: '1px solid #e5e7eb',
+                  py: 0.75,
+                  px: 0.9,
+                  whiteSpace: 'nowrap',
+                  cursor: sortable ? 'pointer' : 'default',
+                  userSelect: 'none',
+                }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: label === 'Action' ? 'center' : 'flex-start' }}>
+                <Stack
+                  direction="row"
+                  spacing={0.6}
+                  alignItems="center"
+                  justifyContent={label === 'Action' || label === 'No' ? 'center' : 'flex-start'}
+                >
                   <span>{label}</span>
-                  {sortable && (
-                    <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
-                      {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                        <ArrowUpward sx={{ fontSize: '1rem', color: '#fff' }} />
-                      ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                        <ArrowDownward sx={{ fontSize: '1rem', color: '#fff' }} />
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <ArrowUpward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
-                          <ArrowDownward sx={{ fontSize: '0.8rem', color: '#ccc' }} />
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-                </Box>
+                  {sortable ? renderSortIndicator(key) : null}
+                </Stack>
               </TableCell>
             ))}
           </TableRow>
         </TableHead>
+
         <TableBody>
-          {productTypes.map((productType, idx) => (
-            <TableRow
-              key={productType.id}
-              sx={{
-                backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#ffffff',
-                '&:hover': { backgroundColor: '#e3f2fd', transition: 'background-color 0.3s ease' },
-                cursor: 'pointer',
-              }}
-            >
-              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>
-                {idx + 1 + page * rowsPerPage}
-              </TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>{productType.name || ''}</TableCell>
-              <TableCell sx={{ fontSize: '0.75rem', py: 0.3, px: 0.5 }}>
-                {formatCreatedDate(productType.createdDate)}
-              </TableCell>
-              <TableCell align="center" sx={{ py: 0.3, px: 0.5 }}>
-                <Stack direction="row" spacing={0.2} justifyContent="center">
-                  <IconButton
-                    aria-label="edit"
-                    color="success"
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(56, 142, 60, 0.1)',
-                      '&:hover': { backgroundColor: 'rgba(56, 142, 60, 0.25)' },
-                      borderRadius: 1,
-                      p: 0.2,
-                    }}
-                    onClick={() => handleEdit(productType)}
-                  >
-                    <Edit fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    aria-label="delete"
-                    color="error"
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                      '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                      borderRadius: 1,
-                      p: 0.2,
-                    }}
-                    onClick={() => handleDelete(productType)}
-                  >
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Stack>
+          {productTypes && productTypes.length > 0 ? (
+            productTypes.map((productType, idx) => {
+              const zebra = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+
+              return (
+                <TableRow
+                  key={productType.id || idx}
+                  sx={{
+                    backgroundColor: zebra,
+                    '&:hover': { backgroundColor: '#f1f5f9' },
+                    '& > *': { borderBottom: '1px solid #f3f4f6' },
+                  }}
+                >
+                  <TableCell align="center" sx={{ fontSize: '0.8rem', py: 0.55, px: 0.8 }}>
+                    {idx + 1 + page * rowsPerPage}
+                  </TableCell>
+
+                  <TableCell sx={cellEllipsisSx} title={productType.name || ''}>
+                    {productType.name || ''}
+                  </TableCell>
+
+                  <TableCell sx={cellEllipsisSx} title={formatCreatedDate(productType.createdDate)}>
+                    {formatCreatedDate(productType.createdDate)}
+                  </TableCell>
+
+                  <TableCell align="center" sx={{ py: 0.55, px: 0.8 }}>
+                    <Stack direction="row" spacing={0.3} justifyContent="center">
+                      <Tooltip title="Edit">
+                        <span>
+                          <IconButton
+                            aria-label="edit"
+                            color="success"
+                            size="small"
+                            sx={{ p: 0.25 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(productType);
+                            }}
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+
+                      <Tooltip title="Delete">
+                        <span>
+                          <IconButton
+                            aria-label="delete"
+                            color="error"
+                            size="small"
+                            sx={{ p: 0.25 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(productType);
+                            }}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          ) : (
+            <TableRow>
+              <TableCell colSpan={4} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                No Data Available
               </TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
-        </Table>
-      </TableContainer>
-    );
+      </Table>
+    </TableContainer>
+  );
 }
 
 export default function ProductType2Page() {
@@ -220,218 +331,125 @@ export default function ProductType2Page() {
   const navigate = useNavigate();
   const location = useLocation();
   const type1Name = location.state?.type1Name || 'Unknown';
+
   const [data, setData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'info',
-  });
+
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [openAddConfirmDialog, setOpenAddConfirmDialog] = useState(false);
-  const [openEditConfirmDialog, setOpenEditConfirmDialog] = useState(false); // New state for edit confirmation
   const [productTypeToDelete, setProductTypeToDelete] = useState(null);
+
   const [productTypeToEdit, setProductTypeToEdit] = useState(null);
+
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-  const [newProductTypeName, setNewProductTypeName] = useState('');
-  const [editProductTypeName, setEditProductTypeName] = useState('');
   const [type2NameValue, setType2NameValue] = useState('');
 
-  const handleCloseNotification = () => {
-    setNotification((prev) => ({ ...prev, open: false }));
-  };
+  const btnSx = useMemo(() => ({ textTransform: 'none', fontWeight: 400 }), []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setNotification({ open: false, message: '', severity: 'info' });
-    try {
-      const url = new URL(`${API_BASE_URL}/api/product-type-2`);
-      url.search = new URLSearchParams({ productType1Id, page, size: rowsPerPage }).toString();
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { accept: '*/*' },
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  const handleCloseNotification = () => setNotification((prev) => ({ ...prev, open: false }));
+
+  // ✅ unified fetch: có name -> search endpoint, không có -> list endpoint
+  const fetchData = useCallback(
+    async ({ name = type2NameValue, pageOverride = page, sizeOverride = rowsPerPage } = {}) => {
+      setLoading(true);
+      setNotification({ open: false, message: '', severity: 'info' });
+
+      try {
+        const useSearch = !!(name && name.trim());
+        const url = new URL(
+          useSearch ? `${API_BASE_URL}/api/product-type-2/search` : `${API_BASE_URL}/api/product-type-2`
+        );
+
+        const params = {
+          productType1Id,
+          page: pageOverride,
+          size: sizeOverride,
+        };
+        if (useSearch) params.name = name.trim();
+
+        url.search = new URLSearchParams(params).toString();
+
+        const response = await fetch(url, { method: 'GET', headers: { accept: '*/*' } });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setData(result.content || []);
+        setTotalElements(result.totalElements || 0);
+      } catch (err) {
+        setNotification({ open: true, message: `Failed to load data: ${err.message}`, severity: 'error' });
+        setData([]);
+        setTotalElements(0);
+      } finally {
+        setLoading(false);
       }
-      const result = await response.json();
-      setData(result.content || []);
-      setTotalElements(result.totalElements || 0);
-    } catch (err) {
-      setNotification({
-        open: true,
-        message: `Failed to load data: ${err.message}`,
-        severity: 'error',
-      });
-      setData([]);
-      setTotalElements(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [productType1Id, page, rowsPerPage]);
+    },
+    [API_BASE_URL, productType1Id, page, rowsPerPage, type2NameValue]
+  );
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleAdd = () => {
-    if (!newProductTypeName.trim()) {
-      setNotification({
-        open: true,
-        message: 'Please enter a product type name',
-        severity: 'warning',
-      });
-      return;
+  // ===== actions =====
+  const handleAdd = async (name) => {
+    const url = new URL(`${API_BASE_URL}/api/product-type-2`);
+    url.search = new URLSearchParams({ productType1Id, name }).toString();
+
+    const response = await fetch(url, { method: 'POST', headers: { accept: '*/*' } });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
-    setOpenAddConfirmDialog(true);
+
+    const result = await response.json();
+
+    setPage(0);
+    await fetchData({ pageOverride: 0 });
+
+    setNotification({
+      open: true,
+      message: `Name '${result.name}' has been added`,
+      severity: 'success',
+      autoHideDuration: 6000,
+    });
   };
 
-  const handleConfirmAdd = async () => {
-    try {
-      setLoading(true);
-      const url = new URL(`${API_BASE_URL}/api/product-type-2`);
-      url.search = new URLSearchParams({ productType1Id, name: newProductTypeName }).toString();
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { accept: '*/*' },
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-      const result = await response.json();
-      setPage(0);
-      await fetchData();
-      setNotification({
-        open: true,
-        message: `Name '${result.name}' has been added`,
-        severity: 'success',
-        autoHideDuration: 6000,
-      });
-      setNewProductTypeName('');
-      setOpenAddDialog(false);
-      setOpenAddConfirmDialog(false);
-    } catch (err) {
-      setNotification({
-        open: true,
-        message: `Failed to add product type: ${err.message}`,
-        severity: 'error',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleUpdate = async ({ id, name }) => {
+    if (!id) throw new Error('Invalid Product Type ID');
 
-  const handleCancelAdd = () => {
-    setOpenAddConfirmDialog(false);
+    const url = new URL(`${API_BASE_URL}/api/product-type-2/${id}`);
+    url.search = new URLSearchParams({ name }).toString();
+
+    const response = await fetch(url, { method: 'PUT', headers: { accept: '*/*' } });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    setPage(0);
+    await fetchData({ pageOverride: 0 });
+
+    setNotification({
+      open: true,
+      message: `Name '${name}' has been updated`,
+      severity: 'success',
+      autoHideDuration: 6000,
+    });
   };
 
   const handleEdit = (productType) => {
     setProductTypeToEdit(productType);
-    setEditProductTypeName(productType.name);
     setOpenEditDialog(true);
-  };
-
-  const handleUpdateClick = () => {
-    if (!editProductTypeName.trim()) {
-      setNotification({
-        open: true,
-        message: 'Please enter a product type name',
-        severity: 'warning',
-      });
-      return;
-    }
-    setOpenEditConfirmDialog(true); // Show confirmation dialog
-  };
-
-  const handleConfirmUpdate = async () => {
-    try {
-      setLoading(true);
-      const url = new URL(`${API_BASE_URL}/api/product-type-2/${productTypeToEdit.id}`);
-      url.search = new URLSearchParams({ name: editProductTypeName }).toString();
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: { accept: '*/*' },
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-      setPage(0);
-      await fetchData();
-      setNotification({
-        open: true,
-        message: `Name '${editProductTypeName}' has been updated`,
-        severity: 'success',
-        autoHideDuration: 6000,
-      });
-      setOpenEditDialog(false);
-      setOpenEditConfirmDialog(false); // Close confirmation dialog
-      setProductTypeToEdit(null);
-      setEditProductTypeName('');
-    } catch (err) {
-      setNotification({
-        open: true,
-        message: `Failed to update product type: ${err.message}`,
-        severity: 'error',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancelUpdate = () => {
-    setOpenEditConfirmDialog(false); // Close confirmation dialog
-  };
-
-  const handleUpdate = async () => {
-    // This function is retained for compatibility but is not directly called
-    if (!editProductTypeName.trim()) {
-      setNotification({
-        open: true,
-        message: 'Please enter a product type name',
-        severity: 'warning',
-      });
-      return;
-    }
-    try {
-      setLoading(true);
-      const url = new URL(`${API_BASE_URL}/api/product-type-2/${productTypeToEdit.id}`);
-      url.search = new URLSearchParams({ name: editProductTypeName }).toString();
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: { accept: '*/*' },
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-      setPage(0);
-      await fetchData();
-      setNotification({
-        open: true,
-        message: `Name '${editProductTypeName}' has been updated`,
-        severity: 'success',
-        autoHideDuration: 6000,
-      });
-      setOpenEditDialog(false);
-      setProductTypeToEdit(null);
-      setEditProductTypeName('');
-    } catch (err) {
-      setNotification({
-        open: true,
-        message: `Failed to update product type: ${err.message}`,
-        severity: 'error',
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleDelete = (productType) => {
@@ -440,26 +458,27 @@ export default function ProductType2Page() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!productTypeToDelete) {
-      setNotification({
-        open: true,
-        message: 'No product type selected for deletion',
-        severity: 'error',
-      });
+    if (!productTypeToDelete?.id) {
+      setNotification({ open: true, message: 'No product type selected for deletion', severity: 'error' });
       return;
     }
+
     try {
       setLoading(true);
+
       const response = await fetch(`${API_BASE_URL}/api/product-type-2/${productTypeToDelete.id}`, {
         method: 'DELETE',
         headers: { accept: '*/*' },
       });
+
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
+
       setPage(0);
-      await fetchData();
+      await fetchData({ pageOverride: 0 });
+
       setNotification({
         open: true,
         message: `Name '${productTypeToDelete.name}' has been deleted`,
@@ -467,11 +486,7 @@ export default function ProductType2Page() {
         autoHideDuration: 6000,
       });
     } catch (err) {
-      setNotification({
-        open: true,
-        message: `Failed to delete product type: ${err.message}`,
-        severity: 'error',
-      });
+      setNotification({ open: true, message: `Failed to delete product type: ${err.message}`, severity: 'error' });
     } finally {
       setLoading(false);
       setOpenDeleteDialog(false);
@@ -484,27 +499,17 @@ export default function ProductType2Page() {
     setProductTypeToDelete(null);
   };
 
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
+  // ✅ sort tri-state: asc -> desc -> off
   const handleSort = (key) => {
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null;
-    }
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
+
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
 
     if (!direction) {
-      fetchData();
+      fetchData({ pageOverride: 0 });
       return;
     }
 
@@ -516,7 +521,7 @@ export default function ProductType2Page() {
       if (bValue === null || bValue === undefined) bValue = '';
 
       if (key === 'createdDate') {
-        if (aValue.length < 3 || bValue.length < 3) return 0;
+        if (!Array.isArray(aValue) || !Array.isArray(bValue) || aValue.length < 3 || bValue.length < 3) return 0;
         const [aYear, aMonth, aDay] = aValue;
         const [bYear, bMonth, bDay] = bValue;
         const aDate = new Date(aYear, aMonth - 1, aDay);
@@ -534,313 +539,225 @@ export default function ProductType2Page() {
 
   const handleType2NameChange = (value) => {
     setType2NameValue(value);
+    setPage(0);
   };
 
-  const handleSearch = (params) => {
+  const handleSearch = ({ name }) => {
+    const v = (name || '').trim();
+    setType2NameValue(v);
     setPage(0);
-    setLoading(true);
-    const url = new URL(`${API_BASE_URL}/api/product-type-2/search`);
-    url.search = new URLSearchParams({
-      productType1Id,
-      page: 0,
-      size: rowsPerPage,
-      name: params.name || '',
-    }).toString();
-    fetch(url, {
-      method: 'GET',
-      headers: { accept: '*/*' },
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        return response.json();
-      })
-      .then((result) => {
-        setData(result.content || []);
-        setTotalElements(result.totalElements || 0);
-      })
-      .catch((err) => {
-        setNotification({
-          open: true,
-          message: `Failed to load data: ${err.message}`,
-          severity: 'error',
-        });
-        setData([]);
-        setTotalElements(0);
-      })
-      .finally(() => setLoading(false));
+    fetchData({ name: v, pageOverride: 0 });
   };
 
   const handleReset = () => {
     setType2NameValue('');
+    setSortConfig({ key: null, direction: null });
     setPage(0);
-    fetchData();
+    fetchData({ name: '', pageOverride: 0 });
   };
 
-  return (
-    <Box sx={{ p: 1, fontSize: '0.85rem', backgroundColor: '#f5f8fa', minHeight: '100vh' }}>
-      <IconButton
-        onClick={() => navigate('/product-type-management')}
-        sx={{
-          mb: 1.5,
-          background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-          color: '#fff',
+  // ===== delete confirm style (same vibe but keep inside page to stay 3 files) =====
+  const deletePaperSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background: alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+      overflow: 'hidden',
+    }),
+    [theme]
+  );
+
+  const deleteHeaderSx = useMemo(
+    () => ({
+      py: 1.6,
+      px: 2.3,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.error.main}, ${theme.palette.warning.main})`,
+    }),
+    [theme]
+  );
+
+  const pillBtn = (color = 'primary') => ({
+    borderRadius: 999,
+    px: 2.2,
+    py: 1.05,
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    ...(color === 'danger'
+      ? {
+          backgroundImage: `linear-gradient(90deg, ${theme.palette.error.main}, ${theme.palette.warning.main})`,
+          boxShadow: `0 10px 24px ${alpha(theme.palette.error.main, 0.25)}`,
           '&:hover': {
-            background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            backgroundImage: `linear-gradient(90deg, ${theme.palette.error.dark}, ${theme.palette.warning.dark})`,
+            boxShadow: `0 14px 30px ${alpha(theme.palette.error.main, 0.32)}`,
+            transform: 'translateY(-1px)',
           },
-          p: 0.5,
-          borderRadius: '50%',
-          width: 40,
-          height: 40,
-          transition: 'all 0.3s ease',
-        }}
-        disabled={loading}
-        aria-label="Back to Product Type 1"
-        title="Back to Product Type 1"
-      >
-        <ArrowBack />
-      </IconButton>
-      <Typography
-        variant="h4"
-        gutterBottom
-        sx={{
-          textAlign: 'left',
-          fontSize: '1rem',
-          fontWeight: 600,
-          marginBottom: '8px',
-          color: '#1976d2',
-          lineHeight: 1.5,
-          fontFamily: 'Inter, sans-serif',
-        }}
-      >
-        Product Type 2 - {type1Name}
-      </Typography>
-      <Stack direction="row" spacing={1} mb={1} justifyContent="space-between" alignItems="center">
+        }
+      : {}),
+  });
+
+  return (
+    <Box sx={{ p: 1.5, minHeight: '100vh', backgroundColor: '#f7f7f7' }}>
+      <Container maxWidth={false} disableGutters sx={{ px: 1.5 }}>
+        {/* Header card */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1.25,
+            mb: 1,
+            borderRadius: 1.5,
+            border: '1px solid #e5e7eb',
+            backgroundColor: '#fff',
+          }}
+        >
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <IconButton
+                onClick={() => navigate('/product-type-management')}
+                disabled={loading}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 999,
+                  border: '1px solid #e5e7eb',
+                  backgroundColor: '#fff',
+                  '&:hover': { backgroundColor: '#f3f4f6' },
+                }}
+                aria-label="Back"
+              >
+                <ArrowBack fontSize="small" />
+              </IconButton>
+
+              <Stack spacing={0.35}>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                  Product Type 2 • {type1Name}
+                </Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+                  Total: {totalElements} • Filter: {type2NameValue ? `"${type2NameValue}"` : 'none'} • Sort:{' '}
+                  {sortConfig.key ? `${sortConfig.key} (${sortConfig.direction})` : 'none'}
+                </Typography>
+              </Stack>
+            </Stack>
+
+            <Button
+              variant="outlined"
+              startIcon={<Add fontSize="small" />}
+              onClick={() => setOpenAddDialog(true)}
+              disabled={loading}
+              sx={btnSx}
+            >
+              Add Product Type 2
+            </Button>
+          </Stack>
+        </Paper>
+
+        {/* Search */}
         <ProductType2Search
           type2NameValue={type2NameValue}
           onType2NameChange={handleType2NameChange}
           onSearch={handleSearch}
           onReset={handleReset}
         />
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setOpenAddDialog(true)}
-          sx={{
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
-            textTransform: 'none',
-            px: 1.5,
-            py: 0.3,
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-            '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+
+        {loading && (
+          <Typography align="center" sx={{ color: '#6b7280', fontSize: '0.85rem', mt: 1.5 }}>
+            Loading data...
+          </Typography>
+        )}
+
+        {/* Table */}
+        <ProductType2Table
+          productTypes={data}
+          handleDelete={handleDelete}
+          handleEdit={handleEdit}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          sortConfig={sortConfig}
+          handleSort={handleSort}
+        />
+
+        {/* Pagination */}
+        <PaginationBar
+          count={totalElements}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          loading={loading}
+          onPageChange={(p) => setPage(p)}
+          onRowsPerPageChange={(size) => {
+            setRowsPerPage(size);
+            setPage(0);
           }}
-          disabled={loading}
-        >
-          Add Product Type 2
-        </Button>
-      </Stack>
-      {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.9rem', mt: 1.5 }}>
-          Loading data...
-        </Typography>
-      )}
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={notification.autoHideDuration || 6000}
-        onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{
-          '& .MuiSnackbarContent-root': {
-            width: { xs: '90%', sm: '400px' },
-            maxWidth: '500px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-            zIndex: 1500,
-          },
-        }}
-      >
-        <Alert
+        />
+
+        {/* Snackbar */}
+        <Snackbar
+          open={notification.open}
+          autoHideDuration={notification.autoHideDuration || 6000}
           onClose={handleCloseNotification}
-          severity={notification.severity}
-          sx={{ width: '100%', fontSize: '0.9rem' }}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
-          {notification.message}
-        </Alert>
-      </Snackbar>
-      <ProductType2Table
-        productTypes={data}
-        handleDelete={handleDelete}
-        handleEdit={handleEdit}
-        page={page}
-        rowsPerPage={rowsPerPage}
-        sortConfig={sortConfig}
-        handleSort={handleSort}
-      />
-      <TablePagination
-        rowsPerPageOptions={[5, 10, 25]}
-        component="div"
-        count={totalElements}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-        sx={{
-          mt: 1,
-          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-            fontSize: '0.85rem',
-            color: theme.palette.text.secondary,
-          },
-          '.MuiTablePagination-select': { fontSize: '0.85rem' },
-          '.MuiTablePagination-actions > button': {
-            color: theme.palette.primary.main,
-          },
-        }}
-      />
-      <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Add Product Type 2</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Product Type Name"
-            fullWidth
-            value={newProductTypeName}
-            onChange={(e) => setNewProductTypeName(e.target.value)}
-            sx={{ '& .MuiInputBase-input': { fontSize: '0.9rem' } }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenAddDialog(false)} sx={{ fontSize: '0.85rem' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleAdd}
-            variant="contained"
-            sx={{
-              fontSize: '0.85rem',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={loading}
+          <Alert
+            onClose={handleCloseNotification}
+            severity={notification.severity}
+            variant="filled"
+            sx={{ width: '100%', fontSize: '0.85rem' }}
           >
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={openAddConfirmDialog} onClose={handleCancelAdd}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Add Product Type</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to add Product Type 2 with name &quot;{newProductTypeName || 'Unknown'}&quot;?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelAdd} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmAdd}
-            variant="contained"
-            sx={{
-              fontSize: '0.85rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={loading}
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Edit Product Type 2</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Product Type Name"
-            fullWidth
-            value={editProductTypeName}
-            onChange={(e) => setEditProductTypeName(e.target.value)}
-            sx={{ '& .MuiInputBase-input': { fontSize: '0.9rem' } }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenEditDialog(false)} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleUpdateClick}
-            variant="contained"
-            sx={{
-              fontSize: '0.85rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={loading}
-          >
-            Update
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={openEditConfirmDialog} onClose={handleCancelUpdate}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Product Type</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to update Product Type 2 to &quot;{editProductTypeName || 'Unknown'}&quot;?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelUpdate} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmUpdate}
-            variant="contained"
-            sx={{
-              fontSize: '0.85rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
-            }}
-            disabled={loading}
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={openDeleteDialog} onClose={handleCancelDelete}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Delete Product Type</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to delete &quot;{productTypeToDelete?.name || 'Unknown'}&quot;?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelDelete} sx={{ fontSize: '0.85rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmDelete}
-            variant="contained"
-            color="error"
-            sx={{ fontSize: '0.85rem', textTransform: 'none' }}
-            disabled={loading}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {notification.message}
+          </Alert>
+        </Snackbar>
+
+        {/* ✅ Add (NEW FILE) */}
+        <AddProductType2Dialog
+          open={openAddDialog}
+          onClose={() => setOpenAddDialog(false)}
+          onAdd={handleAdd}
+          disabled={loading}
+          type1Name={type1Name}
+        />
+
+        {/* ✅ Edit (NEW FILE) */}
+        <EditProductType2Dialog
+          open={openEditDialog}
+          onClose={() => {
+            setOpenEditDialog(false);
+            setProductTypeToEdit(null);
+          }}
+          onUpdate={handleUpdate}
+          productType={productTypeToEdit}
+          disabled={loading}
+          type1Name={type1Name}
+        />
+
+        {/* Delete Confirm (styled but kept inside page = vẫn đúng 3 file) */}
+        <Dialog open={openDeleteDialog} onClose={handleCancelDelete} maxWidth="xs" fullWidth PaperProps={{ sx: deletePaperSx }}>
+          <DialogTitle sx={deleteHeaderSx}>
+            <Typography sx={{ fontWeight: 900, letterSpacing: 1.1, textTransform: 'uppercase' }}>
+              Delete Product Type 2
+            </Typography>
+            <Typography sx={{ opacity: 0.92, mt: 0.3, fontSize: 13 }}>
+              Parent: <b>{type1Name}</b>
+            </Typography>
+          </DialogTitle>
+
+          <DialogContent sx={{ pt: 2 }}>
+            <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>
+              Are you sure you want to delete <b>{productTypeToDelete?.name || 'Unknown'}</b>?
+            </Typography>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <Button onClick={handleCancelDelete} disabled={loading} variant="outlined" sx={{ borderRadius: 999, px: 2.2, py: 1.05, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmDelete} disabled={loading} variant="contained" sx={pillBtn('danger')}>
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Container>
     </Box>
   );
 }

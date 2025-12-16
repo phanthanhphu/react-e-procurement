@@ -1,27 +1,114 @@
+// EditRequisitionMonthly.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, TextField, Stack, CircularProgress, FormControl,
-  InputLabel, Select, MenuItem, Typography, Paper,
-  IconButton, FormHelperText, Box, Snackbar, Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Stack,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Typography,
+  IconButton,
+  FormHelperText,
+  Box,
+  Snackbar,
+  Alert,
+  Chip,
+  Divider,
+  Tooltip,
+  useMediaQuery,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+
+import { debounce } from 'lodash';
 import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
-import { debounce } from 'lodash';
+
+/* =========================
+   ✅ Helpers: token + email (same pattern as CREATE)
+========================= */
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => `%${('00' + c.charCodeAt(0).toString(16)).slice(-2)}`)
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const getAccessToken = () =>
+  localStorage.getItem('accessToken') ||
+  localStorage.getItem('token') ||
+  localStorage.getItem('jwt') ||
+  '';
+
+const getUserEmail = () => {
+  const direct =
+    localStorage.getItem('email') ||
+    localStorage.getItem('userEmail') ||
+    localStorage.getItem('username');
+
+  if (direct && direct.trim()) return direct.trim();
+
+  const token = getAccessToken();
+  const payload = token ? parseJwt(token) : null;
+  const email = payload?.email || payload?.preferred_username || payload?.upn || payload?.sub;
+  return typeof email === 'string' ? email.trim() : '';
+};
+
+const withEmailParam = (url, email) => {
+  if (!email) return url;
+  return url.includes('?')
+    ? `${url}&email=${encodeURIComponent(email)}`
+    : `${url}?email=${encodeURIComponent(email)}`;
+};
+
+const readBodyByContentType = async (res) => {
+  const ct = res?.headers?.get?.('content-type') || '';
+  if (ct.includes('application/json')) return res.json().catch(() => ({}));
+  return { message: await res.text().catch(() => '') };
+};
+
+// BE-friendly: đôi khi API trả {message,data}, đôi khi trả object trực tiếp
+const unwrapData = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (payload.data && typeof payload.data === 'object') return payload.data;
+  return payload;
+};
 
 const normalizeCurrencyCode = (code) => {
   const valid = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
   const map = { EURO: 'EUR' };
   if (!code) return 'VND';
-  const n = map[code.toUpperCase()] || code.toUpperCase();
+  const n = map[String(code).toUpperCase()] || String(code).toUpperCase();
   return valid.includes(n) ? n : 'VND';
 };
 
 export default function EditRequisitionMonthly({ open, item, onClose, onRefresh }) {
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
@@ -29,11 +116,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     oldSAPCode: '',
     hanaSAPCode: '',
     dailyMedInventory: '',
+    safeStock: '', // ✅ curl có
     reason: '',
     remark: '',
     remarkComparison: '',
     supplierId: '',
     groupId: '',
+    productType1Id: '', // ✅ curl có
+    productType2Id: '', // ✅ curl có
     unit: '',
     supplierPrice: 0,
   });
@@ -41,146 +131,374 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
   const [saving, setSaving] = useState(false);
+
   const [departmentList, setDepartmentList] = useState([]);
   const [translating, setTranslating] = useState(false);
+
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [imageUrls, setImageUrls] = useState([]);
   const [imagesToDelete, setImagesToDelete] = useState([]);
+
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
+
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [groupCurrency, setGroupCurrency] = useState('VND');
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [itemNoForSearch, setItemNoForSearch] = useState('');
 
   const prevConfirmedRef = useRef('');
 
-  // Đồng bộ real-time khi người dùng gõ/xóa Item Description (VN)
-  useEffect(() => {
-    setItemNoForSearch(formData.itemDescriptionVN?.trim() || '');
-  }, [formData.itemDescriptionVN]);
+  const locked = saving;
 
-  const totalRequestQty = useMemo(() => {
-    return deptRows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0);
-  }, [deptRows]);
+  /* =========================
+     ✅ UI TOKENS (glass + gradient + compact)
+  ========================= */
+  const paperSx = useMemo(
+    () => ({
+      borderRadius: fullScreen ? 0 : 4,
+      overflow: 'hidden',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.25)}`,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background:
+        theme.palette.mode === 'dark'
+          ? alpha(theme.palette.background.paper, 0.72)
+          : alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+    }),
+    [fullScreen, theme]
+  );
 
-  const orderQtyError = formData.dailyMedInventory && totalRequestQty > 0 &&
-    parseFloat(formData.dailyMedInventory) > totalRequestQty
-      ? `Confirmed MED Quantity cannot exceed total request (${totalRequestQty})`
-      : '';
+  const headerSx = useMemo(
+    () => ({
+      position: 'relative',
+      py: 1.6,
+      px: 2.2,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    }),
+    [theme]
+  );
 
-  const showSnackbar = useCallback((message, severity = 'success') => {
-    setSnackbarMessage(message);
+  const subtleCardSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+      background: alpha(theme.palette.common.white, 0.6),
+      backdropFilter: 'blur(10px)',
+      boxShadow: `0 10px 30px ${alpha('#000', 0.08)}`,
+    }),
+    [theme]
+  );
+
+  const fieldSx = useMemo(
+    () => ({
+      '& .MuiInputLabel-root': { fontSize: 12.5 },
+      '& .MuiFormHelperText-root': { marginLeft: 0, fontSize: 12 },
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 3,
+        backgroundColor: alpha(theme.palette.common.white, 0.65),
+        minHeight: 36,
+        '& input': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.25 },
+        '& textarea': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.35 },
+        '& .MuiSelect-select': { padding: '8px 36px 8px 12px', fontSize: 13.5, lineHeight: 1.25 },
+        '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
+        '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
+        '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
+      },
+    }),
+    [theme]
+  );
+
+  const gradientBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      boxShadow: `0 10px 24px ${alpha(theme.palette.primary.main, 0.28)}`,
+      transform: 'translateY(0)',
+      transition: 'transform .15s ease, box-shadow .15s ease',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: `0 14px 30px ${alpha(theme.palette.primary.main, 0.34)}`,
+        backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+      },
+    }),
+    [theme]
+  );
+
+  const outlineBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    }),
+    []
+  );
+
+  const toast = useCallback((msg, severity = 'success') => {
+    setSnackbarMessage(msg);
     setSnackbarSeverity(severity);
     setSnackbarOpen(true);
   }, []);
 
-  // AUTO ALLOCATE BUY
+  /* =========================
+     ✅ computed values
+  ========================= */
   useEffect(() => {
-    const currentConfirmedStr = formData.dailyMedInventory || '';
-    const currentConfirmed = parseFloat(currentConfirmedStr) || 0;
+    setItemNoForSearch(formData.itemDescriptionVN?.trim() || '');
+  }, [formData.itemDescriptionVN]);
+
+  const totalRequestQty = useMemo(
+    () => deptRows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0),
+    [deptRows]
+  );
+
+  const orderQtyError = useMemo(() => {
+    if (formData.dailyMedInventory === '' || totalRequestQty <= 0) return '';
+    const confirmed = parseFloat(formData.dailyMedInventory);
+    if (!Number.isFinite(confirmed)) return '';
+    return confirmed > totalRequestQty
+      ? `Confirmed MED Quantity cannot exceed total request (${totalRequestQty})`
+      : '';
+  }, [formData.dailyMedInventory, totalRequestQty]);
+
+  const validateDeptDuplicates = useCallback((rows) => {
+    const errors = rows.map((row, idx) => {
+      if (!row.id) return '';
+      const dup = rows.some((r, i) => String(r.id) === String(row.id) && i !== idx);
+      return dup ? 'This department is already selected' : '';
+    });
+    setDeptErrors(errors);
+    return errors;
+  }, []);
+
+  // AUTO ALLOCATE BUY (only when confirmed changes)
+  useEffect(() => {
+    const currentConfirmedStr =
+      formData.dailyMedInventory === null || formData.dailyMedInventory === undefined
+        ? ''
+        : String(formData.dailyMedInventory);
+
+    const currentConfirmed = parseFloat(currentConfirmedStr);
 
     if (currentConfirmedStr === prevConfirmedRef.current) return;
     prevConfirmedRef.current = currentConfirmedStr;
 
-    if (!currentConfirmedStr || isNaN(currentConfirmed) || currentConfirmed <= 0 || currentConfirmed > totalRequestQty) {
-      setDeptRows(prev => prev.map(r => ({ ...r, buy: '' })));
+    if (
+      currentConfirmedStr === '' ||
+      !Number.isFinite(currentConfirmed) ||
+      currentConfirmed <= 0 ||
+      currentConfirmed > totalRequestQty
+    ) {
+      setDeptRows((prev) => prev.map((r) => ({ ...r, buy: '' })));
       return;
     }
 
-    setDeptRows(prev => {
+    setDeptRows((prev) => {
       const validRows = prev
         .map((r, i) => ({ ...r, qtyNum: parseFloat(r.qty) || 0, idx: i }))
-        .filter(r => r.qtyNum > 0)
+        .filter((r) => r.qtyNum > 0)
         .sort((a, b) => a.qtyNum - b.qtyNum || a.idx - b.idx);
 
       if (validRows.length === 0) return prev;
 
       let remaining = currentConfirmed;
-      const newRows = [...prev];
+      const newRows = [...prev].map((r) => ({ ...r, buy: '' }));
 
-      validRows.forEach(row => {
+      validRows.forEach((row) => {
         if (remaining <= 0) return;
         const allocate = Math.min(row.qtyNum, remaining);
-        newRows[row.idx].buy = allocate.toString();
+        newRows[row.idx].buy = String(allocate);
         remaining -= allocate;
       });
 
       return newRows;
     });
-  }, [formData.dailyMedInventory, deptRows, totalRequestQty]);
+  }, [formData.dailyMedInventory, totalRequestQty]);
 
-  // LOAD DATA
+  /* =========================
+     ✅ CLEANUP previews on unmount
+  ========================= */
+  useEffect(() => {
+    return () => {
+      previews.forEach((u) => URL.revokeObjectURL(u));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* =========================
+     ✅ LOAD DATA: GET (có token + unwrap)
+  ========================= */
   useEffect(() => {
     if (!open || !item?.id) {
       setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
       setDeptErrors(['']);
+
       setImageUrls([]);
       setImagesToDelete([]);
+
       setFiles([]);
-      setPreviews([]);
+      setPreviews((p) => {
+        p.forEach(URL.revokeObjectURL);
+        return [];
+      });
+
       prevConfirmedRef.current = '';
+
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
       setItemNoForSearch('');
+      setConfirmOpen(false);
+
+      setGroupCurrency('VND');
+      setIsEnManuallyEdited(false);
+
+      setFormData({
+        itemDescriptionEN: '',
+        itemDescriptionVN: '',
+        fullDescription: '',
+        oldSAPCode: '',
+        hanaSAPCode: '',
+        dailyMedInventory: '',
+        safeStock: '',
+        reason: '',
+        remark: '',
+        remarkComparison: '',
+        supplierId: '',
+        groupId: '',
+        productType1Id: '',
+        productType2Id: '',
+        unit: '',
+        supplierPrice: 0,
+      });
       return;
     }
 
+    const fetchWithFallback = async (urls, token) => {
+      let res = null;
+      for (const u of urls) {
+        res = await fetch(u, {
+          method: 'GET',
+          headers: {
+            accept: '*/*',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (res.status !== 404 && res.status !== 405) break;
+      }
+      return res;
+    };
+
     const loadData = async () => {
+      const email = getUserEmail();
+      const token = getAccessToken();
+
       try {
+        const reqUrls = [
+          withEmailParam(`${API_BASE_URL}/requisition-monthly/${item.id}`, email)
+        ];
+
+        const groupUrls = [
+          withEmailParam(`${API_BASE_URL}/api/group-summary-requisitions/${item.groupId || ''}`, email),
+        ];
+
         const [reqRes, deptRes, groupRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`),
-          fetch(`${API_BASE_URL}/api/departments`),
-          fetch(`${API_BASE_URL}/api/group-summary-requisitions/${item.groupId || ''}`).catch(() => ({ ok: false }))
+          fetchWithFallback(reqUrls, token),
+          fetch(`${API_BASE_URL}/api/departments`, {
+            method: 'GET',
+            headers: {
+              accept: '*/*',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          }),
+          fetchWithFallback(groupUrls, token).catch(() => ({ ok: false, status: 0, headers: new Headers() })),
         ]);
 
-        if (!reqRes.ok) throw new Error('Failed to load requisition');
-        const data = await reqRes.json();
+        if (!reqRes?.ok) {
+          const body = reqRes ? await readBodyByContentType(reqRes) : {};
+          throw new Error(body?.message || 'Failed to load requisition');
+        }
 
+        const rawReq = await readBodyByContentType(reqRes);
+        const data = unwrapData(rawReq) || {};
+
+        // ✅ set main form
         setFormData({
           itemDescriptionEN: data.itemDescriptionEN || '',
           itemDescriptionVN: data.itemDescriptionVN || '',
           fullDescription: data.fullDescription || '',
           oldSAPCode: data.oldSAPCode || '',
           hanaSAPCode: data.hanaSAPCode || '',
-          dailyMedInventory: data.dailyMedInventory?.toString() || '',
+          dailyMedInventory:
+            data.dailyMedInventory !== undefined && data.dailyMedInventory !== null
+              ? String(data.dailyMedInventory)
+              : '',
+          safeStock:
+            data.safeStock !== undefined && data.safeStock !== null ? String(data.safeStock) : '',
           reason: data.reason || '',
           remark: data.remark || '',
           remarkComparison: data.remarkComparison || '',
           supplierId: data.supplierId || '',
-          groupId: data.groupId || '',
+          groupId: data.groupId || item.groupId || '',
+          productType1Id:
+            data.productType1Id !== undefined && data.productType1Id !== null ? String(data.productType1Id) : '',
+          productType2Id:
+            data.productType2Id !== undefined && data.productType2Id !== null ? String(data.productType2Id) : '',
           unit: data.unit || '',
-          supplierPrice: parseFloat(data.price) || 0,
+          supplierPrice: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
         });
 
-        prevConfirmedRef.current = data.dailyMedInventory?.toString() || '';
+        prevConfirmedRef.current =
+          data.dailyMedInventory !== undefined && data.dailyMedInventory !== null
+            ? String(data.dailyMedInventory)
+            : '';
 
-        const depts = (data.departmentRequisitions || []).map(d => ({
+        // ✅ depts
+        const depts = (data.departmentRequisitions || []).map((d) => ({
           id: d.id || '',
           name: d.name || '',
-          qty: d.qty?.toString() || '',
-          buy: d.buy?.toString() || '',
+          qty: d.qty !== undefined && d.qty !== null ? String(d.qty) : '',
+          buy: d.buy !== undefined && d.buy !== null ? String(d.buy) : '',
         }));
-        setDeptRows(depts.length > 0 ? depts : [{ id: '', name: '', qty: '', buy: '' }]);
-        setDeptErrors(new Array(depts.length || 1).fill(''));
 
-        setImageUrls(data.imageUrls || []);
+        const nextRows = depts.length > 0 ? depts : [{ id: '', name: '', qty: '', buy: '' }];
+        setDeptRows(nextRows);
+        setDeptErrors(new Array(nextRows.length).fill(''));
+        validateDeptDuplicates(nextRows);
+
+        // ✅ images (giữ đúng string từ server để delete match 1-1)
+        setImageUrls(Array.isArray(data.imageUrls) ? data.imageUrls : []);
         setImagesToDelete([]);
+
+        // reset uploads
         setFiles([]);
-        setPreviews([]);
+        setPreviews((p) => {
+          p.forEach(URL.revokeObjectURL);
+          return [];
+        });
 
         setItemNoForSearch((data.itemDescriptionVN || '').trim());
 
+        // supplier view
         if (data.supplierId) {
           setSelectedSupplier({
             supplierName: data.supplierName || 'Unknown',
             sapCode: data.oldSAPCode || '',
-            price: parseFloat(data.price) || 0,
+            price: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
             unit: data.unit || '',
           });
           setShowSupplierSelector(false);
@@ -189,59 +507,83 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           setShowSupplierSelector(true);
         }
 
+        // departments list
         if (deptRes.ok) {
-          const deps = await deptRes.json();
-          setDepartmentList(deps || []);
+          const deps = await deptRes.json().catch(() => []);
+          setDepartmentList(Array.isArray(deps) ? deps : []);
+        } else {
+          setDepartmentList([]);
         }
 
-        if (groupRes.ok) {
-          const g = await groupRes.json();
+        // group currency
+        if (groupRes?.ok) {
+          const rawG = await readBodyByContentType(groupRes);
+          const g = unwrapData(rawG) || {};
           setGroupCurrency(normalizeCurrencyCode(g.currency));
+        } else {
+          setGroupCurrency('VND');
         }
       } catch (err) {
-        showSnackbar('Failed to load data', 'error');
+        console.error(err);
+        toast(err.message || 'Failed to load data', 'error');
       }
     };
 
     loadData();
-  }, [open, item?.id, showSnackbar]);
+  }, [open, item?.id, item?.groupId, toast, validateDeptDuplicates]);
 
-  // DỊCH TỰ ĐỘNG
-  const translateText = async (text) => {
-    if (!text || isEnManuallyEdited) return;
-    setTranslating(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (res.ok) {
-        const { translatedText } = await res.json();
-        setFormData(prev => ({ ...prev, itemDescriptionEN: translatedText || '' }));
+  /* =========================
+     ✅ TRANSLATE: có token
+  ========================= */
+  const translateText = useCallback(
+    async (text) => {
+      if (!text || isEnManuallyEdited) return;
+      setTranslating(true);
+
+      try {
+        const token = getAccessToken();
+        const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ text }),
+        });
+
+        if (res.ok) {
+          const json = await res.json().catch(() => ({}));
+          const translatedText = json?.translatedText || '';
+          setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
+        }
+      } catch {
+        // ignore
+      } finally {
+        setTranslating(false);
       }
-    } catch { } finally {
-      setTranslating(false);
-    }
-  };
+    },
+    [isEnManuallyEdited]
+  );
 
-  const debouncedTranslate = useCallback(debounce(translateText, 600), [isEnManuallyEdited]);
+  const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
 
   useEffect(() => {
-    if (formData.itemDescriptionVN && !isEnManuallyEdited) {
-      debouncedTranslate(formData.itemDescriptionVN);
-    }
-  }, [formData.itemDescriptionVN, debouncedTranslate]);
+    if (formData.itemDescriptionVN && !isEnManuallyEdited) debouncedTranslate(formData.itemDescriptionVN);
+    return () => debouncedTranslate.cancel?.();
+  }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
 
+  /* =========================
+     ✅ UI handlers
+  ========================= */
   const handleSelectSupplier = (supplierData) => {
     if (!supplierData) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         oldSAPCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
-        fullDescription: ''
+        // productType giữ nguyên nếu bạn muốn
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -249,13 +591,23 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     }
 
     const price = parseFloat(supplierData.supplierPrice) || 0;
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      oldSAPCode: supplierData.oldSapCode || '',
-      supplierId: supplierData.supplierId || '',
-      unit: supplierData.unit || '',
+      oldSAPCode: supplierData.oldSapCode || prev.oldSAPCode || '',
+      supplierId: supplierData.supplierId || prev.supplierId || '',
+      unit: supplierData.unit || prev.unit || '',
       supplierPrice: price,
-      fullDescription: supplierData.fullItemDescriptionVN || '',
+      fullDescription: supplierData.fullItemDescriptionVN || prev.fullDescription || '',
+      // ✅ nếu SupplierSelector có trả 2 id này thì set luôn
+      productType1Id:
+        supplierData.productType1Id !== undefined && supplierData.productType1Id !== null
+          ? String(supplierData.productType1Id)
+          : prev.productType1Id,
+      productType2Id:
+        supplierData.productType2Id !== undefined && supplierData.productType2Id !== null
+          ? String(supplierData.productType2Id)
+          : prev.productType2Id,
     }));
 
     setSelectedSupplier({
@@ -269,301 +621,905 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   };
 
   const handleChange = (field) => (e) => {
-    const value = e.target.value;
-    const val = field === 'dailyMedInventory'
-      ? value === '' ? '' : (isNaN(parseFloat(value)) ? '' : parseFloat(value).toString())
-      : value;
+    const raw = e.target.value;
 
-    setFormData(prev => ({ ...prev, [field]: val }));
+    // numeric-ish fields giữ string cho FormData
+    if (field === 'dailyMedInventory' || field === 'safeStock' || field === 'productType1Id' || field === 'productType2Id') {
+      if (raw === '' || raw === null || raw === undefined) {
+        setFormData((prev) => ({ ...prev, [field]: '' }));
+      } else {
+        // cho phép nhập số, nhưng vẫn lưu string
+        const n = parseFloat(raw);
+        setFormData((prev) => ({ ...prev, [field]: Number.isFinite(n) ? String(n) : '' }));
+      }
+    } else if (field === 'supplierPrice') {
+      const n = parseFloat(raw);
+      setFormData((prev) => ({ ...prev, supplierPrice: Number.isFinite(n) ? n : 0 }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: raw }));
+    }
+
     if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
   const handleDeptChange = (i, field, val) => {
-    setDeptRows(prev => {
+    setDeptRows((prev) => {
       const updated = [...prev];
+
       if (field === 'id') {
-        const dept = departmentList.find(d => d.id === val);
+        const dept = departmentList.find((d) => String(d.id) === String(val));
         updated[i] = { ...updated[i], id: val, name: dept?.departmentName || '' };
       } else {
         updated[i] = { ...updated[i], [field]: val };
       }
+
+      const errors = updated.map((row, idx) => {
+        if (!row.id) return '';
+        const dup = updated.some((r, index) => String(r.id) === String(row.id) && index !== idx);
+        return dup ? 'This department is already selected' : '';
+      });
+      setDeptErrors(errors);
+
       return updated;
     });
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows(prev => [...prev, { id: '', name: '', qty: '', buy: '' }]);
-    setDeptErrors(prev => [...prev, '']);
+    setDeptRows((prev) => {
+      const next = [...prev, { id: '', name: '', qty: '', buy: '' }];
+      setDeptErrors((e) => [...e, '']);
+      return next;
+    });
   };
 
   const handleDeleteDeptRow = (i) => {
-    setDeptRows(prev => prev.filter((_, idx) => idx !== i));
-    setDeptErrors(prev => prev.filter((_, idx) => idx !== i));
+    setDeptRows((prev) => {
+      const next = prev.filter((_, idx) => idx !== i);
+      const finalRows = next.length ? next : [{ id: '', name: '', qty: '', buy: '' }];
+      validateDeptDuplicates(finalRows);
+      return finalRows;
+    });
   };
 
+  const totalImagesCount = useMemo(() => files.length + imageUrls.length, [files.length, imageUrls.length]);
+
   const handleFileChange = (e) => {
-    const selected = Array.from(e.target.files);
+    const selected = Array.from(e.target.files || []);
     if (selected.length === 0) return;
 
-    const valid = selected.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
-    if (valid.length < selected.length) {
-      showSnackbar('Only image files less than or equal to 5MB are allowed', 'warning');
+    const valid = selected.filter((f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+    if (valid.length < selected.length) toast('Only image files ≤ 5MB are allowed', 'warning');
+
+    // ✅ CHUẨN: giới hạn theo "đang hiển thị" (imageUrls đã remove cái delete rồi)
+    if (totalImagesCount + valid.length > 10) {
+      toast('Maximum 10 images allowed', 'warning');
+      e.target.value = null;
       return;
     }
 
-    const totalCurrent = files.length + imageUrls.length - imagesToDelete.length;
-    if (totalCurrent + valid.length > 10) {
-      showSnackbar('Maximum 10 images allowed', 'warning');
-      return;
-    }
+    setFiles((prev) => [...prev, ...valid]);
+    setPreviews((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
 
-    previews.forEach(url => URL.revokeObjectURL(url));
-    setFiles(prev => [...prev, ...valid]);
-    setPreviews(prev => [...prev, ...valid.map(f => URL.createObjectURL(f))]);
     e.target.value = null;
   };
 
-  // ĐÃ SỬA LỖI Ở ĐÂY!!!
   const handleRemoveImage = (index) => {
+    // existing images
     if (index < imageUrls.length) {
       const removed = imageUrls[index];
-      setImageUrls(prev => prev.filter((_, i) => i !== index));
-      setImagesToDelete(prev => [...prev, removed]); // ĐÃ SỬA: prev thay vì takim
-    } else {
-      const fileIdx = index - imageUrls.length;
-      if (fileIdx >= 0 && fileIdx < previews.length) {
-        URL.revokeObjectURL(previews[fileIdx]);
-        setFiles(prev => prev.filter((_, i) => i !== fileIdx));
-        setPreviews(prev => prev.filter((_, i) => i !== fileIdx));
-      }
+      setImageUrls((prev) => prev.filter((_, i) => i !== index));
+      setImagesToDelete((prev) => [...prev, removed]); // ✅ giữ nguyên string để match backend
+      return;
+    }
+
+    // new uploads
+    const fileIdx = index - imageUrls.length;
+    if (fileIdx >= 0 && fileIdx < previews.length) {
+      URL.revokeObjectURL(previews[fileIdx]);
+      setFiles((prev) => prev.filter((_, i) => i !== fileIdx));
+      setPreviews((prev) => prev.filter((_, i) => i !== fileIdx));
     }
   };
 
+  const handleClose = () => {
+    if (locked) return;
+    onClose?.();
+  };
+
   const handleSaveClick = () => {
-    if (!formData.itemDescriptionVN?.trim()) return showSnackbar('Item Description (VN) is required', 'error');
-    if (totalRequestQty === 0) return showSnackbar('At least one department must have Qty', 'error');
-    if (orderQtyError) return showSnackbar(orderQtyError, 'error');
-    if (deptErrors.some(Boolean)) return showSnackbar('Please fix duplicate departments', 'error');
+    if (!formData.itemDescriptionVN?.trim()) return toast('Item Description (VN) is required', 'error');
+    if (totalRequestQty === 0) return toast('At least one department must have Qty', 'error');
+    if (orderQtyError) return toast(orderQtyError, 'error');
+    if (deptErrors.some(Boolean)) return toast('Please fix duplicate departments', 'error');
+
+    // ✅ curl required-ish
+    if (!formData.groupId?.trim()) return toast('groupId is required', 'error');
+    if (!formData.oldSAPCode?.trim()) return toast('oldSAPCode is required', 'error');
+
     setConfirmOpen(true);
   };
 
+  /* =========================
+     ✅ UPDATE: PUT multipart + ?email=... (Y CHANG CURL)
+  ========================= */
   const handleConfirmSave = async () => {
+    if (!item?.id) return;
+
     const departmentRequisitions = deptRows
-      .filter(r => r.id && r.qty)
-      .map(r => ({
+      .filter((r) => r.id && r.qty !== '' && r.qty !== null && r.qty !== undefined)
+      .map((r) => ({
         id: r.id,
-        name: r.name,
+        name:
+          r.name ||
+          departmentList.find((d) => String(d.id) === String(r.id))?.departmentName ||
+          '',
         qty: parseFloat(r.qty) || 0,
         buy: parseFloat(r.buy) || 0,
       }));
 
+    const appendIf = (fd, key, value) => {
+      if (value === null || value === undefined) return;
+      const s = String(value);
+      if (s.trim() === '') return;
+      fd.append(key, s);
+    };
+
     const fd = new FormData();
-    files.forEach(f => fd.append('files', f));
-    fd.append('imagesToDelete', JSON.stringify(imagesToDelete));
+
+    // ✅ files=@...
+    files.forEach((f) => fd.append('files', f));
+
+    // ✅ imagesToDelete=[...]
+    fd.append('imagesToDelete', JSON.stringify(imagesToDelete || []));
+
+    // ✅ departmentRequisitions=[{...}]
     fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
-    Object.entries(formData).forEach(([k, v]) => fd.append(k, v ?? ''));
+
+    // ✅ giống curl - gửi các field chính
+    fd.append('remark', formData.remark || '');
+    fd.append('itemDescriptionVN', formData.itemDescriptionVN || '');
+    fd.append('hanaSAPCode', formData.hanaSAPCode || '');
+    fd.append('reason', formData.reason || '');
+    fd.append('supplierId', formData.supplierId || '');
+    fd.append('oldSAPCode', formData.oldSAPCode || '');
+    fd.append('dailyMedInventory', formData.dailyMedInventory || '0');
+    fd.append('remarkComparison', formData.remarkComparison || '');
+    fd.append('fullDescription', formData.fullDescription || '');
+    fd.append('itemDescriptionEN', formData.itemDescriptionEN || '');
+    fd.append('groupId', formData.groupId || '');
+
+    // ✅ optional (curl có)
+    appendIf(fd, 'safeStock', formData.safeStock);
+    appendIf(fd, 'productType1Id', formData.productType1Id);
+    appendIf(fd, 'productType2Id', formData.productType2Id);
 
     setSaving(true);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/requisition-monthly/${item.id}`, {
-        method: 'PUT',
-        body: fd,
-      });
-      if (!res.ok) throw new Error('Update failed');
-      showSnackbar('Updated successfully!', 'success');
+      const email = getUserEmail();
+      if (!email) throw new Error('Missing email. Please login again.');
+
+      const token = getAccessToken();
+
+      // ✅ URL y chang curl: /requisition-monthly/{id}?email=...
+      const urls = [
+        withEmailParam(`${API_BASE_URL}/requisition-monthly/${item.id}`, email),
+        // fallback nếu dự án có prefix /api
+        withEmailParam(`${API_BASE_URL}/api/requisition-monthly/${item.id}`, email),
+      ];
+
+      let res = null;
+      let usedUrl = '';
+
+      for (const u of urls) {
+        usedUrl = u;
+        res = await fetch(u, {
+          method: 'PUT',
+          headers: {
+            accept: '*/*',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            // ❌ không set Content-Type khi dùng FormData
+          },
+          body: fd,
+        });
+
+        if (res.status !== 404 && res.status !== 405) break;
+      }
+
+      if (!res) throw new Error('No response from server');
+
+      const raw = await readBodyByContentType(res);
+      const body = unwrapData(raw);
+
+      if (!res.ok) {
+        console.error('Update monthly failed:', { usedUrl, status: res.status, raw });
+        throw new Error(raw?.message || `Update failed (${res.status})`);
+      }
+
+      toast('Updated successfully!', 'success');
+      setConfirmOpen(false);
       onRefresh?.();
-      onClose();
+      onClose?.();
     } catch (err) {
-      showSnackbar(err.message || 'Update failed', 'error');
+      toast(err.message || 'Update failed', 'error');
+      // giữ confirm mở để retry
     } finally {
       setSaving(false);
-      setConfirmOpen(false);
     }
   };
 
+  const titleName = formData.itemDescriptionVN?.trim() || 'this item';
+
   return (
     <>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}>
-          Edit Monthly Requisition
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Stack direction="row" spacing={2}>
-              <TextField label="Old SAP Code" value={formData.oldSAPCode} onChange={handleChange('oldSAPCode')} size="small" fullWidth />
-              <TextField label="Hana SAP Code" value={formData.hanaSAPCode} onChange={handleChange('hanaSAPCode')} size="small" fullWidth />
-            </Stack>
+      {/* MAIN DIALOG */}
+      <Dialog
+        open={open}
+        onClose={locked ? undefined : handleClose}
+        fullScreen={fullScreen}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: paperSx }}
+      >
+        {/* Header */}
+        <DialogTitle sx={headerSx}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  fontSize: { xs: 16.5, sm: 18.5 },
+                }}
+              >
+                Edit Monthly Requisition
+              </Typography>
+              <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 12.5 }}>
+                Update item info, supplier, departments, and attachments
+              </Typography>
+            </Box>
 
-            <Stack direction="row" spacing={2}>
-              <TextField label="Item Description (VN) *" value={formData.itemDescriptionVN} onChange={handleChange('itemDescriptionVN')} size="small" fullWidth required />
-              <TextField
-                label="Item Description (EN)"
-                value={formData.itemDescriptionEN}
-                onChange={handleChange('itemDescriptionEN')}
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
                 size="small"
-                fullWidth
-                disabled={translating}
-                InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }}
+                icon={<CheckCircleRoundedIcon />}
+                label="Editing"
+                sx={{
+                  color: 'common.white',
+                  bgcolor: alpha('#000', 0.18),
+                  border: `1px solid ${alpha('#fff', 0.22)}`,
+                  fontWeight: 700,
+                }}
               />
+              <Tooltip title="Close">
+                <span>
+                  <IconButton
+                    onClick={handleClose}
+                    disabled={locked}
+                    sx={{
+                      color: 'common.white',
+                      bgcolor: alpha('#000', 0.18),
+                      border: `1px solid ${alpha('#fff', 0.22)}`,
+                      '&:hover': { bgcolor: alpha('#000', 0.28) },
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Stack>
+          </Stack>
+        </DialogTitle>
 
-            <TextField label="Full Description" value={formData.fullDescription} onChange={handleChange('fullDescription')} size="small" fullWidth multiline rows={2} />
+        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 } }}>
+          <Stack spacing={1.4}>
+            {/* ITEM INFO */}
+            <Box sx={{ ...subtleCardSx, p: 1.6 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Item Information</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                VN is required; EN can auto-translate (you can override manually).
+              </Typography>
 
-            {showSupplierSelector ? (
-              <SupplierSelector
-                oldSapCode={formData.oldSAPCode}
-                itemNo={itemNoForSearch}
-                onSelectSupplier={handleSelectSupplier}
-                currency={groupCurrency}
-              />
-            ) : selectedSupplier ? (
-              <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa' }}>
-                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                  Selected Supplier:
-                </Typography>
-                <Typography><strong>{selectedSupplier.supplierName}</strong></Typography>
-                <Typography>SAP Code: <strong>{selectedSupplier.sapCode || '—'}</strong></Typography>
-                <Typography>
-                  Price: <strong>
-                    {selectedSupplier.price > 0
-                      ? selectedSupplier.price.toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })
-                      : '—'}
-                  </strong>
-                </Typography>
-                <Typography>Unit: <strong>{selectedSupplier.unit || '—'}</strong></Typography>
+              <Divider sx={{ my: 1.2 }} />
 
-                {/* CHỈ GIỮ LẠI NÚT "Change Supplier" – ĐẸP + ĐỦ */}
-                <Button 
-                  size="small" 
-                  variant="outlined" 
-                  onClick={() => setShowSupplierSelector(true)} 
-                  sx={{ mt: 2 }}
-                >
-                  Change Supplier
-                </Button>
-              </Paper>
-            ) : null}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 1.2,
+                }}
+              >
+                <TextField
+                  label="Old SAP Code"
+                  value={formData.oldSAPCode}
+                  onChange={handleChange('oldSAPCode')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+                <TextField
+                  label="Hana SAP Code"
+                  value={formData.hanaSAPCode}
+                  onChange={handleChange('hanaSAPCode')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                />
 
-            {/* Phần còn lại giữ nguyên */}
-            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Department Request Qty:</Typography>
-              {deptRows.map((row, i) => (
-                <Stack direction="row" spacing={2} alignItems="center" key={i} sx={{ mt: 1 }}>
-                  <FormControl fullWidth size="small" error={!!deptErrors[i]}>
-                    <InputLabel>Department</InputLabel>
-                    <Select value={row.id} label="Department" onChange={(e) => handleDeptChange(i, 'id', e.target.value)}>
-                      <MenuItem value=""><em>None</em></MenuItem>
-                      {departmentList.map(d => <MenuItem key={d.id} value={d.id}>{d.departmentName}</MenuItem>)}
-                    </Select>
-                    {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
-                  </FormControl>
-                  <TextField label="Qty" type="number" size="small" value={row.qty} onChange={(e) => handleDeptChange(i, 'qty', e.target.value)} />
-                  <TextField label="Buy" type="number" size="small" value={row.buy || ''} disabled sx={{ bgcolor: '#f5f5f5' }} />
-                  <IconButton onClick={() => handleDeleteDeptRow(i)} color="error"><DeleteIcon /></IconButton>
-                </Stack>
-              ))}
-              <Button startIcon={<AddIcon />} onClick={handleAddDeptRow} variant="outlined" size="small" sx={{ mt: 1 }}>Add Department</Button>
+                <TextField
+                  label="Item Description (VN) *"
+                  value={formData.itemDescriptionVN}
+                  onChange={handleChange('itemDescriptionVN')}
+                  size="small"
+                  fullWidth
+                  required
+                  disabled={locked}
+                  sx={fieldSx}
+                />
 
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f0f7ff', borderRadius: 1 }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between">
-                  <Typography><strong>Total Request:</strong> <span style={{ color: '#1976d2' }}>{totalRequestQty}</span></Typography>
-                  <Typography><strong>Total Buy:</strong> <span style={{ color: '#1976d2' }}>{formData.dailyMedInventory || 0}</span></Typography>
-                  <Typography><strong>Unit:</strong> {formData.unit || '-'}</Typography>
+                <TextField
+                  label="Item Description (EN)"
+                  value={formData.itemDescriptionEN}
+                  onChange={handleChange('itemDescriptionEN')}
+                  size="small"
+                  fullWidth
+                  disabled={locked || translating}
+                  sx={fieldSx}
+                  InputProps={{
+                    endAdornment: translating ? <CircularProgress size={16} /> : null,
+                  }}
+                />
+
+                <TextField
+                  label="Group ID *"
+                  value={formData.groupId}
+                  onChange={handleChange('groupId')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+
+                <TextField
+                  label="Safe Stock"
+                  type="number"
+                  value={formData.safeStock}
+                  onChange={handleChange('safeStock')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  inputProps={{ min: 0 }}
+                />
+
+                <TextField
+                  label="Product Type 1 ID"
+                  type="number"
+                  value={formData.productType1Id}
+                  onChange={handleChange('productType1Id')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  inputProps={{ min: 0 }}
+                />
+
+                <TextField
+                  label="Product Type 2 ID"
+                  type="number"
+                  value={formData.productType2Id}
+                  onChange={handleChange('productType2Id')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  inputProps={{ min: 0 }}
+                />
+
+                <TextField
+                  label="Full Description"
+                  value={formData.fullDescription}
+                  onChange={handleChange('fullDescription')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  multiline
+                  rows={2}
+                  style={{ gridColumn: '1 / span 2' }}
+                />
+              </Box>
+
+              <Box
+                sx={{
+                  mt: 1.2,
+                  p: 1.1,
+                  borderRadius: 3,
+                  bgcolor: alpha(theme.palette.primary.main, 0.06),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="flex-start">
+                  <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
+                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    <b>Tip:</b> If you override EN manually, auto-translate will stop.
+                  </Typography>
                 </Stack>
               </Box>
-            </Paper>
+            </Box>
 
-            <TextField
-              label="Confirmed MED Quantity *"
-              type="number"
-              value={formData.dailyMedInventory}
-              onChange={handleChange('dailyMedInventory')}
-              size="small"
-              fullWidth
-              error={!!orderQtyError}
-              helperText={orderQtyError || `Total request: ${totalRequestQty}`}
-              inputProps={{ min: 0 }}
-            />
+            {/* SUPPLIER */}
+            <Box sx={{ ...subtleCardSx, p: 1.6 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Change supplier if needed. Existing supplier will be kept.
+              </Typography>
 
-            <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} size="small" fullWidth multiline rows={2} />
-            <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} size="small" fullWidth multiline rows={2} />
+              <Divider sx={{ my: 1.2 }} />
 
-            <FormControl fullWidth size="small">
-              <InputLabel>Remark Comparison</InputLabel>
-              <Select value={formData.remarkComparison} label="Remark Comparison" onChange={handleChange('remarkComparison')}>
-                <MenuItem value=""><em>None</em></MenuItem>
-                <MenuItem value="Old price">Old price</MenuItem>
-                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">The goods heavy and Small Q'ty. Only 1 Supplier can provide this type</MenuItem>
-              </Select>
-            </FormControl>
-
-            <Box>
-              <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                  Choose Images
-                  <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
-                </Button>
-                {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    {files.length + imageUrls.length - imagesToDelete.length} image(s)
+              {showSupplierSelector ? (
+                <SupplierSelector
+                  oldSapCode={formData.oldSAPCode}
+                  itemNo={itemNoForSearch}
+                  onSelectSupplier={handleSelectSupplier}
+                  currency={groupCurrency}
+                  disabled={locked}
+                />
+              ) : selectedSupplier ? (
+                <Box
+                  sx={{
+                    borderRadius: 4,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                    background: alpha('#fff', 0.7),
+                    p: 1.4,
+                  }}
+                >
+                  <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Selected Supplier</Typography>
+                  <Typography sx={{ fontWeight: 900, fontSize: 14.5, color: '#111827', mt: 0.2 }}>
+                    {selectedSupplier.supplierName}
                   </Typography>
+
+                  <Box
+                    sx={{
+                      mt: 0.8,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                      gap: 0.9,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      SAP Code: <b>{selectedSupplier.sapCode || '—'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Unit: <b>{selectedSupplier.unit || '—'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Price:{' '}
+                      <b>
+                        {selectedSupplier.price > 0
+                          ? selectedSupplier.price.toLocaleString('vi-VN', {
+                              style: 'currency',
+                              currency: groupCurrency,
+                            })
+                          : '—'}
+                      </b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Currency: <b>{groupCurrency}</b>
+                    </Typography>
+                  </Box>
+
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={locked}
+                    onClick={() => setShowSupplierSelector(true)}
+                    sx={{ mt: 1.1, borderRadius: 999, textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Change Supplier
+                  </Button>
+                </Box>
+              ) : null}
+            </Box>
+
+            {/* DEPARTMENTS */}
+            <Box sx={{ ...subtleCardSx, p: 1.6 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department Request Qty</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Qty per department. Buy auto-allocates based on confirmed MED.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Stack spacing={1}>
+                {deptRows.map((row, i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr auto' },
+                      gap: 1,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <FormControl fullWidth size="small" error={!!deptErrors[i]} sx={fieldSx}>
+                      <InputLabel>Department</InputLabel>
+                      <Select
+                        value={row.id}
+                        label="Department"
+                        disabled={locked}
+                        onChange={(e) => handleDeptChange(i, 'id', e.target.value)}
+                      >
+                        <MenuItem value="">
+                          <em>None</em>
+                        </MenuItem>
+                        {departmentList.map((d) => (
+                          <MenuItem key={d.id} value={String(d.id)}>
+                            {d.departmentName}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
+                    </FormControl>
+
+                    <TextField
+                      label="Qty"
+                      type="number"
+                      size="small"
+                      value={row.qty}
+                      disabled={locked}
+                      onChange={(e) => handleDeptChange(i, 'qty', e.target.value)}
+                      sx={fieldSx}
+                      inputProps={{ min: 0 }}
+                    />
+
+                    <TextField
+                      label="Buy"
+                      type="number"
+                      size="small"
+                      value={row.buy || ''}
+                      disabled
+                      sx={{
+                        ...fieldSx,
+                        '& .MuiOutlinedInput-root': {
+                          ...(fieldSx['& .MuiOutlinedInput-root'] || {}),
+                          backgroundColor: alpha(theme.palette.action.disabledBackground, 0.55),
+                        },
+                      }}
+                    />
+
+                    <Tooltip title="Remove row">
+                      <span>
+                        <IconButton
+                          onClick={() => handleDeleteDeptRow(i)}
+                          disabled={locked || deptRows.length <= 1}
+                          color="error"
+                          size="small"
+                          sx={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 999,
+                            border: `1px solid ${alpha(theme.palette.error.main, 0.25)}`,
+                            bgcolor: alpha(theme.palette.error.main, 0.05),
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
+                ))}
+
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={handleAddDeptRow}
+                  variant="outlined"
+                  size="small"
+                  disabled={locked}
+                  sx={{ alignSelf: 'flex-start', borderRadius: 999, textTransform: 'none', fontWeight: 800, px: 1.6 }}
+                >
+                  Add Department
+                </Button>
+
+                <Box
+                  sx={{
+                    mt: 0.6,
+                    p: 1.2,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.primary.main, 0.06),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                  }}
+                >
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} justifyContent="space-between">
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      <b>Total Request:</b> <span style={{ color: theme.palette.primary.main }}>{totalRequestQty}</span>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      <b>Total Buy:</b>{' '}
+                      <span style={{ color: theme.palette.primary.main }}>{formData.dailyMedInventory || 0}</span>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      <b>Unit:</b> {formData.unit || '-'}
+                    </Typography>
+                  </Stack>
+                </Box>
+
+                <TextField
+                  label="Confirmed MED Quantity *"
+                  type="number"
+                  value={formData.dailyMedInventory}
+                  onChange={handleChange('dailyMedInventory')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  error={!!orderQtyError}
+                  helperText={orderQtyError || `Total request: ${totalRequestQty}`}
+                  sx={fieldSx}
+                  inputProps={{ min: 0 }}
+                />
+              </Stack>
+            </Box>
+
+            {/* NOTES */}
+            <Box sx={{ ...subtleCardSx, p: 1.6 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Reason, remark, and comparison notes.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2 }}>
+                <TextField
+                  label="Reason"
+                  value={formData.reason}
+                  onChange={handleChange('reason')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  multiline
+                  rows={2}
+                />
+                <TextField
+                  label="Remark"
+                  value={formData.remark}
+                  onChange={handleChange('remark')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  multiline
+                  rows={2}
+                />
+                <TextField
+                  label="Remark Comparison"
+                  value={formData.remarkComparison || ''}
+                  onChange={handleChange('remarkComparison')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  multiline
+                  rows={2}
+                  style={{ gridColumn: '1 / span 2' }}
+                />
+              </Box>
+            </Box>
+
+            {/* IMAGES */}
+            <Box sx={{ ...subtleCardSx, p: 1.6 }}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Images</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Max 10 images total. Existing + new uploads.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Stack spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<PhotoCamera />}
+                    disabled={locked || totalImagesCount >= 10}
+                    sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800, px: 1.6 }}
+                  >
+                    Choose Images
+                    <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
+                  </Button>
+
+                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    {totalImagesCount}/10 in view
+                  </Typography>
+
+                  {imagesToDelete.length > 0 && (
+                    <Chip
+                      size="small"
+                      label={`${imagesToDelete.length} marked for delete`}
+                      sx={{
+                        bgcolor: alpha(theme.palette.error.main, 0.08),
+                        border: `1px solid ${alpha(theme.palette.error.main, 0.18)}`,
+                        color: theme.palette.error.dark,
+                        fontWeight: 700,
+                      }}
+                    />
+                  )}
+                </Stack>
+
+                {(previews.length > 0 || imageUrls.length > 0) && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.2 }}>
+                    {imageUrls.map((url, i) => (
+                      <Box key={`old-${i}`} sx={{ position: 'relative' }}>
+                        <img
+                          src={`${API_BASE_URL}${url}`}
+                          alt={`Image ${i + 1}`}
+                          style={{
+                            height: 88,
+                            width: 132,
+                            objectFit: 'cover',
+                            borderRadius: 12,
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        <Tooltip title="Remove">
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={locked}
+                              onClick={() => handleRemoveImage(i)}
+                              sx={{
+                                position: 'absolute',
+                                top: 6,
+                                right: 6,
+                                bgcolor: alpha('#fff', 0.85),
+                                border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                                width: 30,
+                                height: 30,
+                              }}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Box>
+                    ))}
+
+                    {previews.map((url, i) => (
+                      <Box key={`new-${i}`} sx={{ position: 'relative' }}>
+                        <img
+                          src={url}
+                          alt={`New ${i + 1}`}
+                          style={{
+                            height: 88,
+                            width: 132,
+                            objectFit: 'cover',
+                            borderRadius: 12,
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                          }}
+                        />
+                        <Tooltip title="Remove">
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={locked}
+                              onClick={() => handleRemoveImage(i + imageUrls.length)}
+                              sx={{
+                                position: 'absolute',
+                                top: 6,
+                                right: 6,
+                                bgcolor: alpha('#fff', 0.85),
+                                border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                                width: 30,
+                                height: 30,
+                              }}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Box>
+                    ))}
+                  </Box>
                 )}
               </Stack>
-
-              {(previews.length > 0 || imageUrls.length > 0) && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
-                  {imageUrls.map((url, i) => (
-                    <Box key={`old-${i}`} sx={{ position: 'relative' }}>
-                      <img
-                        src={`${API_BASE_URL}${url}`}
-                        alt={`Image ${i + 1}`}
-                        style={{ height: 120, borderRadius: 8, border: '1px solid #ddd', objectFit: 'cover' }}
-                        onError={(e) => e.target.style.display = 'none'}
-                      />
-                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.9)' }} onClick={() => handleRemoveImage(i)}>
-                        <CloseIcon fontSize="small" color="error" />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  {previews.map((url, i) => (
-                    <Box key={`new-${i}`} sx={{ position: 'relative' }}>
-                      <img src={url} alt={`New ${i + 1}`} style={{ height: 120, borderRadius: 8, border: '1px solid #ddd', objectFit: 'cover' }} />
-                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.9)' }} onClick={() => handleRemoveImage(i + imageUrls.length)}>
-                        <CloseIcon fontSize="small" color="error" />
-                      </IconButton>
-                    </Box>
-                  ))}
-                </Box>
-              )}
             </Box>
           </Stack>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveClick} disabled={saving || !!orderQtyError || deptErrors.some(Boolean)}>
-            {saving ? <CircularProgress size={20} /> : 'Save'}
+        <DialogActions sx={{ px: { xs: 2, sm: 2.2 }, py: 1.8, gap: 1 }}>
+          <Button onClick={handleClose} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={handleSaveClick}
+            disabled={locked || !!orderQtyError || deptErrors.some(Boolean)}
+            sx={gradientBtnSx}
+          >
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>Confirm Update</DialogTitle>
-        <DialogContent>
-          <Typography>Are you sure to update "<strong>{formData.itemDescriptionVN || 'this item'}</strong>"?</Typography>
+      {/* CONFIRM DIALOG */}
+      <Dialog
+        open={confirmOpen}
+        onClose={() => (!locked ? setConfirmOpen(false) : null)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+            background: alpha('#FFFFFF', 0.92),
+            backdropFilter: 'blur(14px)',
+            boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm Update</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>
+            Are you sure you want to update <b>{titleName}</b>?
+          </Typography>
+
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.4,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+            }}
+          >
+            <Stack spacing={0.6}>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Total Request: <b>{totalRequestQty}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Confirmed MED: <b>{formData.dailyMedInventory || 0}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Supplier: <b>{selectedSupplier?.supplierName || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Images: <b>{totalImagesCount}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Will delete: <b>{imagesToDelete.length}</b>
+              </Typography>
+            </Stack>
+          </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleConfirmSave} disabled={saving}>
-            {saving ? <CircularProgress size={20} /> : 'Confirm Save'}
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={() => setConfirmOpen(false)} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            No
+          </Button>
+          <Button onClick={handleConfirmSave} disabled={locked} variant="contained" sx={{ ...gradientBtnSx, px: 2.4 }}>
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={snackbarOpen} autoHideDuration={5000} onClose={() => setSnackbarOpen(false)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-        <Alert severity={snackbarSeverity} onClose={() => setSnackbarOpen(false)}>
+      {/* TOAST */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4500}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -13,17 +13,26 @@ import {
   Select,
   MenuItem,
   Typography,
-  Paper,
   IconButton,
   FormHelperText,
   Box,
   Snackbar,
   Alert,
+  Divider,
+  Tooltip,
+  Chip,
+  useMediaQuery,
 } from '@mui/material';
+
+import { alpha, useTheme } from '@mui/material/styles';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+
 import { API_BASE_URL } from '../../config';
 import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
@@ -31,11 +40,65 @@ import { debounce } from 'lodash';
 const normalizeCurrencyCode = (code) => {
   const map = { EURO: 'EUR' };
   if (!code) return 'VND';
-  const normalized = map[code.toUpperCase()] || code.toUpperCase();
+  const normalized = map[String(code).toUpperCase()] || String(code).toUpperCase();
   return ['VND', 'USD', 'EUR', 'JPY', 'GBP'].includes(normalized) ? normalized : 'VND';
 };
 
+// ===== auth helpers (same mindset as AddDialog) =====
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const getAccessToken = () =>
+  localStorage.getItem('accessToken') ||
+  localStorage.getItem('token') ||
+  localStorage.getItem('jwt') ||
+  '';
+
+const getUserEmail = () => {
+  const direct =
+    localStorage.getItem('email') ||
+    localStorage.getItem('userEmail') ||
+    localStorage.getItem('username');
+
+  if (direct && direct.trim()) return direct.trim();
+
+  const token = getAccessToken();
+  const payload = token ? parseJwt(token) : null;
+  const email =
+    payload?.email ||
+    payload?.preferred_username ||
+    payload?.upn ||
+    payload?.sub;
+
+  return typeof email === 'string' ? email.trim() : '';
+};
+
+const withEmail = (url, email) => {
+  if (!email) return url;
+  return url.includes('?')
+    ? `${url}&email=${encodeURIComponent(email)}`
+    : `${url}?email=${encodeURIComponent(email)}`;
+};
+
 export default function EditDialog({ open, item, onClose, onRefresh }) {
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const mountedRef = useRef(false);
+
   const [formData, setFormData] = useState({
     itemDescriptionEN: '',
     itemDescriptionVN: '',
@@ -57,86 +120,270 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
   const [saving, setSaving] = useState(false);
+
   const [departmentList, setDepartmentList] = useState([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
+
   const [translating, setTranslating] = useState(false);
+
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [imageUrls, setImageUrls] = useState([]);
   const [imagesToDelete, setImagesToDelete] = useState([]);
+
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
   const [groupCurrency, setGroupCurrency] = useState('VND');
   const [loadingCurrency, setLoadingCurrency] = useState(false);
+
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
+
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
-  const totalRequestQty = deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0);
+  const locked = saving;
 
-  const orderQtyError = formData.orderQty && totalRequestQty > 0 && parseFloat(formData.orderQty) > totalRequestQty
-    ? `Order Q'ty cannot exceed total request (${totalRequestQty})`
-    : '';
+  // ===== UI TOKENS (glass + gradient + compact) =====
+  const paperSx = useMemo(
+    () => ({
+      borderRadius: fullScreen ? 0 : 4,
+      overflow: 'hidden',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.25)}`,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background: alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+    }),
+    [fullScreen, theme]
+  );
 
-  const autoAllocateBuy = useCallback((rows, orderQtyInput) => {
-    const orderQty = parseFloat(orderQtyInput) || 0;
-    if (orderQty <= 0 || totalRequestQty === 0) {
-      return rows.map(r => ({ ...r, buy: '' }));
-    }
-    const effectiveQty = Math.min(orderQty, totalRequestQty);
+  const headerSx = useMemo(
+    () => ({
+      position: 'relative',
+      py: 1.6,
+      px: 2.2,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    }),
+    [theme]
+  );
 
-    const sorted = rows
-      .map((r, i) => ({ ...r, originalIndex: i }))
-      .filter(r => parseFloat(r.qty) > 0)
-      .sort((a, b) => (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex);
+  const subtleCardSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+      background: alpha(theme.palette.common.white, 0.6),
+      backdropFilter: 'blur(10px)',
+      boxShadow: `0 10px 30px ${alpha('#000', 0.08)}`,
+      p: 1.6,
+    }),
+    [theme]
+  );
 
-    const allocated = {};
-    let remaining = effectiveQty;
+  const fieldSx = useMemo(
+    () => ({
+      '& .MuiInputLabel-root': { fontSize: 12.5 },
+      '& .MuiFormHelperText-root': { marginLeft: 0, fontSize: 12 },
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 3,
+        backgroundColor: alpha(theme.palette.common.white, 0.65),
+        minHeight: 36,
+        '& input': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.25 },
+        '& textarea': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.35 },
+        '& .MuiSelect-select': { padding: '8px 36px 8px 12px', fontSize: 13.5, lineHeight: 1.25 },
+        '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
+        '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
+        '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
+      },
+    }),
+    [theme]
+  );
 
-    for (const row of sorted) {
-      if (remaining <= 0) break;
-      const req = parseFloat(row.qty) || 0;
-      if (req > 0) {
-        const give = Math.min(req, remaining);
-        allocated[row.department] = give;
-        remaining -= give;
+  const gradientBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      boxShadow: `0 10px 24px ${alpha(theme.palette.primary.main, 0.28)}`,
+      transform: 'translateY(0)',
+      transition: 'transform .15s ease, box-shadow .15s ease',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: `0 14px 30px ${alpha(theme.palette.primary.main, 0.34)}`,
+        backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+      },
+    }),
+    [theme]
+  );
+
+  const outlineBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    }),
+    []
+  );
+
+  const toastError = useCallback((msg) => {
+    setErrorMessage(msg);
+    setErrorOpen(true);
+  }, []);
+
+  // ===== Calc =====
+  const totalRequestQty = useMemo(
+    () => deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0),
+    [deptRows]
+  );
+
+  const orderQtyError = useMemo(() => {
+    if (!formData.orderQty || totalRequestQty <= 0) return '';
+    const oq = parseFloat(formData.orderQty);
+    if (!Number.isFinite(oq)) return '';
+    return oq > totalRequestQty ? `Order Q'ty cannot exceed total request (${totalRequestQty})` : '';
+  }, [formData.orderQty, totalRequestQty]);
+
+  // ✅ validate duplicates properly for ALL rows
+  const validateDeptDuplicates = useCallback((rows) => {
+    const errors = rows.map((row, idx) => {
+      if (!row.department) return '';
+      const dup = rows.some((r, i) => r.department === row.department && i !== idx);
+      return dup ? 'This department is already selected' : '';
+    });
+    setDeptErrors(errors);
+    return errors;
+  }, []);
+
+  // Auto allocate buy: ưu tiên phòng có Qty nhỏ nhất trước
+  const autoAllocateBuy = useCallback(
+    (rows, orderQtyInput) => {
+      const orderQty = parseFloat(orderQtyInput) || 0;
+      if (orderQty <= 0 || totalRequestQty === 0) return rows.map((r) => ({ ...r, buy: '' }));
+      const effectiveQty = Math.min(orderQty, totalRequestQty);
+
+      const sorted = rows
+        .map((r, i) => ({ ...r, originalIndex: i }))
+        .filter((r) => parseFloat(r.qty) > 0)
+        .sort(
+          (a, b) =>
+            (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex
+        );
+
+      const allocated = {};
+      let remaining = effectiveQty;
+
+      for (const row of sorted) {
+        if (remaining <= 0) break;
+        const req = parseFloat(row.qty) || 0;
+        if (req > 0) {
+          const give = Math.min(req, remaining);
+          allocated[row.department] = give;
+          remaining -= give;
+        }
       }
-    }
 
-    return rows.map(row => ({
-      ...row,
-      buy: allocated[row.department] ?? ''
-    }));
-  }, [totalRequestQty]);
+      return rows.map((row) => ({ ...row, buy: row.department ? (allocated[row.department] ?? '') : '' }));
+    },
+    [totalRequestQty]
+  );
 
   useEffect(() => {
     if (!orderQtyError) {
-      setDeptRows(prev => autoAllocateBuy(prev, formData.orderQty));
+      setDeptRows((prev) => autoAllocateBuy(prev, formData.orderQty));
     }
   }, [formData.orderQty, autoAllocateBuy, orderQtyError]);
 
+  // ===== API =====
   const fetchGroupCurrency = useCallback(async () => {
-    if (!item?.requisition?.groupId) return setGroupCurrency('VND');
+    const gid = item?.requisition?.groupId;
+    if (!gid) {
+      setGroupCurrency('VND');
+      return;
+    }
+
     setLoadingCurrency(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${item.requisition.groupId}`);
+      const email = getUserEmail();
+      const token = getAccessToken();
+
+      const url = withEmail(`${API_BASE_URL}/api/group-summary-requisitions/${gid}`, email);
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
       if (res.ok) {
         const data = await res.json();
-        setGroupCurrency(normalizeCurrencyCode(data.currency));
+        if (mountedRef.current) setGroupCurrency(normalizeCurrencyCode(data.currency));
+      } else {
+        if (mountedRef.current) setGroupCurrency('VND');
       }
     } catch {
-      setGroupCurrency('VND');
+      if (mountedRef.current) setGroupCurrency('VND');
     } finally {
-      setLoadingCurrency(false);
+      if (mountedRef.current) setLoadingCurrency(false);
     }
   }, [item]);
 
-  const fetchData = async () => {
+  const fetchDepartmentList = useCallback(async () => {
+    setLoadingDepartments(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`);
-      if (!res.ok) throw new Error('Load failed');
+      const token = getAccessToken();
+      const res = await fetch(`${API_BASE_URL}/api/departments`, {
+        headers: {
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json().catch(() => []);
+      if (mountedRef.current) setDepartmentList(data || []);
+    } catch (err) {
+      console.error(err);
+      if (mountedRef.current) setDepartmentList([]);
+    } finally {
+      if (mountedRef.current) setLoadingDepartments(false);
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    const rid = item?.requisition?.id;
+    if (!rid) return;
+
+    try {
+      const email = getUserEmail();
+      const token = getAccessToken();
+
+      const url = withEmail(`${API_BASE_URL}/api/summary-requisitions/${rid}`, email);
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Load failed');
+      }
+
       const data = await res.json();
+
+      if (!mountedRef.current) return;
 
       setFormData({
         itemDescriptionEN: data.itemDescriptionEN || '',
@@ -156,20 +403,24 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         supplierPrice: data.price || 0,
       });
 
-      const depts = (data.departmentRequisitions || []).map(d => ({
+      const depts = (data.departmentRequisitions || []).map((d) => ({
         department: d.id ? String(d.id) : '',
-        qty: d.qty ? String(d.qty) : '',
-        buy: d.buy ? String(d.buy) : '',
+        qty: d.qty != null ? String(d.qty) : '',
+        buy: d.buy != null ? String(d.buy) : '',
       }));
-
       if (depts.length === 0) depts.push({ department: '', qty: '', buy: '' });
 
       setDeptRows(depts);
-      setDeptErrors(new Array(depts.length).fill(''));
+      validateDeptDuplicates(depts);
 
       setImageUrls(data.imageUrls || []);
+
+      // reset new uploads + deletes
       setFiles([]);
-      setPreviews([]);
+      setPreviews((p) => {
+        p.forEach((u) => URL.revokeObjectURL(u));
+        return [];
+      });
       setImagesToDelete([]);
 
       if (data.supplierId) {
@@ -181,78 +432,114 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         });
         setShowSupplierSelector(false);
       } else {
+        setSelectedSupplier(null);
         setShowSupplierSelector(true);
       }
 
       setIsEnManuallyEdited(false);
-    } catch (err) {
-      setErrorMessage('Failed to load data');
-      setErrorOpen(true);
+    } catch (e) {
+      console.error(e);
+      toastError(e?.message || 'Failed to load data');
     }
-  };
+  }, [item, toastError, validateDeptDuplicates]);
 
-  const fetchDepartmentList = async () => {
-    setLoadingDepartments(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/departments`);
-      const data = await res.json();
-      setDepartmentList(data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingDepartments(false);
-    }
-  };
+  // ===== open lifecycle =====
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (open && item?.requisition?.id) {
       fetchData();
       fetchGroupCurrency();
       fetchDepartmentList();
-    } else {
-      // reset khi đóng
-      setFormData(prev => ({ ...prev, orderQty: '', oldSapCode: '', itemDescriptionVN: '' }));
-      setDeptRows([{ department: '', qty: '', buy: '' }]);
-      setDeptErrors(['']);
-      setFiles([]);
-      setPreviews([]);
-      setImageUrls([]);
-      setImagesToDelete([]);
-      setSelectedSupplier(null);
-      setShowSupplierSelector(true);
+      return;
     }
-  }, [open, item]);
 
-  const translateText = async (text) => {
-    if (!text || isEnManuallyEdited) return;
-    setTranslating(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setFormData(prev => ({ ...prev, itemDescriptionEN: data.translatedText || '' }));
+    // reset when closed / no item
+    setFormData({
+      itemDescriptionEN: '',
+      itemDescriptionVN: '',
+      fullItemDescriptionVN: '',
+      oldSapCode: '',
+      hanaSapCode: '',
+      orderQty: '',
+      reason: '',
+      remark: '',
+      remarkComparison: '',
+      supplierId: '',
+      groupId: '',
+      productType1Id: '',
+      productType2Id: '',
+      unit: '',
+      supplierPrice: 0,
+    });
+
+    setDeptRows([{ department: '', qty: '', buy: '' }]);
+    setDeptErrors(['']);
+
+    setFiles([]);
+    setPreviews((p) => {
+      p.forEach((u) => URL.revokeObjectURL(u));
+      return [];
+    });
+
+    setImageUrls([]);
+    setImagesToDelete([]);
+
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setIsEnManuallyEdited(false);
+    setOpenConfirmDialog(false);
+  }, [open, item, fetchData, fetchGroupCurrency, fetchDepartmentList]);
+
+  // ===== Auto translate VN -> EN (with auth) =====
+  const translateText = useCallback(
+    async (text) => {
+      if (!text || isEnManuallyEdited) return;
+      setTranslating(true);
+      try {
+        const token = getAccessToken();
+        const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ text }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (mountedRef.current) {
+            setFormData((prev) => ({ ...prev, itemDescriptionEN: data.translatedText || '' }));
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (mountedRef.current) setTranslating(false);
       }
-    } catch { }
-    finally { setTranslating(false); }
-  };
+    },
+    [isEnManuallyEdited]
+  );
 
-  const debouncedTranslate = useCallback(debounce(translateText, 600), [isEnManuallyEdited]);
+  const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
 
   useEffect(() => {
     if (formData.itemDescriptionVN && !isEnManuallyEdited) {
       debouncedTranslate(formData.itemDescriptionVN);
     }
-  }, [formData.itemDescriptionVN, debouncedTranslate]);
+    return () => debouncedTranslate.cancel?.();
+  }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
 
-  const itemNoForSupplier = formData.itemDescriptionVN.trim();
+  const itemNoForSupplier = (formData.itemDescriptionVN || '').trim();
 
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         fullItemDescriptionVN: supplierData.fullItemDescriptionVN || '',
         oldSapCode: supplierData.oldSapCode || '',
@@ -262,18 +549,25 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
       }));
+
       setSelectedSupplier({
         supplierName: supplierData.supplierName || '',
         sapCode: supplierData.oldSapCode || '',
         price: parseFloat(supplierData.supplierPrice) || 0,
         unit: supplierData.unit || '',
       });
+
       setShowSupplierSelector(false);
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        oldSapCode: '', supplierId: '', unit: '', supplierPrice: 0,
-        productType1Id: '', productType2Id: '', fullItemDescriptionVN: ''
+        oldSapCode: '',
+        supplierId: '',
+        unit: '',
+        supplierPrice: 0,
+        productType1Id: '',
+        productType2Id: '',
+        fullItemDescriptionVN: '',
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
@@ -282,79 +576,89 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   const handleChange = (field) => (e) => {
     const value = e.target.value;
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
+  // ✅ dept change w/ global validation
   const handleDeptChange = (index, field, value) => {
-    const newRows = [...deptRows];
-    newRows[index][field] = value;
-    setDeptRows(newRows);
-
-    const newErrors = newRows.map((row, i) => {
-      if (i === index && field === 'department' && value) {
-        const dup = newRows.some((r, j) => j !== i && r.department === value && r.department);
-        return dup ? 'This department is already selected' : '';
-      }
-      return '';
+    setDeptRows((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      if (field === 'department') validateDeptDuplicates(next);
+      return next;
     });
-    setDeptErrors(newErrors);
   };
 
   const handleAddDeptRow = () => {
-    setDeptRows([...deptRows, { department: '', qty: '', buy: '' }]);
-    setDeptErrors([...deptErrors, '']);
+    setDeptRows((prev) => {
+      const next = [...prev, { department: '', qty: '', buy: '' }];
+      setDeptErrors((e) => [...e, '']);
+      return next;
+    });
   };
 
   const handleDeleteDeptRow = (index) => {
-    setDeptRows(deptRows.filter((_, i) => i !== index));
-    setDeptErrors(deptErrors.filter((_, i) => i !== index));
+    setDeptRows((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      const safe = next.length ? next : [{ department: '', qty: '', buy: '' }];
+      validateDeptDuplicates(safe);
+      return safe;
+    });
   };
 
   const calcTotalRequestQty = () => deptRows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
   const calcTotalBuy = () => deptRows.reduce((s, r) => s + (parseFloat(r.buy) || 0), 0);
 
+  // ✅ FIX: count images đúng (đừng trừ imagesToDelete nữa vì bạn đã remove khỏi imageUrls rồi)
+  const currentImagesCount = Math.max(0, files.length + imageUrls.length);
+
   const handleFileChange = (e) => {
-    const selected = Array.from(e.target.files);
-    const valid = selected.filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
-    if (valid.length < selected.length) {
-      setErrorMessage('Only images ≤ 5MB allowed');
-      setErrorOpen(true);
-    }
-    const newFiles = [...files, ...valid];
-    setFiles(newFiles);
-    setPreviews(newFiles.map(f => URL.createObjectURL(f)));
+    const maxRemain = 10 - (files.length + imageUrls.length);
+    const selected = Array.from(e.target.files || []).slice(0, Math.max(0, maxRemain));
+    const valid = selected.filter((f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+
+    if (valid.length < selected.length) toastError('Only images ≤ 5MB allowed');
+
+    setFiles((prev) => [...prev, ...valid]);
+    setPreviews((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
+
     e.target.value = null;
   };
 
   const handleRemoveFile = (index) => {
+    // old images first
     if (index < imageUrls.length) {
-      setImageUrls(imageUrls.filter((_, i) => i !== index));
-      setImagesToDelete(prev => [...prev, imageUrls[index]]);
+      const url = imageUrls[index];
+      setImageUrls((prev) => prev.filter((_, i) => i !== index));
+      setImagesToDelete((prev) => [...prev, url]);
     } else {
       const i = index - imageUrls.length;
       URL.revokeObjectURL(previews[i]);
-      setFiles(files.filter((_, j) => j !== i));
-      setPreviews(previews.filter((_, j) => j !== i));
+      setFiles((prev) => prev.filter((_, j) => j !== i));
+      setPreviews((prev) => prev.filter((_, j) => j !== i));
     }
   };
 
   const handleSaveClick = () => {
-    if (!formData.itemDescriptionVN) return setErrorMessage('Item Description (VN) is required'), setErrorOpen(true);
-    if (totalRequestQty === 0) return setErrorMessage('At least one department must have Qty'), setErrorOpen(true);
-    if (orderQtyError) return setErrorMessage(orderQtyError), setErrorOpen(true);
-    const deptIds = deptRows.filter(r => r.department).map(r => r.department);
-    if (new Set(deptIds).size !== deptIds.length) return setErrorMessage('Duplicate departments'), setErrorOpen(true);
+    if (!formData.itemDescriptionVN?.trim()) return toastError('Item Description (VN) is required');
+    if (totalRequestQty === 0) return toastError('At least one department must have Qty');
+    if (orderQtyError) return toastError(orderQtyError);
+    if (deptErrors.some(Boolean)) return toastError('Duplicate departments');
+
     setOpenConfirmDialog(true);
   };
 
   const handleSave = async () => {
+    const rid = item?.requisition?.id;
+    if (!rid) return toastError('Missing requisition id');
+
     const departmentRequisitions = deptRows
-      .filter(r => r.department && r.qty)
-      .map(r => ({
+      .filter((r) => r.department && r.qty !== '' && r.qty !== null && r.qty !== undefined)
+      .map((r) => ({
         id: r.department,
-        name: departmentList.find(d => d.id === r.department)?.departmentName || '',
+        name: departmentList.find((d) => String(d.id) === String(r.department))?.departmentName || '',
         qty: parseFloat(r.qty) || 0,
         buy: parseFloat(r.buy) || 0,
       }));
@@ -376,24 +680,37 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     fd.append('productType2Id', formData.productType2Id || '');
     fd.append('unit', formData.unit || '');
     fd.append('supplierPrice', formData.supplierPrice || 0);
-    files.forEach(f => fd.append('files', f));
+    files.forEach((f) => fd.append('files', f));
     fd.append('imagesToDelete', JSON.stringify(imagesToDelete));
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/${item.requisition.id}`, {
+      const email = getUserEmail();
+      const token = getAccessToken();
+
+      const url = withEmail(`${API_BASE_URL}/api/summary-requisitions/${rid}`, email);
+
+      const res = await fetch(url, {
         method: 'PUT',
+        headers: {
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: fd,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || 'Update failed');
-      }
+
+      let payload = null;
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) payload = await res.json().catch(() => null);
+      else payload = { message: await res.text().catch(() => '') };
+
+      if (!res.ok) throw new Error(payload?.message || 'Update failed');
+
+      setOpenConfirmDialog(false);
       onClose?.('Updated successfully!');
       onRefresh?.();
     } catch (err) {
-      setErrorMessage(err.message || 'Update failed');
-      setErrorOpen(true);
+      toastError(err.message || 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -401,202 +718,634 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 'bold' }}>
-          Edit Request
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-
-            <Stack direction="row" spacing={2}>
-              <TextField label="Old SAP Code" value={formData.oldSapCode} onChange={handleChange('oldSapCode')} size="small" fullWidth />
-              <TextField label="Hana SAP Code" value={formData.hanaSapCode} onChange={handleChange('hanaSapCode')} size="small" fullWidth />
-            </Stack>
-
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Item Description (VN) *"
-                value={formData.itemDescriptionVN}
-                onChange={handleChange('itemDescriptionVN')}
-                size="small"
-                fullWidth
-                required
-              />
-              <TextField
-                label="Item Description (EN)"
-                value={formData.itemDescriptionEN}
-                onChange={handleChange('itemDescriptionEN')}
-                size="small"
-                fullWidth
-                disabled={translating}
-                InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }}
-              />
-            </Stack>
-
-            <TextField
-              label="Full Item Description (VN)"
-              value={formData.fullItemDescriptionVN}
-              onChange={handleChange('fullItemDescriptionVN')}
-              size="small"
-              fullWidth
-              multiline
-              rows={2}
-            />
-
-            {showSupplierSelector ? (
-              <SupplierSelector
-                oldSapCode={formData.oldSapCode}
-                itemNo={itemNoForSupplier}
-                onSelectSupplier={handleSelectSupplier}
-                currency={groupCurrency}
-                disabled={loadingCurrency}
-              />
-            ) : selectedSupplier ? (
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography fontWeight="bold">Selected Supplier:</Typography>
-                <Typography>Supplier: {selectedSupplier.supplierName}</Typography>
-                <Typography>SAP Code: {selectedSupplier.sapCode}</Typography>
-                <Typography>Price: {(selectedSupplier.price || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
-                <Typography>Unit: {selectedSupplier.unit || '-'}</Typography>
-                <Button variant="outlined" size="small" onClick={() => setShowSupplierSelector(true)} sx={{ mt: 1 }}>
-                  Change Supplier
-                </Button>
-              </Paper>
-            ) : null}
-
-            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Department Request Qty:</Typography>
-              {deptRows.map((row, i) => (
-                <Stack direction="row" spacing={2} alignItems="center" key={i} sx={{ mt: 1 }}>
-                  <FormControl fullWidth size="small" error={!!deptErrors[i]}>
-                    <InputLabel>Department</InputLabel>
-                    <Select
-                      value={row.department}
-                      label="Department"
-                      onChange={(e) => handleDeptChange(i, 'department', e.target.value)}
-                      disabled={loadingDepartments}
-                    >
-                      <MenuItem value=""><em>None</em></MenuItem>
-                      {departmentList.map(d => (
-                        <MenuItem key={d.id} value={String(d.id)}>{d.departmentName}</MenuItem>
-                      ))}
-                    </Select>
-                    {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
-                  </FormControl>
-
-                  <TextField label="Qty" type="number" size="small" value={row.qty} onChange={e => handleDeptChange(i, 'qty', e.target.value)} />
-
-                  <TextField
-                    label="Buy"
-                    type="number"
-                    size="small"
-                    value={row.buy || ''}
-                    disabled
-                    InputProps={{ readOnly: true, style: { backgroundColor: '#f5f5f5' } }}
-                  />
-
-                  <IconButton onClick={() => handleDeleteDeptRow(i)} color="error"><DeleteIcon /></IconButton>
-                </Stack>
-              ))}
-
-              <Button startIcon={<AddIcon />} onClick={handleAddDeptRow} variant="outlined" size="small" sx={{ mt: 1 }}>
-                Add Department
-              </Button>
-
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f9f9f9', borderRadius: 1 }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between">
-                  <Typography><strong>Total Qty:</strong> <span style={{ color: '#1976d2' }}>{calcTotalRequestQty()}</span></Typography>
-                  <Typography><strong>Total Buy:</strong> <span style={{ color: '#1976d2' }}>{calcTotalBuy()}</span></Typography>
-                  <Typography><strong>Unit:</strong> {formData.unit || '-'}</Typography>
-                  <Typography><strong>Price:</strong> {(formData.supplierPrice || 0).toLocaleString('vi-VN', { style: 'currency', currency: groupCurrency })}</Typography>
-                </Stack>
-              </Box>
-            </Paper>
-
-            <TextField
-              label="Order Q'ty"
-              type="number"
-              value={formData.orderQty}
-              onChange={handleChange('orderQty')}
-              size="small"
-              fullWidth
-              sx={{ mt: 2 }}
-              error={!!orderQtyError}
-              helperText={orderQtyError || `Total request: ${totalRequestQty}`}
-            />
-
-            <TextField label="Reason" value={formData.reason} onChange={handleChange('reason')} size="small" fullWidth multiline rows={2} />
-            <TextField label="Remark" value={formData.remark} onChange={handleChange('remark')} size="small" fullWidth multiline rows={2} />
-
-            <FormControl fullWidth size="small">
-              <InputLabel>Remark Comparison</InputLabel>
-              <Select value={formData.remarkComparison} label="Remark Comparison" onChange={handleChange('remarkComparison')}>
-                <MenuItem value=""><em>None</em></MenuItem>
-                <MenuItem value="Old price">Old price</MenuItem>
-                <MenuItem value="The goods heavy and Small Q'ty. Only 1 Supplier can provide this type">The goods heavy and Small Q'ty. Only 1 Supplier can provide this type</MenuItem>
-              </Select>
-            </FormControl>
-
+      {/* MAIN */}
+      <Dialog
+        open={open}
+        onClose={locked ? undefined : onClose}
+        fullScreen={fullScreen}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: paperSx }}
+      >
+        {/* Gradient Header */}
+        <DialogTitle sx={headerSx}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Box>
-              <InputLabel sx={{ mb: 1 }}>Images (Max 10)</InputLabel>
-              <Button variant="outlined" component="label" startIcon={<PhotoCamera />}>
-                Choose Images
-                <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
-              </Button>
-              {(files.length + imageUrls.length - imagesToDelete.length) > 0 && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  {files.length + imageUrls.length - imagesToDelete.length} image(s)
-                </Typography>
-              )}
-              {(previews.length > 0 || imageUrls.length > 0) && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
-                  {imageUrls.map((url, i) => (
-                    <Box key={`old-${i}`} sx={{ position: 'relative' }}>
-                      <img src={`${API_BASE_URL}${url}`} alt="" style={{ height: 120, borderRadius: 4, border: '1px solid #ddd' }} />
-                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.8)' }} onClick={() => handleRemoveFile(i)}>
-                        <CloseIcon fontSize="small" color="error" />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  {previews.map((url, i) => (
-                    <Box key={`new-${i}`} sx={{ position: 'relative' }}>
-                      <img src={url} alt="" style={{ height: 120, borderRadius: 4, border: '1px solid #ddd' }} />
-                      <IconButton size="small" sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(255,255,255,0.8)' }} onClick={() => handleRemoveFile(i + imageUrls.length)}>
-                        <CloseIcon fontSize="small" color="error" />
-                      </IconButton>
-                    </Box>
-                  ))}
+              <Typography
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  fontSize: { xs: 16.5, sm: 18.5 },
+                }}
+              >
+                Edit Request
+              </Typography>
+              <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 12.5 }}>
+                Update item info, departments, order quantity, notes & images.
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                size="small"
+                icon={<CheckCircleRoundedIcon />}
+                label={loadingCurrency ? 'Loading...' : `Currency: ${groupCurrency}`}
+                sx={{
+                  color: 'common.white',
+                  bgcolor: alpha('#000', 0.18),
+                  border: `1px solid ${alpha('#fff', 0.22)}`,
+                  fontWeight: 700,
+                }}
+              />
+              <Tooltip title="Close">
+                <span>
+                  <IconButton
+                    onClick={onClose}
+                    disabled={locked}
+                    sx={{
+                      color: 'common.white',
+                      bgcolor: alpha('#000', 0.18),
+                      border: `1px solid ${alpha('#fff', 0.22)}`,
+                      '&:hover': { bgcolor: alpha('#000', 0.28) },
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 } }}>
+          <Stack spacing={1.4}>
+            {/* BASIC */}
+            <Box sx={subtleCardSx}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Basic info</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                VN required; EN auto-translates unless you edit it manually.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2 }}>
+                <TextField
+                  label="Old SAP Code"
+                  value={formData.oldSapCode}
+                  onChange={handleChange('oldSapCode')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+                <TextField
+                  label="Hana SAP Code"
+                  value={formData.hanaSapCode}
+                  onChange={handleChange('hanaSapCode')}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+
+                <TextField
+                  label="Item Description (VN) *"
+                  value={formData.itemDescriptionVN}
+                  onChange={handleChange('itemDescriptionVN')}
+                  size="small"
+                  fullWidth
+                  required
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+
+                <TextField
+                  label="Item Description (EN)"
+                  value={formData.itemDescriptionEN}
+                  onChange={handleChange('itemDescriptionEN')}
+                  size="small"
+                  fullWidth
+                  disabled={locked || translating}
+                  sx={fieldSx}
+                  InputProps={{ endAdornment: translating ? <CircularProgress size={16} /> : null }}
+                />
+
+                <TextField
+                  label="Full Item Description (VN)"
+                  value={formData.fullItemDescriptionVN}
+                  onChange={handleChange('fullItemDescriptionVN')}
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  disabled={locked}
+                  sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
+                />
+              </Box>
+            </Box>
+
+            {/* SUPPLIER */}
+            <Box sx={subtleCardSx}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                    Keep supplier updated for correct unit/price.
+                  </Typography>
                 </Box>
-              )}
+
+                {!showSupplierSelector && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setShowSupplierSelector(true)}
+                    disabled={locked}
+                    sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
+                  >
+                    Change supplier
+                  </Button>
+                )}
+              </Stack>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              {showSupplierSelector ? (
+                <Box
+                  sx={{
+                    borderRadius: 4,
+                    border: `1px dashed ${alpha(theme.palette.divider, 0.9)}`,
+                    background: alpha('#fff', 0.65),
+                    p: 1.2,
+                  }}
+                >
+                  <SupplierSelector
+                    oldSapCode={formData.oldSapCode}
+                    itemNo={itemNoForSupplier}
+                    onSelectSupplier={handleSelectSupplier}
+                    currency={groupCurrency}
+                    disabled={loadingCurrency || locked}
+                  />
+                </Box>
+              ) : selectedSupplier ? (
+                <Box
+                  sx={{
+                    borderRadius: 4,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                    background: alpha('#fff', 0.7),
+                    p: 1.4,
+                  }}
+                >
+                  <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Selected supplier</Typography>
+                  <Typography sx={{ fontWeight: 900, fontSize: 14.5, color: '#111827', mt: 0.2 }}>
+                    {selectedSupplier.supplierName}
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      mt: 0.8,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+                      gap: 0.9,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      SAP: <b>{selectedSupplier.sapCode || '-'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Unit: <b>{selectedSupplier.unit || '-'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Price:{' '}
+                      <b>
+                        {(selectedSupplier.price || 0).toLocaleString('vi-VN', {
+                          style: 'currency',
+                          currency: groupCurrency,
+                        })}
+                      </b>
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : null}
+            </Box>
+
+            {/* DEPARTMENTS */}
+            <Box sx={subtleCardSx}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department requests</Typography>
+                  <Tooltip title="Buy is auto-allocated based on Order Q'ty (smallest requests first)." arrow>
+                    <InfoOutlinedIcon
+                      sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }}
+                    />
+                  </Tooltip>
+                </Stack>
+
+                <Button
+                  startIcon={<AddIcon fontSize="small" />}
+                  onClick={handleAddDeptRow}
+                  variant="outlined"
+                  size="small"
+                  disabled={locked}
+                  sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800, px: 1.6 }}
+                >
+                  Add department
+                </Button>
+              </Stack>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Stack spacing={1}>
+                {deptRows.map((row, i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      borderRadius: 4,
+                      border: `1px solid ${alpha(theme.palette.divider, 0.75)}`,
+                      background: alpha('#fff', i % 2 === 0 ? 0.72 : 0.6),
+                      p: 1.2,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr auto' },
+                        gap: 1,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <FormControl
+                        fullWidth
+                        size="small"
+                        error={!!deptErrors[i]}
+                        disabled={loadingDepartments || locked}
+                        sx={fieldSx}
+                      >
+                        <InputLabel>Department</InputLabel>
+                        <Select
+                          value={row.department}
+                          label="Department"
+                          onChange={(e) => handleDeptChange(i, 'department', e.target.value)}
+                        >
+                          <MenuItem value="">
+                            <em>None</em>
+                          </MenuItem>
+                          {departmentList.map((d) => (
+                            <MenuItem key={d.id} value={String(d.id)}>
+                              {d.departmentName}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {deptErrors[i] && <FormHelperText>{deptErrors[i]}</FormHelperText>}
+                      </FormControl>
+
+                      <TextField
+                        label="Qty"
+                        type="number"
+                        size="small"
+                        value={row.qty}
+                        onChange={(e) => handleDeptChange(i, 'qty', e.target.value)}
+                        disabled={locked}
+                        sx={fieldSx}
+                        inputProps={{ min: 0 }}
+                      />
+
+                      <TextField
+                        label="Buy"
+                        type="number"
+                        size="small"
+                        value={row.buy || ''}
+                        disabled
+                        sx={{
+                          ...fieldSx,
+                          '& .MuiOutlinedInput-root': {
+                            ...(fieldSx['& .MuiOutlinedInput-root'] || {}),
+                            backgroundColor: alpha(theme.palette.action.disabledBackground, 0.55),
+                          },
+                        }}
+                      />
+
+                      <Tooltip title="Remove row" arrow>
+                        <span>
+                          <IconButton
+                            onClick={() => handleDeleteDeptRow(i)}
+                            color="error"
+                            disabled={locked || deptRows.length <= 1}
+                            size="small"
+                            sx={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 999,
+                              border: `1px solid ${alpha(theme.palette.error.main, 0.25)}`,
+                              bgcolor: alpha(theme.palette.error.main, 0.05),
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                ))}
+
+                {/* Summary */}
+                <Box
+                  sx={{
+                    mt: 0.4,
+                    p: 1.2,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.primary.main, 0.06),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1.2}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  >
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      Total Qty: <b style={{ color: theme.palette.text.primary }}>{calcTotalRequestQty()}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      Total Buy: <b style={{ color: theme.palette.text.primary }}>{calcTotalBuy()}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      Unit: <b style={{ color: theme.palette.text.primary }}>{formData.unit || '-'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
+                      Price:{' '}
+                      <b style={{ color: theme.palette.text.primary }}>
+                        {(formData.supplierPrice || 0).toLocaleString('vi-VN', {
+                          style: 'currency',
+                          currency: groupCurrency,
+                        })}
+                      </b>
+                    </Typography>
+                  </Stack>
+                </Box>
+              </Stack>
+            </Box>
+
+            {/* ORDER */}
+            <Box sx={subtleCardSx}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Order</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Order Q'ty drives Buy auto-allocation.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <TextField
+                label="Order Q'ty"
+                type="number"
+                value={formData.orderQty}
+                onChange={handleChange('orderQty')}
+                size="small"
+                fullWidth
+                error={!!orderQtyError}
+                disabled={locked}
+                helperText={orderQtyError || `Total request: ${totalRequestQty}`}
+                sx={fieldSx}
+                inputProps={{ min: 0 }}
+              />
+            </Box>
+
+            {/* NOTES */}
+            <Box sx={subtleCardSx}>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                Reason / Remark / Comparison.
+              </Typography>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2 }}>
+                <TextField
+                  label="Reason"
+                  value={formData.reason}
+                  onChange={handleChange('reason')}
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+                <TextField
+                  label="Remark"
+                  value={formData.remark}
+                  onChange={handleChange('remark')}
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  disabled={locked}
+                  sx={fieldSx}
+                />
+                <TextField
+                  label="Remark Comparison"
+                  value={formData.remarkComparison || ''}
+                  onChange={handleChange('remarkComparison')}
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  placeholder="Enter remark comparison..."
+                  disabled={locked}
+                  sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
+                />
+              </Box>
+            </Box>
+
+            {/* IMAGES */}
+            <Box sx={subtleCardSx}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Images</Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                    Only images ≤ 5MB. Max 10 images total.
+                  </Typography>
+                </Box>
+
+                <Chip
+                  size="small"
+                  icon={<CheckCircleRoundedIcon />}
+                  label={`${currentImagesCount}/10`}
+                  sx={{
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+                    color: theme.palette.primary.dark,
+                    fontWeight: 800,
+                  }}
+                />
+              </Stack>
+
+              <Divider sx={{ my: 1.2 }} />
+
+              <Stack spacing={1}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<PhotoCamera fontSize="small" />}
+                  disabled={locked || currentImagesCount >= 10}
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    alignSelf: 'flex-start',
+                    px: 1.6,
+                  }}
+                >
+                  Choose images
+                  <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
+                </Button>
+
+                {(imageUrls.length > 0 || previews.length > 0) && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.2, mt: 0.4 }}>
+                    {imageUrls.map((url, i) => (
+                      <Box key={`old-${i}`} sx={{ position: 'relative' }}>
+                        <img
+                          src={`${API_BASE_URL}${url}`}
+                          alt=""
+                          style={{
+                            height: 88,
+                            width: 132,
+                            objectFit: 'cover',
+                            borderRadius: 12,
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                            display: 'block',
+                          }}
+                        />
+                        <IconButton
+                          size="small"
+                          sx={{
+                            position: 'absolute',
+                            top: 6,
+                            right: 6,
+                            bgcolor: alpha('#fff', 0.85),
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                            width: 30,
+                            height: 30,
+                          }}
+                          onClick={() => handleRemoveFile(i)}
+                          disabled={locked}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ))}
+
+                    {previews.map((url, i) => (
+                      <Box key={`new-${i}`} sx={{ position: 'relative' }}>
+                        <img
+                          src={url}
+                          alt=""
+                          style={{
+                            height: 88,
+                            width: 132,
+                            objectFit: 'cover',
+                            borderRadius: 12,
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                            display: 'block',
+                          }}
+                        />
+                        <IconButton
+                          size="small"
+                          sx={{
+                            position: 'absolute',
+                            top: 6,
+                            right: 6,
+                            bgcolor: alpha('#fff', 0.85),
+                            border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+                            width: 30,
+                            height: 30,
+                          }}
+                          onClick={() => handleRemoveFile(i + imageUrls.length)}
+                          disabled={locked}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Stack>
             </Box>
           </Stack>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        {/* Footer */}
+        <DialogActions sx={{ px: { xs: 2, sm: 2.2 }, py: 1.8, gap: 1 }}>
+          <Button onClick={onClose} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+
           <Button
             variant="contained"
             onClick={handleSaveClick}
-            disabled={saving || deptErrors.some(Boolean) || !!orderQtyError}
+            disabled={locked || deptErrors.some(Boolean) || !!orderQtyError}
+            sx={gradientBtnSx}
           >
-            {saving ? <CircularProgress size={20} /> : 'Save'}
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openConfirmDialog} onClose={() => setOpenConfirmDialog(false)}>
-        <DialogTitle>Confirm Edit</DialogTitle>
-        <DialogContent>
-          <Typography>Are you sure to save changes for "<strong>{formData.itemDescriptionVN || 'this item'}</strong>"?</Typography>
+      {/* CONFIRM */}
+      <Dialog
+        open={openConfirmDialog}
+        onClose={locked ? undefined : () => setOpenConfirmDialog(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+            background: alpha('#FFFFFF', 0.92),
+            backdropFilter: 'blur(14px)',
+            boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm edit</DialogTitle>
+        <DialogContent sx={{ pt: 0.5 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            Save changes for <b>{formData.itemDescriptionVN || 'this item'}</b>?
+          </Typography>
+          <Typography sx={{ mt: 0.6, fontSize: 12.5, color: 'text.secondary' }}>
+            This will update item data, departments, order qty and images.
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenConfirmDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>Confirm</Button>
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button
+            onClick={() => setOpenConfirmDialog(false)}
+            disabled={locked}
+            variant="outlined"
+            sx={outlineBtnSx}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={locked} variant="contained" sx={gradientBtnSx}>
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Confirm'}
+          </Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={errorOpen} autoHideDuration={6000} onClose={() => setErrorOpen(false)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-        <Alert severity="error" onClose={() => setErrorOpen(false)}>{errorMessage}</Alert>
+      {/* ERROR TOAST */}
+      <Snackbar
+        open={errorOpen}
+        autoHideDuration={6000}
+        onClose={() => setErrorOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="error" onClose={() => setErrorOpen(false)} sx={{ borderRadius: 3 }}>
+          {errorMessage}
+        </Alert>
       </Snackbar>
     </>
   );

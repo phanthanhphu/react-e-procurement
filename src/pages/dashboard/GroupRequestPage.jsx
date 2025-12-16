@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/pages/group/GroupRequestPage.jsx
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import UpdateStatusGroup from './UpdateStatusGroup';
 import {
   Typography,
@@ -13,7 +14,6 @@ import {
   Stack,
   IconButton,
   Button,
-  TablePagination,
   useTheme,
   useMediaQuery,
   Tooltip,
@@ -23,9 +23,26 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip,
+  Divider,
+  CircularProgress,
+  Pagination,
+  Select,
+  MenuItem,
 } from '@mui/material';
-import { Add, Edit, Delete, Visibility, ArrowUpward, ArrowDownward } from '@mui/icons-material';
+
+import {
+  Add,
+  Edit,
+  Delete,
+  Visibility,
+  ArrowUpward,
+  ArrowDownward,
+  Close,
+  Inbox as InboxIcon,
+} from '@mui/icons-material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import axios from 'axios';
@@ -34,21 +51,18 @@ import EditGroupModal from './EditGroupModal';
 import GroupSearchBar from './GroupSearchBar';
 import { API_BASE_URL } from '../../config';
 
-// Cấu hình axios interceptor
+/* =========================
+   Axios client
+   ========================= */
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    Accept: '*/*',
-    'Content-Type': 'application/json',
-  },
+  headers: { Accept: '*/*', 'Content-Type': 'application/json' },
 });
 
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error)
@@ -65,6 +79,47 @@ apiClient.interceptors.response.use(
   }
 );
 
+/* =========================
+   Helpers (match SupplierProductsPage style)
+   ========================= */
+const formatDateISO = (dateInput) => {
+  if (!dateInput) return '-';
+
+  let d;
+  if (Array.isArray(dateInput)) {
+    const [year, month, day, hour = 0, minute = 0, second = 0] = dateInput;
+    d = dayjs(new Date(year, month - 1, day, hour, minute, second));
+  } else if (typeof dateInput === 'string') {
+    d = dayjs(dateInput);
+  } else {
+    return '-';
+  }
+
+  if (!d.isValid()) return '-';
+  return d.format('DD/MM/YYYY');
+};
+
+const getTypeColor = (type) =>
+  ({ Requisition_monthly: '#2563eb', Requisition_weekly: '#dc2626' }[type] || '#6b7280');
+
+const getCurrencyColor = (currency) =>
+  ({ VND: '#16a34a', EUR: '#2563eb', EURO: '#2563eb', USD: '#dc2626' }[currency] || '#6b7280');
+
+const tagPillSx = {
+  padding: '2px 8px',
+  borderRadius: '999px',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  color: '#fff',
+  display: 'inline-flex',
+  justifyContent: 'center',
+  minWidth: 78,
+  mx: 'auto',
+};
+
+/* =========================
+   Headers
+   ========================= */
 const headers = [
   { label: 'No', key: 'no', sortable: false, hideOnSmall: false, backendKey: 'no' },
   { label: 'Name', key: 'name', sortable: true, hideOnSmall: false, backendKey: 'name' },
@@ -76,6 +131,9 @@ const headers = [
   { label: 'Actions', key: 'actions', sortable: false, hideOnSmall: false, backendKey: 'actions' },
 ];
 
+/* =========================
+   API functions
+   ========================= */
 const fetchGroups = async (
   page = 0,
   limit = 12,
@@ -101,15 +159,11 @@ const fetchGroups = async (
       currency: currency || '',
       sort,
     });
+
     if (startDate && startDate.isValid()) params.append('startDate', startDate.format('YYYY-MM-DD'));
     if (endDate && endDate.isValid()) params.append('endDate', endDate.format('YYYY-MM-DD'));
 
-    const response = await apiClient.get(`${API_BASE_URL}/api/group-summary-requisitions/filter`, { params });
-    console.log('Raw fetched groups:', response.data.content.map(item => ({
-      id: item.id,
-      createdDate: item.createdDate,
-      stockDate: item.stockDate
-    })));
+    const response = await apiClient.get(`/api/group-summary-requisitions/filter`, { params });
     return {
       content: response.data.content || [],
       totalElements: response.data.totalElements || 0,
@@ -123,7 +177,7 @@ const fetchGroups = async (
 
 const deleteGroup = async (id) => {
   try {
-    const response = await apiClient.delete(`${API_BASE_URL}/api/group-summary-requisitions/${id}`);
+    const response = await apiClient.delete(`/api/group-summary-requisitions/${id}`);
     return { success: true, message: response.data?.message || 'Group deleted successfully' };
   } catch (error) {
     console.error('Error deleting group:', error.response?.data || error.message);
@@ -131,67 +185,144 @@ const deleteGroup = async (id) => {
   }
 };
 
-const formatDate = (dateInput) => {
-  if (!dateInput) return null;
-
-  let date;
-  if (Array.isArray(dateInput)) {
-    const [year, month, day, hour = 0, minute = 0, second = 0] = dateInput;
-    date = dayjs(new Date(year, month - 1, day, hour, minute, second));
-  } else if (typeof dateInput === 'string' && dayjs(dateInput).isValid()) {
-    date = dayjs(dateInput);
-  } else {
-    return null;
+/* =========================
+   Sort indicator (tri-state like SupplierProductsPage)
+   ========================= */
+const SortIndicator = ({ active, direction }) => {
+  if (!active) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
+      </Box>
+    );
   }
 
-  return date.isValid() ? date.format('YYYY-MM-DD') : null;
-};
-
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'Completed':
-      return '#4caf50';
-    case 'Not Started':
-      return '#f44336';
-    case 'In Progress':
-      return '#2196f3';
-    default:
-      return '#9e9e9e';
+  if (direction === 'asc') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
+      </Box>
+    );
   }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+      <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
+      <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
+    </Box>
+  );
 };
 
-const getTypeColor = (type) => {
-  switch (type) {
-    case 'Requisition_monthly':
-      return '#64b5f6';
-    case 'Requisition_weekly':
-      return '#e57373';
-    default:
-      return '#9e9e9e';
-  }
-};
+/* =========================
+   PaginationBar (same as SupplierProductsPage)
+   ========================= */
+function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageChange, loading }) {
+  const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
+  const from = count === 0 ? 0 : page * rowsPerPage + 1;
+  const to = Math.min(count || 0, (page + 1) * rowsPerPage);
 
-const getCurrencyColor = (currency) => {
-  switch (currency) {
-    case 'VND':
-      return '#4caf50';
-    case 'EURO':
-      return '#2196f3';
-    case 'USD':
-      return '#e57373';
-    default:
-      return '#9e9e9e';
-  }
-};
+  const btnSx = { textTransform: 'none', fontWeight: 400 };
 
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        mt: 1,
+        px: 1.25,
+        py: 0.9,
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        backgroundColor: '#fff',
+      }}
+    >
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1}
+        alignItems={{ xs: 'stretch', md: 'center' }}
+        justifyContent="space-between"
+      >
+        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+          Showing <span style={{ color: '#111827' }}>{from}-{to}</span> of{' '}
+          <span style={{ color: '#111827' }}>{count || 0}</span>
+        </Typography>
+
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+          <Button
+            variant="text"
+            startIcon={<ChevronLeftIcon fontSize="small" />}
+            disabled={loading || page <= 0}
+            onClick={() => onPageChange(page - 1)}
+            sx={btnSx}
+          >
+            Prev
+          </Button>
+
+          <Pagination
+            size="small"
+            page={page + 1}
+            count={totalPages}
+            onChange={(_, p1) => onPageChange(p1 - 1)}
+            disabled={loading}
+            siblingCount={1}
+            boundaryCount={1}
+            sx={{ '& .MuiPaginationItem-root': { fontSize: '0.8rem', minWidth: 32, height: 32 } }}
+          />
+
+          <Button
+            variant="text"
+            endIcon={<ChevronRightIcon fontSize="small" />}
+            disabled={loading || page >= totalPages - 1}
+            onClick={() => onPageChange(page + 1)}
+            sx={btnSx}
+          >
+            Next
+          </Button>
+        </Stack>
+
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+          <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Page size</Typography>
+          <Select
+            size="small"
+            value={rowsPerPage}
+            onChange={(e) => onRowsPerPageChange(Number(e.target.value))}
+            disabled={loading}
+            sx={{
+              height: 32,
+              minWidth: 110,
+              borderRadius: 1.2,
+              '& .MuiSelect-select': { fontSize: '0.8rem' },
+            }}
+          >
+            {[10, 12, 20, 50].map((n) => (
+              <MenuItem key={n} value={n} sx={{ fontSize: '0.8rem' }}>
+                {n} / page
+              </MenuItem>
+            ))}
+          </Select>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+}
+
+/* =========================
+   Page
+   ========================= */
 export default function GroupRequestPage() {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
+  const btnSx = useMemo(() => ({ textTransform: 'none', fontWeight: 400 }), []);
+
   const [data, setData] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [nameFilter, setNameFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createdByFilter, setCreatedByFilter] = useState('');
@@ -199,25 +330,40 @@ export default function GroupRequestPage() {
   const [currencyFilter, setCurrencyFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
   const [stockDateRange, setStockDateRange] = useState([]);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
+
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(isLargeScreen ? 20 : 12);
-  const [totalPages, setTotalPages] = useState(1);
+
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
+
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+
+  const pageWrapSx = useMemo(
+    () => ({
+      bgcolor: '#f7f7f7',
+      minHeight: '100vh',
+      p: 1.5,
+    }),
+    []
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setNotification({ open: false, message: '', severity: 'info' });
+
     const [startDate, endDate] = dateRange || [];
+
     const sortParam = sortConfig.key
       ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
       : 'createdDate,desc';
+
     const { content, totalElements, totalPages } = await fetchGroups(
       page,
       rowsPerPage,
@@ -228,22 +374,33 @@ export default function GroupRequestPage() {
       currencyFilter,
       startDate,
       endDate,
+      null,
+      null,
       sortParam
     );
+
     setData(content);
     setTotalElements(totalElements);
     setTotalPages(totalPages);
+
     setLoading(false);
-  }, [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter, dateRange, stockDateRange, sortConfig]);
+  }, [
+    page,
+    rowsPerPage,
+    nameFilter,
+    statusFilter,
+    createdByFilter,
+    typeFilter,
+    currencyFilter,
+    dateRange,
+    stockDateRange,
+    sortConfig,
+  ]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
-      setNotification({
-        open: true,
-        message: 'Please login to access this page.',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Please login to access this page.', severity: 'error' });
       navigate('/login');
       return;
     }
@@ -273,33 +430,24 @@ export default function GroupRequestPage() {
 
   const handleConfirmDelete = async () => {
     if (!selectedGroup) {
-      setNotification({
-        open: true,
-        message: 'No group selected for deletion',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'No group selected for deletion', severity: 'error' });
       setDeleteDialogOpen(false);
       return;
     }
+
     setLoading(true);
     try {
       const { success, message } = await deleteGroup(selectedGroup.id);
+
       if (success) {
-        await fetchData();
         const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
         if (page > maxPage) setPage(maxPage);
+        else await fetchData();
       }
-      setNotification({
-        open: true,
-        message: message,
-        severity: success ? 'success' : 'error',
-      });
+
+      setNotification({ open: true, message, severity: success ? 'success' : 'error' });
     } catch (error) {
-      setNotification({
-        open: true,
-        message: error.message,
-        severity: 'error',
-      });
+      setNotification({ open: true, message: error.message, severity: 'error' });
     } finally {
       setLoading(false);
       setDeleteDialogOpen(false);
@@ -315,7 +463,6 @@ export default function GroupRequestPage() {
   const handleSearch = () => {
     setPage(0);
     setSortConfig({ key: null, direction: null });
-    fetchData();
   };
 
   const handleReset = () => {
@@ -325,404 +472,402 @@ export default function GroupRequestPage() {
     setTypeFilter('');
     setCurrencyFilter('');
     setDateRange([]);
+    setStockDateRange([]);
     setPage(0);
     setSortConfig({ key: null, direction: null });
-    fetchData();
   };
 
   const handleSort = (key) => {
+    if (!headers.find((h) => h.key === key)?.sortable) return;
+
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = null;
-    }
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
+
     setSortConfig({ key: direction ? key : null, direction });
     setPage(0);
-    fetchData();
   };
 
-  const handleChangePage = (event, newPage) => setPage(newPage);
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
+  const sortLabel = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return 'createdDate,desc';
+    const backendKey = headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    return `${backendKey},${sortConfig.direction}`;
+  }, [sortConfig]);
 
-  const handleCloseNotification = () => {
-    setNotification({ open: false, message: '', severity: 'info' });
-  };
+  const hasActiveSearch = useMemo(
+    () => [nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter].some((v) => (v || '').trim()),
+    [nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter]
+  );
+
+  const handleCloseNotification = () => setNotification({ open: false, message: '', severity: 'info' });
 
   return (
-    <Box
-      sx={{
-        p: 1,
-        fontSize: '0.65rem',
-        fontFamily: 'Inter, sans-serif',
-        backgroundColor: '#f5f8fa',
-        minHeight: '100vh',
-      }}
-    >
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={1}
-        sx={{ userSelect: 'none' }}
+    <Box sx={pageWrapSx}>
+      {/* Header card */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 1.25,
+          mb: 1,
+          borderRadius: 1.5,
+          border: '1px solid #e5e7eb',
+          backgroundColor: '#fff',
+        }}
       >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 600,
-            color: theme.palette.primary.dark,
-            fontSize: '1rem',
-          }}
-        >
-          Group
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setIsAddModalOpen(true)}
-          sx={{
-            textTransform: 'none',
-            borderRadius: 2,
-            px: 1,
-            py: 0.2,
-            fontWeight: 600,
-            fontSize: '0.65rem',
-            background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-            color: '#fff',
-            boxShadow: '0 4px 12px rgba(76, 184, 255, 0.3)',
-            '&:hover': {
-              background: 'linear-gradient(to right, #3aa4f8, #016ae3)',
-              boxShadow: '0 6px 16px rgba(76, 184, 255, 0.4)',
-            },
-          }}
-        >
-          Add Request Group
-        </Button>
-      </Stack>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Stack spacing={0.35}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Group</Typography>
+            <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+              Total: {totalElements} • {hasActiveSearch ? 'Filter: active' : 'Filter: none'} • Sort:{' '}
+              <span style={{ color: '#111827' }}>{sortLabel}</span>
+            </Typography>
+          </Stack>
 
-      <GroupSearchBar
-        nameFilter={nameFilter}
-        statusFilter={statusFilter}
-        createdByFilter={createdByFilter}
-        typeFilter={typeFilter}
-        currencyFilter={currencyFilter}
-        setNameFilter={setNameFilter}
-        setStatusFilter={setStatusFilter}
-        setCreatedByFilter={setCreatedByFilter}
-        setTypeFilter={setTypeFilter}
-        setCurrencyFilter={setCurrencyFilter}
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        stockDateRange={stockDateRange}
-        setStockDateRange={setStockDateRange}
-        setPage={setPage}
-        handleSearch={handleSearch}
-        handleReset={handleReset}
-      />
-
-      {loading && (
-        <Typography align="center" sx={{ color: '#90a4ae', fontSize: '0.7rem', mt: 1.5 }}>
-          Loading data...
-        </Typography>
-      )}
-
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={4000}
-        onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%', fontSize: '0.7rem' }}>
-          {notification.message}
-        </Alert>
-      </Snackbar>
-
-      {!loading && (
-        <>
-          <TableContainer
-            component={Paper}
-            elevation={4}
+          <Button
+            variant="contained"
+            startIcon={<Add fontSize="small" />}
+            onClick={() => setIsAddModalOpen(true)}
+            disabled={loading}
             sx={{
-              overflowX: 'auto',
-              boxShadow: '0 8px 24px rgb(0 0 0 / 0.08)',
-              '&::-webkit-scrollbar': {
-                height: '8px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                backgroundColor: theme.palette.primary.main,
-                borderRadius: '4px',
-              },
+              ...btnSx,
+              borderRadius: 1.2,
+              height: 34,
+              px: 1.25,
+              backgroundColor: '#111827',
+              '&:hover': { backgroundColor: '#0b1220' },
             }}
           >
-            <Table stickyHeader size="small" sx={{ width: '100%' }}>
-              <TableHead>
-                <TableRow sx={{ background: 'linear-gradient(to right, #4cb8ff, #027aff)' }}>
-                  {headers.map(({ label, key, sortable, hideOnSmall }) => (
+            Add Request Group
+          </Button>
+        </Stack>
+      </Paper>
+
+      {/* Search card */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 1.25,
+          mb: 1,
+          borderRadius: 1.5,
+          border: '1px solid #e5e7eb',
+          backgroundColor: '#fff',
+        }}
+      >
+        <Box
+          sx={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 1.5,
+            p: 1.25,
+            backgroundColor: '#fafafa',
+          }}
+        >
+          <GroupSearchBar
+            nameFilter={nameFilter}
+            statusFilter={statusFilter}
+            createdByFilter={createdByFilter}
+            typeFilter={typeFilter}
+            currencyFilter={currencyFilter}
+            setNameFilter={setNameFilter}
+            setStatusFilter={setStatusFilter}
+            setCreatedByFilter={setCreatedByFilter}
+            setTypeFilter={setTypeFilter}
+            setCurrencyFilter={setCurrencyFilter}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            stockDateRange={stockDateRange}
+            setStockDateRange={setStockDateRange}
+            setPage={setPage}
+            handleSearch={handleSearch}
+            handleReset={handleReset}
+          />
+        </Box>
+      </Paper>
+
+      {/* Table */}
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 1.5,
+          border: '1px solid #e5e7eb',
+          backgroundColor: '#fff',
+          overflow: 'hidden',
+        }}
+      >
+        <TableContainer
+          sx={{
+            overflowX: 'auto',
+            '&::-webkit-scrollbar': { height: '8px' },
+            '&::-webkit-scrollbar-thumb': { backgroundColor: '#cbd5e1', borderRadius: '8px' },
+          }}
+        >
+          <Table stickyHeader size="small" sx={{ width: '100%' }}>
+            <TableHead>
+              <TableRow>
+                {headers.map(({ label, key, sortable, hideOnSmall }) => {
+                  const align = ['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'left';
+                  const active = sortConfig.key === key && !!sortConfig.direction;
+
+                  const stickyNo = key === 'no';
+                  const hideXs = hideOnSmall ? { display: { xs: 'none', md: 'table-cell' } } : {};
+
+                  return (
                     <TableCell
                       key={key}
-                      align={['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'left'}
-                      sx={{
-                        fontWeight: 'bold',
-                        fontSize: '0.65rem',
-                        color: '#ffffff',
-                        py: 0.5,
-                        px: 1,
-                        whiteSpace: 'nowrap',
-                        borderRight: '1px solid rgba(255,255,255,0.15)',
-                        '&:last-child': { borderRight: 'none' },
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: key === 'no' ? 21 : 20,
-                        backgroundColor: '#027aff',
-                        ...(key === 'no' && { left: 0, width: '60px' }),
-                        cursor: sortable ? 'pointer' : 'default',
-                        '&:hover': sortable ? { backgroundColor: '#016ae3' } : {},
-                        ...(label === 'Name' && { width: '25%' }),
-                        ...(label === 'Created By' && { width: '15%', display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
-                        ...(label === 'Created Date' && { width: '15%' }),
-                        ...(label === 'Stock Date' && { width: '15%', display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
-                        ...(label === 'Currency' && { display: { xs: hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' } }),
-                        ...(label === 'Actions' && { width: '120px' }),
-                      }}
+                      align={align}
                       onClick={() => sortable && handleSort(key)}
+                      sx={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#111827',
+                        backgroundColor: '#f3f4f6',
+                        borderBottom: '1px solid #e5e7eb',
+                        py: 0.6,
+                        px: 0.7,
+                        whiteSpace: 'nowrap',
+                        cursor: sortable ? 'pointer' : 'default',
+                        userSelect: 'none',
+                        ...(stickyNo && {
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 3,
+                          width: 64,
+                        }),
+                        ...(key === 'actions' && { width: 140 }),
+                        ...hideXs,
+                        '&:hover': sortable ? { backgroundColor: '#eef2f7' } : undefined,
+                      }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: ['No', 'Status', 'Currency', 'Actions'].includes(label) ? 'center' : 'flex-start' }}>
+                      <Stack
+                        direction="row"
+                        spacing={0.6}
+                        alignItems="center"
+                        justifyContent={align === 'center' ? 'center' : 'flex-start'}
+                      >
                         <Tooltip title={label} arrow>
                           <span>{label}</span>
                         </Tooltip>
-                        {sortable && (
-                          <Box sx={{ ml: 0.5, display: 'flex', alignItems: 'center' }}>
-                            {sortConfig.key === key && sortConfig.direction === 'asc' ? (
-                              <ArrowUpward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                            ) : sortConfig.key === key && sortConfig.direction === 'desc' ? (
-                              <ArrowDownward sx={{ fontSize: '0.8rem', color: '#fff' }} />
-                            ) : (
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <ArrowUpward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
-                                <ArrowDownward sx={{ fontSize: '0.6rem', color: '#ccc' }} />
-                              </Box>
-                            )}
-                          </Box>
-                        )}
-                      </Box>
+                        {sortable ? <SortIndicator active={active} direction={sortConfig.direction} /> : null}
+                      </Stack>
                     </TableCell>
-                  ))}
+                  );
+                })}
+              </TableRow>
+            </TableHead>
+
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={headers.length} sx={{ py: 3 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                      <CircularProgress size={18} />
+                      <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Loading data...</Typography>
+                    </Stack>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.length > 0 ? (
-                  data.map((group, idx) => {
-                    const isCompleted = group.status === 'Completed';
-                    return (
-                      <TableRow
-                        key={group.id}
+              ) : data.length > 0 ? (
+                data.map((group, idx) => {
+                  const zebra = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+                  const isCompleted = group.status === 'Completed';
+
+                  const typeColor = getTypeColor(group.type);
+                  const curColor = getCurrencyColor(group.currency);
+
+                  return (
+                    <TableRow
+                      key={group.id}
+                      sx={{
+                        backgroundColor: zebra,
+                        '&:hover': { backgroundColor: '#f1f5f9' },
+                        '& > *': { borderBottom: '1px solid #f3f4f6' },
+                      }}
+                    >
+                      <TableCell
+                        align="center"
                         sx={{
-                          backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                          '&:hover': {
-                            backgroundColor: '#e3f2fd',
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                            transition: 'all 0.3s ease',
-                          },
-                          fontSize: '0.65rem',
+                          fontSize: '0.75rem',
+                          py: 0.45,
+                          px: 0.7,
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 2,
+                          backgroundColor: zebra,
+                          color: '#111827',
                         }}
                       >
-                        <TableCell
-                          align="center"
+                        {page * rowsPerPage + idx + 1}
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          fontSize: '0.75rem',
+                          py: 0.45,
+                          px: 0.7,
+                          color: '#111827',
+                          fontWeight: 500,
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {group.name || ''}
+                      </TableCell>
+
+                      <TableCell sx={{ py: 0.45, px: 0.7 }}>
+                        <Box
                           sx={{
-                            px: 1,
-                            py: 0.5,
-                            position: 'sticky',
-                            left: 0,
-                            zIndex: 1,
-                            backgroundColor: idx % 2 === 0 ? '#fff' : '#f7f9fc',
-                            fontSize: '0.65rem',
+                            ...tagPillSx,
+                            backgroundColor: typeColor,
                           }}
+                          title={group.type || 'Unknown'}
                         >
-                          {page * rowsPerPage + idx + 1}
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            fontSize: '0.65rem',
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {group.name || ''}
-                        </TableCell>
-                        <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
-                          <Chip
-                            label={
-                              group.type === 'Requisition_monthly'
-                                ? 'Monthly Requisition'
-                                : group.type === 'Requisition_weekly'
-                                ? 'Weekly Requisition'
-                                : 'Unknown'
-                            }
-                            size="small"
-                            sx={{
-                              fontSize: '0.55rem',
-                              fontWeight: 600,
-                              bgcolor: getTypeColor(group.type),
-                              color: '#fff',
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 1, py: 0.5 }}>
-                          <UpdateStatusGroup
-                            groupId={group.id}
-                            currentStatus={group.status || 'Not Started'}
-                            onSuccess={fetchData}
-                            userRole={localStorage.getItem('role') || ''}
-                          />
-                        </TableCell>
-                        <TableCell
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            fontSize: '0.65rem',
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                            display: { xs: headers.find(h => h.key === 'createdBy').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
-                          }}
-                        >
-                          {group.createdBy || ''}
-                        </TableCell>
-                        <TableCell sx={{ px: 1, py: 0.5, fontSize: '0.65rem' }}>
-                          {formatDate(group.createdDate) || 'N/A'}
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            fontSize: '0.65rem',
-                            display: { xs: headers.find(h => h.key === 'currency').hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
-                          }}
-                        >
-                          <Chip
-                            label={group.currency || 'N/A'}
-                            size="small"
-                            sx={{
-                              fontSize: '0.55rem',
-                              fontWeight: 600,
-                              bgcolor: getCurrencyColor(group.currency),
-                              color: '#fff',
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell align="center" sx={{ px: 1, py: 0.5 }}>
-                          <Stack direction="row" spacing={0.5} justifyContent="center">
-                            <Tooltip title="View Details">
+                          {group.type === 'Requisition_monthly'
+                            ? 'Monthly'
+                            : group.type === 'Requisition_weekly'
+                            ? 'Weekly'
+                            : 'Unknown'}
+                        </Box>
+                      </TableCell>
+
+                      <TableCell align="center" sx={{ py: 0.45, px: 0.7 }}>
+                        <UpdateStatusGroup
+                          groupId={group.id}
+                          currentStatus={group.status || 'Not Started'}
+                          onSuccess={fetchData}
+                          userRole={localStorage.getItem('role') || ''}
+                        />
+                      </TableCell>
+
+                      <TableCell
+                        sx={{
+                          fontSize: '0.75rem',
+                          py: 0.45,
+                          px: 0.7,
+                          color: '#374151',
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          display: { xs: headers.find((h) => h.key === 'createdBy')?.hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                        }}
+                      >
+                        {group.createdBy || ''}
+                      </TableCell>
+
+                      <TableCell sx={{ fontSize: '0.75rem', py: 0.45, px: 0.7, color: '#374151' }}>
+                        {formatDateISO(group.createdDate)}
+                      </TableCell>
+
+                      <TableCell
+                        align="center"
+                        sx={{
+                          py: 0.45,
+                          px: 0.7,
+                          display: { xs: headers.find((h) => h.key === 'currency')?.hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                        }}
+                      >
+                        <Box sx={{ ...tagPillSx, backgroundColor: curColor }}>
+                          {group.currency || 'N/A'}
+                        </Box>
+                      </TableCell>
+
+                      <TableCell align="center" sx={{ py: 0.45, px: 0.7 }}>
+                        <Stack direction="row" spacing={0.4} justifyContent="center">
+                          <Tooltip title="View details" arrow>
+                            <span>
                               <IconButton
-                                aria-label="view"
                                 color="primary"
                                 size="small"
-                                sx={{
-                                  backgroundColor: 'rgba(25, 118, 210, 0.1)',
-                                  '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.25)' },
-                                  borderRadius: 1,
-                                  p: 0.3,
-                                }}
+                                sx={{ p: 0.25 }}
                                 onClick={() => {
-                                  if (group.type === 'Requisition_monthly') {
-                                    navigate(`/requisition-monthly/${group.id}`);
-                                  } else if (group.type === 'Requisition_weekly') {
-                                    navigate(`/summary/${group.id}`);
-                                  } else {
-                                    navigate(`/summary/${group.id}`);
-                                  }
+                                  if (group.type === 'Requisition_monthly') navigate(`/requisition-monthly/${group.id}`);
+                                  else navigate(`/summary/${group.id}`);
                                 }}
                               >
                                 <Visibility fontSize="small" />
                               </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Edit Group">
+                            </span>
+                          </Tooltip>
+
+                          <Tooltip title={isCompleted ? 'Completed: cannot edit' : 'Edit group'} arrow>
+                            <span>
                               <IconButton
-                                aria-label="edit"
-                                color="success"
+                                color="primary"
                                 size="small"
-                                sx={{
-                                  backgroundColor: 'rgba(56, 142, 60, 0.1)',
-                                  '&:hover': { backgroundColor: 'rgba(56, 142, 60, 0.25)' },
-                                  borderRadius: 1,
-                                  p: 0.3,
-                                }}
+                                sx={{ p: 0.25 }}
+                                disabled={isCompleted}
                                 onClick={() => {
                                   setCurrentItem(group);
                                   setIsEditModalOpen(true);
                                 }}
-                                disabled={isCompleted}
                               >
                                 <Edit fontSize="small" />
                               </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete Group">
+                            </span>
+                          </Tooltip>
+
+                          <Tooltip title={isCompleted ? 'Completed: cannot delete' : 'Delete group'} arrow>
+                            <span>
                               <IconButton
-                                aria-label="delete"
                                 color="error"
                                 size="small"
-                                sx={{
-                                  backgroundColor: 'rgba(211, 47, 47, 0.1)',
-                                  '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.25)' },
-                                  borderRadius: 1,
-                                  p: 0.3,
-                                }}
-                                onClick={() => handleDelete(group)}
+                                sx={{ p: 0.25 }}
                                 disabled={loading || isCompleted}
+                                onClick={() => handleDelete(group)}
                               >
                                 <Delete fontSize="small" />
                               </IconButton>
-                            </Tooltip>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={headers.length} align="center" sx={{ py: 2, color: '#90a4ae' }}>
-                      <Typography sx={{ fontSize: '0.7rem' }}>No data available.</Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                            </span>
+                          </Tooltip>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={headers.length} sx={{ py: 3 }}>
+                    <Stack direction="column" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
+                      <InboxIcon sx={{ fontSize: 30, opacity: 0.6 }} />
+                      <Typography sx={{ fontSize: '0.85rem' }}>
+                        {hasActiveSearch ? 'No groups found matching your search.' : 'No data'}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-          <TablePagination
-            rowsPerPageOptions={[10, 12, 20, 50]}
-            component="div"
+        <Divider />
+
+        {/* PaginationBar (same UX as SupplierProductsPage) */}
+        <Box sx={{ p: 1.0, backgroundColor: '#fff' }}>
+          <PaginationBar
             count={totalElements}
-            rowsPerPage={rowsPerPage}
             page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Rows per page:"
-            sx={{
-              mt: 1,
-              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-                fontSize: '0.65rem',
-                color: theme.palette.text.secondary,
-              },
-              '.MuiTablePagination-select': { fontSize: '0.65rem' },
-              '.MuiTablePagination-actions > button': {
-                color: theme.palette.primary.main,
-              },
+            rowsPerPage={rowsPerPage}
+            loading={loading}
+            onPageChange={(p) => setPage(p)}
+            onRowsPerPageChange={(size) => {
+              setRowsPerPage(size);
+              setPage(0);
             }}
           />
-        </>
-      )}
+        </Box>
+      </Paper>
 
-      <AddGroupModal
-        open={isAddModalOpen}
-        onCancel={() => setIsAddModalOpen(false)}
-        onOk={handleAddOk}
-      />
+      {/* Toast */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4500}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ fontSize: '0.85rem' }}>
+          {notification.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Add/Edit modals */}
+      <AddGroupModal open={isAddModalOpen} onCancel={() => setIsAddModalOpen(false)} onOk={handleAddOk} />
       <EditGroupModal
         open={isEditModalOpen}
         currentItem={currentItem}
@@ -733,25 +878,40 @@ export default function GroupRequestPage() {
         onOk={handleEditOk}
       />
 
-      <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
-        <DialogTitle sx={{ fontSize: '0.8rem' }}>Delete Group</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.7rem' }}>
-            Are you sure you want to delete "{selectedGroup?.name || 'Unknown'}"?
+      {/* Delete dialog (match clean border + header) */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={loading ? undefined : handleCancelDelete}
+        PaperProps={{ sx: { borderRadius: 1.5, border: '1px solid #e5e7eb' } }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ px: 1.5, py: 1.1, borderBottom: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography sx={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
+              Delete group
+            </Typography>
+            <IconButton size="small" onClick={handleCancelDelete} disabled={loading} sx={{ border: '1px solid #e5e7eb' }}>
+              <Close fontSize="small" />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 1.5, backgroundColor: '#fff' }}>
+          <Typography sx={{ fontSize: '0.9rem', color: '#111827' }}>
+            Are you sure you want to delete <strong>{selectedGroup?.name || 'Unknown'}</strong>?
+          </Typography>
+          <Typography sx={{ mt: 0.5, fontSize: '0.78rem', color: 'text.secondary' }}>
+            This action cannot be undone.
           </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelDelete} color="primary" sx={{ fontSize: '0.65rem' }}>
+
+        <DialogActions sx={{ px: 1.5, py: 1.1, borderTop: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+          <Button onClick={handleCancelDelete} disabled={loading} sx={btnSx}>
             Cancel
           </Button>
-          <Button
-            onClick={handleConfirmDelete}
-            variant="contained"
-            color="error"
-            sx={{ fontSize: '0.65rem' }}
-            disabled={loading}
-          >
-            Delete
+          <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={loading} sx={btnSx}>
+            {loading ? <CircularProgress size={18} /> : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

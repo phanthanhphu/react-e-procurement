@@ -11,37 +11,54 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
   const [groupName, setGroupName] = useState('');
   const [stockDateArray, setStockDateArray] = useState(null);
 
-  useEffect(() => {
-    if (!groupId) {
-      console.warn('No groupId provided for fetching group data');
-      return;
-    }
-    fetch(`${API_BASE_URL}/group-summary-requisitions/${groupId}`)
-      .then((response) => {
-        if (!response.ok) throw new Error('Failed to fetch group data');
-        return response.json();
-      })
-      .then((result) => {
-        console.log('API stockDate:', result.stockDate);
-        const dateArray = result.stockDate;
-        if (dateArray && dateArray.length >= 3) {
-          const [year, month, day] = dateArray;
-          const formattedDate = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
-          setStockDate(formattedDate);
-          setStockDateArray(dateArray);
-        } else {
-          console.warn('Invalid stockDate array, using fallback date');
-          const fallbackDate = dayjs().format('DD/MM/YYYY');
-          setStockDate(fallbackDate);
-        }
-        setGroupName(result.name || '');
-      })
-      .catch((error) => {
-        console.error('Error fetching group data:', error);
+useEffect(() => {
+  if (!groupId) {
+    console.warn('No groupId provided for fetching group data');
+    return;
+  }
+
+  const fetchGroupStockDate = fetch(`${API_BASE_URL}/group-summary-requisitions/${groupId}`)
+    .then((response) => {
+      if (!response.ok) throw new Error('Failed to fetch group data');
+      return response.json();
+    })
+    .then((result) => {
+      console.log('API stockDate:', result.stockDate);
+      const dateArray = result.stockDate;
+      if (dateArray && dateArray.length >= 3) {
+        const [year, month, day] = dateArray;
+        const formattedDate = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+        setStockDate(formattedDate);
+        setStockDateArray(dateArray);
+      } else {
         const fallbackDate = dayjs().format('DD/MM/YYYY');
         setStockDate(fallbackDate);
-      });
-  }, [groupId]);
+      }
+      setGroupName(result.name || '');
+    })
+    .catch((error) => {
+      console.error('Error fetching group data:', error);
+      const fallbackDate = dayjs().format('DD/MM/YYYY');
+      setStockDate(fallbackDate);
+    });
+
+  const fetchWeeklyInfo = fetch(`${API_BASE_URL}/api/group-summary-requisitions/weekly-info/${groupId}`)
+    .then((response) => {
+      if (!response.ok) throw new Error('Failed to fetch weekly info');
+      return response.json();
+    })
+    .then((result) => {
+      console.log("WEEKLY INFO:", result);
+      setStockDate(result.createdDate || '');
+      setGroupName(result.weekly || '');
+    })
+    .catch((err) => {
+      console.error("Error fetching weekly info", err);
+    });
+
+  Promise.all([fetchGroupStockDate, fetchWeeklyInfo]);
+}, [groupId]);
+
 
   const fetchAllGroupData = async () => {
     if (!groupId) {
@@ -90,7 +107,7 @@ export default function ExportRequisitionWeeklyExcelButton({ data, groupId }) {
 
     // Title row
     const titleRow = new Array(totalCols).fill('');
-    titleRow[0] = 'SUMMARY REQUISITION';
+    titleRow[0] = `SUMMARY REQUISITION (${groupName || ''} - ${stockDate || ''})`;
     wsData.push(titleRow);
 
     // Header rows

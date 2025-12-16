@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Dialog,
@@ -20,9 +20,16 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
+  Chip,
+  Divider,
+  Tooltip,
+  useMediaQuery,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import { API_BASE_URL } from '../../config';
 import Notification from './Notification';
 
@@ -40,26 +47,24 @@ const formatPrice = (number, currency) => {
 const parsePrice = (value, currency) => {
   if (!value) return '';
   let cleanValue;
-  if (currency === 'VND') {
-    cleanValue = value.replace(/[^0-9]/g, '');
-  } else if (currency === 'USD' || currency === 'EURO') {
-    cleanValue = value.replace(/[^0-9.]/g, '');
-  } else {
-    cleanValue = value.replace(/[^0-9.]/g, '');
-  }
+  if (currency === 'VND') cleanValue = value.replace(/[^0-9]/g, '');
+  else cleanValue = value.replace(/[^0-9.]/g, '');
   return cleanValue ? cleanValue : '';
 };
 
 export default function EditProductDialog({ open, onClose, product, onRefresh }) {
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [formData, setFormData] = useState({
     productType1Id: '',
     productType2Id: '',
     supplierCode: '',
     supplierName: '',
     sapCode: '',
-    itemNo: '',
-    itemDescription: '',
-    fullDescription: '',
+    hanaSapCode: '',
+    itemDescriptionEN: '',
+    itemDescriptionVN: '',
     size: '',
     unit: '',
     price: '',
@@ -79,16 +84,95 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   const [loadingType2, setLoadingType2] = useState(false);
   const [loadingProduct, setLoadingProduct] = useState(false);
   const [isUsedInRequests, setIsUsedInRequests] = useState(false);
-  const [notification, setNotification] = useState({
-    open: false,
-    message: '',
-    severity: 'info',
-  });
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false); // New state for confirmation dialog
 
-  const handleCloseNotification = () => {
-    setNotification((prev) => ({ ...prev, open: false }));
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+
+  const locked = saving; // khoá thao tác khi đang save
+  const disabledAll = saving || loadingProduct || isUsedInRequests;
+
+  // ====== STYLE TOKENS (same vibe) ======
+  const paperSx = useMemo(
+    () => ({
+      borderRadius: fullScreen ? 0 : 4,
+      overflow: 'hidden',
+      boxShadow: `0 22px 70px ${alpha('#000', 0.25)}`,
+      border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+      background:
+        theme.palette.mode === 'dark'
+          ? alpha(theme.palette.background.paper, 0.72)
+          : alpha('#FFFFFF', 0.92),
+      backdropFilter: 'blur(14px)',
+    }),
+    [fullScreen, theme]
+  );
+
+  const headerSx = useMemo(
+    () => ({
+      position: 'relative',
+      py: 2,
+      px: 2.5,
+      color: 'common.white',
+      background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+    }),
+    [theme]
+  );
+
+  const subtleCardSx = useMemo(
+    () => ({
+      borderRadius: 4,
+      border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+      background: alpha(theme.palette.common.white, 0.6),
+      backdropFilter: 'blur(10px)',
+      boxShadow: `0 10px 30px ${alpha('#000', 0.08)}`,
+    }),
+    [theme]
+  );
+
+  const fieldSx = useMemo(
+    () => ({
+      '& .MuiOutlinedInput-root': {
+        borderRadius: 3,
+        backgroundColor: alpha(theme.palette.common.white, 0.65),
+        '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
+        '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
+        '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
+      },
+    }),
+    [theme]
+  );
+
+  const gradientBtnSx = useMemo(
+    () => ({
+      borderRadius: 999,
+      px: 2.2,
+      py: 1.1,
+      fontWeight: 800,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      boxShadow: `0 10px 24px ${alpha(theme.palette.primary.main, 0.28)}`,
+      transform: 'translateY(0)',
+      transition: 'transform .15s ease, box-shadow .15s ease',
+      '&:hover': {
+        transform: 'translateY(-1px)',
+        boxShadow: `0 14px 30px ${alpha(theme.palette.primary.main, 0.34)}`,
+        backgroundImage: `linear-gradient(90deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+      },
+    }),
+    [theme]
+  );
+
+  const outlineBtnSx = {
+    borderRadius: 999,
+    px: 2.2,
+    py: 1.1,
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   };
+
+  const handleCloseNotification = () => setNotification((prev) => ({ ...prev, open: false }));
 
   // Fetch product details, type 1 list, and check usage when dialog opens
   useEffect(() => {
@@ -97,58 +181,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       fetchProductType1List();
       checkSupplierUsage(product.id);
     }
-  }, [open, product]);
-
-  // Fetch product details
-  const fetchProductDetails = async (id) => {
-    setLoadingProduct(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/supplier-products/${id}`, {
-        method: 'GET',
-        headers: { accept: '*/*' },
-      });
-      if (!res.ok) throw new Error(`Failed to load product details: status ${res.status}`);
-      const result = await res.json();
-      const productData = result.data;
-      console.log('Product details:', productData); // Debug
-      setFormData({
-        productType1Id: productData.productType1Id || '',
-        productType2Id: productData.productType2Id || '',
-        supplierCode: productData.supplierCode || '',
-        supplierName: productData.supplierName || '',
-        sapCode: productData.sapCode || '',
-        itemNo: productData.itemNo || '',
-        itemDescription: productData.itemDescription || '',
-        fullDescription: productData.fullDescription || '',
-        size: productData.size || '',
-        unit: productData.unit || '',
-        price: productData.price ? productData.price.toString() : '',
-        currency: productData.currency || '',
-        goodType: productData.goodType || '',
-      });
-      setFormattedPrice(
-        productData.price && productData.currency ? formatPrice(productData.price, productData.currency) : ''
-      );
-      const initialImageUrls = (productData.imageUrls || []).map((imgUrl) =>
-        imgUrl.startsWith('http')
-          ? `${imgUrl}?t=${new Date().getTime()}`
-          : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}?t=${new Date().getTime()}`
-      );
-      setKeptImageUrls(initialImageUrls);
-      setPreviews(initialImageUrls);
-      setFiles([]);
-      setRemovedImageUrls([]);
-    } catch (error) {
-      console.error('Fetch product details error:', error);
-      setNotification({
-        open: true,
-        message: `Failed to load product details: ${error.message}`,
-        severity: 'error',
-      });
-    } finally {
-      setLoadingProduct(false);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, product?.id]);
 
   // Load product type 2 list when productType1Id changes
   useEffect(() => {
@@ -158,6 +192,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setProductType2List([]);
       setFormData((prev) => ({ ...prev, productType2Id: '' }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.productType1Id]);
 
   // Validate productType2Id after productType2List is loaded
@@ -165,7 +200,6 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     if (productType2List.length > 0 && formData.productType2Id) {
       const isValidType2 = productType2List.some((type2) => type2.id === formData.productType2Id);
       if (!isValidType2) {
-        console.warn(`Invalid productType2Id: ${formData.productType2Id} not found in productType2List`);
         setFormData((prev) => ({ ...prev, productType2Id: '' }));
         setNotification({
           open: true,
@@ -174,9 +208,9 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         });
       }
     }
-  }, [productType2List]);
+  }, [productType2List, formData.productType2Id]);
 
-  // Clean up preview URLs when dialog closes or previews change
+  // Clean up preview URLs
   useEffect(() => {
     return () => {
       previews.slice(keptImageUrls.length).forEach((preview) => URL.revokeObjectURL(preview));
@@ -192,9 +226,9 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         supplierCode: '',
         supplierName: '',
         sapCode: '',
-        itemNo: '',
-        itemDescription: '',
-        fullDescription: '',
+        hanaSapCode: '',
+        itemDescriptionEN: '',
+        itemDescriptionVN: '',
         size: '',
         unit: '',
         price: '',
@@ -208,22 +242,73 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setIsUsedInRequests(false);
       setNotification({ open: false, message: '', severity: 'info' });
       setFormattedPrice('');
-      setOpenConfirmDialog(false); // Ensure confirmation dialog is closed
+      setOpenConfirmDialog(false);
     }
   }, [open]);
 
-  // Check if supplier product is used in requests
+  // ====== API ======
+  const fetchProductDetails = async (id) => {
+    setLoadingProduct(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/supplier-products/${id}`, {
+        method: 'GET',
+        headers: { accept: '*/*' },
+      });
+      if (!res.ok) throw new Error(`Failed to load product details: status ${res.status}`);
+      const result = await res.json();
+      const productData = result.data;
+
+      setFormData({
+        productType1Id: productData.productType1Id || '',
+        productType2Id: productData.productType2Id || '',
+        supplierCode: productData.supplierCode || '',
+        supplierName: productData.supplierName || '',
+        sapCode: productData.sapCode || '',
+        hanaSapCode: productData.hanaSapCode || '',
+        itemDescriptionEN: productData.itemDescriptionEN || '',
+        itemDescriptionVN: productData.itemDescriptionVN || '',
+        size: productData.size || '',
+        unit: productData.unit || '',
+        price: productData.price ? productData.price.toString() : '',
+        currency: productData.currency || '',
+        goodType: productData.goodType || '',
+      });
+
+      setFormattedPrice(
+        productData.price && productData.currency ? formatPrice(productData.price, productData.currency) : ''
+      );
+
+      const initialImageUrls = (productData.imageUrls || []).map((imgUrl) =>
+        imgUrl.startsWith('http')
+          ? `${imgUrl}?t=${new Date().getTime()}`
+          : `${API_BASE_URL}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}?t=${new Date().getTime()}`
+      );
+
+      setKeptImageUrls(initialImageUrls);
+      setPreviews(initialImageUrls);
+      setFiles([]);
+      setRemovedImageUrls([]);
+    } catch (error) {
+      setNotification({
+        open: true,
+        message: `Failed to load product details: ${error.message}`,
+        severity: 'error',
+      });
+    } finally {
+      setLoadingProduct(false);
+    }
+  };
+
   const checkSupplierUsage = async (id) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/supplier-products/check-usage/${id}`, {
         method: 'GET',
         headers: { accept: '*/*' },
       });
-      if (!response.ok) {
-        throw new Error(`Failed to check supplier usage: status ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Failed to check supplier usage: status ${response.status}`);
       const result = await response.json();
       setIsUsedInRequests(result.data);
+
       if (result.data) {
         setNotification({
           open: true,
@@ -232,7 +317,6 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         });
       }
     } catch (error) {
-      console.error('Check supplier usage error:', error);
       setIsUsedInRequests(false);
       setNotification({
         open: true,
@@ -251,17 +335,12 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       });
       if (!res.ok) throw new Error(`Failed to load product type 1 list: status ${res.status}`);
       const data = await res.json();
-      console.log('Product Type 1 API response:', data); // Debug
       setProductType1List(data.content || data);
-      if (data.content?.length === 0 || data.length === 0) {
-        setNotification({
-          open: true,
-          message: 'No Product Type 1 available',
-          severity: 'warning',
-        });
+
+      if ((data.content?.length || data.length || 0) === 0) {
+        setNotification({ open: true, message: 'No Product Type 1 available', severity: 'warning' });
       }
     } catch (error) {
-      console.error('Fetch product type 1 error:', error);
       setNotification({
         open: true,
         message: `Failed to load product type 1 list: ${error.message}`,
@@ -276,18 +355,15 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   const fetchProductType2List = async (type1Id) => {
     setLoadingType2(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=10`,
-        {
-          method: 'GET',
-          headers: { accept: '*/*' },
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/api/product-type-2?productType1Id=${type1Id}&page=0&size=10`, {
+        method: 'GET',
+        headers: { accept: '*/*' },
+      });
       if (!res.ok) throw new Error(`Failed to load product type 2 list: status ${res.status}`);
       const data = await res.json();
-      console.log('Product Type 2 API response:', data); // Debug
       setProductType2List(data.content || data);
-      if (data.content?.length === 0 || data.length === 0) {
+
+      if ((data.content?.length || data.length || 0) === 0) {
         setNotification({
           open: true,
           message: 'No Product Type 2 available for the selected Product Type 1',
@@ -295,7 +371,6 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         });
       }
     } catch (error) {
-      console.error('Fetch product type 2 error:', error);
       setNotification({
         open: true,
         message: `Failed to load product type 2 list: ${error.message}`,
@@ -307,18 +382,29 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
     }
   };
 
+  // ====== handlers ======
+  const handleDialogClose = () => {
+    if (locked) return;
+    onClose?.();
+  };
+
   const handleChange = (field) => (e) => {
     const value = e.target.value;
+
     if (field === 'price') {
       const rawValue = parsePrice(value, formData.currency);
       setFormData((prev) => ({ ...prev, price: rawValue }));
       setFormattedPrice(formatPrice(rawValue, formData.currency));
-    } else if (field === 'currency') {
+      return;
+    }
+
+    if (field === 'currency') {
       setFormData((prev) => ({ ...prev, currency: value, price: '' }));
       setFormattedPrice('');
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }));
+      return;
     }
+
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleFileChange = (e) => {
@@ -327,21 +413,13 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
 
     const validFiles = selectedFiles.filter((file) => file.type.startsWith('image/'));
     if (validFiles.length !== selectedFiles.length) {
-      setNotification({
-        open: true,
-        message: 'Please select only image files (e.g., .jpg, .png)',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Please select only image files (e.g., .jpg, .png)', severity: 'error' });
       return;
     }
 
     const newFiles = [...files, ...validFiles];
     if (newFiles.length + keptImageUrls.length > 10) {
-      setNotification({
-        open: true,
-        message: 'You can upload a maximum of 10 images',
-        severity: 'warning',
-      });
+      setNotification({ open: true, message: 'You can upload a maximum of 10 images', severity: 'warning' });
       return;
     }
 
@@ -354,6 +432,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
 
   const handleRemoveFile = (index) => {
     previews.slice(keptImageUrls.length).forEach((preview) => URL.revokeObjectURL(preview));
+
     if (index < keptImageUrls.length) {
       const newKeptImageUrls = [...keptImageUrls];
       const removedUrl = newKeptImageUrls.splice(index, 1)[0];
@@ -370,52 +449,28 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   };
 
   const validateForm = () => {
-    if (!formData.supplierCode || !formData.supplierName || !formData.sapCode) {
-      setNotification({
-        open: true,
-        message: 'Supplier Code, Supplier Name, and SAP Code are required',
-        severity: 'error',
-      });
+    if (!formData.supplierName || !formData.sapCode) {
+      setNotification({ open: true, message: 'Supplier Name and SAP Code are required', severity: 'error' });
       return false;
     }
     if (!formData.currency) {
-      setNotification({
-        open: true,
-        message: 'Currency is required',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Currency is required', severity: 'error' });
       return false;
     }
     if (!['VND', 'USD', 'EURO'].includes(formData.currency)) {
-      setNotification({
-        open: true,
-        message: 'Currency must be VND, USD, or EURO',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Currency must be VND, USD, or EURO', severity: 'error' });
       return false;
     }
     if (!formData.goodType) {
-      setNotification({
-        open: true,
-        message: 'Good Type is required',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Good Type is required', severity: 'error' });
       return false;
     }
     if (!['Common', 'Special'].includes(formData.goodType)) {
-      setNotification({
-        open: true,
-        message: 'Good Type must be Common, Special',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Good Type must be Common, Special', severity: 'error' });
       return false;
     }
     if (formData.price && isNaN(formData.price)) {
-      setNotification({
-        open: true,
-        message: 'Price must be a valid number',
-        severity: 'error',
-      });
+      setNotification({ open: true, message: 'Price must be a valid number', severity: 'error' });
       return false;
     }
     return true;
@@ -423,51 +478,35 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
 
   const handleSaveClick = () => {
     if (!validateForm()) return;
-    setOpenConfirmDialog(true); // Show confirmation dialog
+    setOpenConfirmDialog(true);
   };
 
   const handleConfirmSave = async () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog
-    await handleSave(); // Execute the original save logic
+    setOpenConfirmDialog(false);
+    await handleSave();
   };
 
-  const handleCancelSave = () => {
-    setOpenConfirmDialog(false); // Close confirmation dialog without saving
-  };
+  const handleCancelSave = () => setOpenConfirmDialog(false);
 
   const handleSave = async () => {
     const multipartForm = new FormData();
     if (formData.productType1Id) multipartForm.append('productType1Id', formData.productType1Id);
     if (formData.productType2Id) multipartForm.append('productType2Id', formData.productType2Id);
-    multipartForm.append('supplierCode', formData.supplierCode);
-    multipartForm.append('supplierName', formData.supplierName);
-    multipartForm.append('sapCode', formData.sapCode);
-    multipartForm.append('itemNo', formData.itemNo);
-    multipartForm.append('itemDescription', formData.itemDescription || '');
-    multipartForm.append('fullDescription', formData.fullDescription || '');
+
+    multipartForm.append('supplierCode', formData.supplierCode || '');
+    multipartForm.append('supplierName', formData.supplierName || '');
+    multipartForm.append('sapCode', formData.sapCode || '');
+    multipartForm.append('hanaSapCode', formData.hanaSapCode || '');
+    multipartForm.append('itemDescriptionEN', formData.itemDescriptionEN || '');
+    multipartForm.append('itemDescriptionVN', formData.itemDescriptionVN || '');
     multipartForm.append('size', formData.size || '');
-    multipartForm.append('unit', formData.unit);
+    multipartForm.append('unit', formData.unit || '');
     multipartForm.append('price', formData.price || '0');
-    multipartForm.append('currency', formData.currency);
-    multipartForm.append('goodType', formData.goodType);
+    multipartForm.append('currency', formData.currency || '');
+    multipartForm.append('goodType', formData.goodType || '');
 
-    if (files.length > 0) {
-      files.forEach((file) => {
-        multipartForm.append('files', file);
-      });
-    }
-
-    if (removedImageUrls.length > 0) {
-      console.log('Images to delete:', removedImageUrls);
-      removedImageUrls.forEach((url) => {
-        multipartForm.append('imagesToDelete', url);
-      });
-    }
-
-    console.log('FormData entries:');
-    for (let pair of multipartForm.entries()) {
-      console.log(`${pair[0]}: ${pair[1] instanceof File ? pair[1].name : pair[1]}`);
-    }
+    if (files.length > 0) files.forEach((file) => multipartForm.append('files', file));
+    if (removedImageUrls.length > 0) removedImageUrls.forEach((url) => multipartForm.append('imagesToDelete', url));
 
     setSaving(true);
     try {
@@ -492,7 +531,6 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       }
 
       const updatedProduct = await res.json();
-      console.log('Backend response:', updatedProduct);
 
       if (updatedProduct && updatedProduct.imageUrls) {
         const newImageUrls = updatedProduct.imageUrls.map((imgUrl) =>
@@ -503,7 +541,6 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         setKeptImageUrls(newImageUrls);
         setPreviews(newImageUrls);
       } else {
-        console.warn('No imageUrls in response, keeping existing images');
         setKeptImageUrls([]);
         setPreviews([]);
       }
@@ -511,283 +548,532 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setFiles([]);
       setRemovedImageUrls([]);
 
-      setNotification({
-        open: true,
-        message: 'Product updated successfully',
-        severity: 'success',
-      });
+      setNotification({ open: true, message: 'Product updated successfully', severity: 'success' });
 
-      if (typeof onRefresh === 'function') {
-        await onRefresh();
-      } else {
-        console.warn('onRefresh is not a function');
-      }
+      if (typeof onRefresh === 'function') await onRefresh();
 
-      onClose();
+      onClose?.();
     } catch (err) {
-      console.error('Edit error:', err);
-      setNotification({
-        open: true,
-        message: `Failed to update product: ${err.message}`,
-        severity: 'error',
-      });
+      setNotification({ open: true, message: `Failed to update product: ${err.message}`, severity: 'error' });
     } finally {
       setSaving(false);
     }
   };
 
+  const headerChipLabel = isUsedInRequests ? 'Locked' : 'Editing';
+
   return (
     <>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ backgroundColor: '#4680FF', color: 'white' }}>
-          Edit Product
+      <Dialog
+        open={open}
+        onClose={locked ? undefined : handleDialogClose}
+        fullScreen={fullScreen}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: paperSx }}
+      >
+        {/* Header */}
+        <DialogTitle sx={headerSx}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+            <Box>
+              <Typography
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: 1.2,
+                  textTransform: 'uppercase',
+                  lineHeight: 1.1,
+                  fontSize: { xs: 18, sm: 20 },
+                }}
+              >
+                Edit Product
+              </Typography>
+              <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 13 }}>
+                Update product info, pricing and images
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                size="small"
+                icon={<CheckCircleRoundedIcon />}
+                label={headerChipLabel}
+                sx={{
+                  color: 'common.white',
+                  bgcolor: alpha('#000', 0.18),
+                  border: `1px solid ${alpha('#fff', 0.22)}`,
+                  fontWeight: 700,
+                }}
+              />
+              <Tooltip title="Close">
+                <span>
+                  <IconButton
+                    onClick={handleDialogClose}
+                    disabled={locked}
+                    sx={{
+                      color: 'common.white',
+                      bgcolor: alpha('#000', 0.18),
+                      border: `1px solid ${alpha('#fff', 0.22)}`,
+                      '&:hover': { bgcolor: alpha('#000', 0.28) },
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
+          </Stack>
         </DialogTitle>
-        <DialogContent dividers>
+
+        <DialogContent sx={{ p: { xs: 2, sm: 2.5 } }}>
           {loadingProduct ? (
-            <Box display="flex" justifyContent="center" my={4}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
           ) : (
             <Stack spacing={2}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
-                <Select
-                  labelId="product-type-1-label"
-                  value={formData.productType1Id}
-                  label="Product Type 1"
-                  onChange={handleChange('productType1Id')}
-                  disabled={saving || loadingType1 || isUsedInRequests}
+              {/* Locked note */}
+              {isUsedInRequests ? (
+                <Box
+                  sx={{
+                    p: 1.4,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.warning.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.18)}`,
+                  }}
                 >
-                  <MenuItem value="">
-                    <em>None</em>
-                  </MenuItem>
-                  {productType1List.map((type1) => (
-                    <MenuItem key={type1.id} value={type1.id}>
-                      {type1.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {loadingType1 && <FormHelperText>Loading types...</FormHelperText>}
-              </FormControl>
-              <FormControl
-                fullWidth
-                size="small"
-                disabled={!formData.productType1Id || loadingType2 || saving || isUsedInRequests}
-              >
-                <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
-                <Select
-                  labelId="product-type-2-label"
-                  value={formData.productType2Id}
-                  label="Product Type 2"
-                  onChange={handleChange('productType2Id')}
-                  disabled={saving || loadingType2 || isUsedInRequests}
-                >
-                  <MenuItem value="">
-                    <em>None</em>
-                  </MenuItem>
-                  {productType2List.map((type2) => (
-                    <MenuItem key={type2.id} value={type2.id}>
-                      {type2.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {loadingType2 && <FormHelperText>Loading subtypes...</FormHelperText>}
-              </FormControl>
-              <TextField
-                label="Supplier Code"
-                value={formData.supplierCode}
-                onChange={handleChange('supplierCode')}
-                size="small"
-                fullWidth
-                required
-                disabled={saving || isUsedInRequests}
-              />
-              <TextField
-                label="Supplier Description"
-                value={formData.supplierName}
-                onChange={handleChange('supplierName')}
-                size="small"
-                fullWidth
-                required
-                disabled={saving || isUsedInRequests}
-              />
-              <TextField
-                label="SAP Code"
-                value={formData.sapCode}
-                onChange={handleChange('sapCode')}
-                size="small"
-                fullWidth
-                required
-                disabled={saving || isUsedInRequests}
-              />
-              <TextField
-                label="Item No"
-                value={formData.itemNo}
-                onChange={handleChange('itemNo')}
-                size="small"
-                fullWidth
-                disabled={saving || isUsedInRequests}
-              />
-              <TextField
-                label="Item Description"
-                value={formData.itemDescription}
-                onChange={handleChange('itemDescription')}
-                size="small"
-                fullWidth
-                disabled={saving || isUsedInRequests}
-              />
-              <TextField
-                label="Full Description"
-                value={formData.fullDescription}
-                onChange={handleChange('fullDescription')}
-                size="small"
-                fullWidth
-                multiline
-                rows={4}
-                disabled={saving || isUsedInRequests}
-              />
-              <FormControl fullWidth size="small" disabled={saving || isUsedInRequests}>
-                <InputLabel id="good-type-label">Good Type</InputLabel>
-                <Select
-                  labelId="good-type-label"
-                  value={formData.goodType}
-                  label="Good Type"
-                  onChange={handleChange('goodType')}
-                  required
-                  disabled={saving || isUsedInRequests}
-                >
-                  <MenuItem value="">
-                    <em>Select Good Type</em>
-                  </MenuItem>
-                  <MenuItem value="Common">Common</MenuItem>
-                  <MenuItem value="Special">Special</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl component="fieldset" disabled={saving || isUsedInRequests} required>
-                <Typography variant="subtitle2" gutterBottom>
-                  Currency
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.warning.main, 0.9) }} />
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      <b>Locked:</b> This product is used in requests, so all fields are disabled.
+                    </Typography>
+                  </Stack>
+                </Box>
+              ) : null}
+
+              {/* Card 1: Types + GoodType + Currency */}
+              <Box sx={{ ...subtleCardSx, p: 2 }}>
+                <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Classification</Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                  Keep it consistent for filtering & reporting
                 </Typography>
-                <RadioGroup
-                  row
-                  name="currency"
-                  value={formData.currency}
-                  onChange={handleChange('currency')}
-                  disabled={saving || isUsedInRequests}
+                <Divider sx={{ my: 1.6 }} />
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                    gap: 1.8,
+                  }}
                 >
-                  <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={saving || isUsedInRequests} />
-                  <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={saving || isUsedInRequests} />
-                  <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={saving || isUsedInRequests} />
-                </RadioGroup>
-                {!formData.currency && (
-                  <FormHelperText error>Please select a currency</FormHelperText>
-                )}
-              </FormControl>
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Size"
-                  value={formData.size}
-                  onChange={handleChange('size')}
-                  size="small"
-                  fullWidth
-                  disabled={saving || isUsedInRequests}
-                />
-                <TextField
-                  label="Unit"
-                  value={formData.unit}
-                  onChange={handleChange('unit')}
-                  size="small"
-                  fullWidth
-                  disabled={saving || isUsedInRequests}
-                />
-                <TextField
-                  label="Price"
-                  value={formattedPrice}
-                  onChange={handleChange('price')}
-                  size="small"
-                  fullWidth
-                  type="text"
-                  disabled={!formData.currency || saving || isUsedInRequests}
-                  inputProps={{ inputMode: 'numeric', pattern: formData.currency === 'VND' ? '[0-9]*' : '[0-9.]*' }}
-                  helperText={!formData.currency ? 'Please select a currency first' : ''}
-                />
-              </Stack>
-              <Box>
-                <InputLabel sx={{ mb: 1 }}>
-                  Product Images (Max 10, leave empty to keep current)
-                </InputLabel>
-                <Stack direction="row" spacing={2} alignItems="center">
+                  <FormControl fullWidth size="small" sx={fieldSx}>
+                    <InputLabel id="product-type-1-label">Product Type 1</InputLabel>
+                    <Select
+                      labelId="product-type-1-label"
+                      value={formData.productType1Id}
+                      label="Product Type 1"
+                      onChange={handleChange('productType1Id')}
+                      disabled={disabledAll || loadingType1}
+                    >
+                      <MenuItem value="">
+                        <em>None</em>
+                      </MenuItem>
+                      {productType1List.map((type1) => (
+                        <MenuItem key={type1.id} value={type1.id}>
+                          {type1.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {loadingType1 ? <FormHelperText>Loading types...</FormHelperText> : null}
+                  </FormControl>
+
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    sx={fieldSx}
+                    disabled={!formData.productType1Id || disabledAll || loadingType2}
+                  >
+                    <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
+                    <Select
+                      labelId="product-type-2-label"
+                      value={formData.productType2Id}
+                      label="Product Type 2"
+                      onChange={handleChange('productType2Id')}
+                      disabled={!formData.productType1Id || disabledAll || loadingType2}
+                    >
+                      <MenuItem value="">
+                        <em>None</em>
+                      </MenuItem>
+                      {productType2List.map((type2) => (
+                        <MenuItem key={type2.id} value={type2.id}>
+                          {type2.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {loadingType2 ? <FormHelperText>Loading subtypes...</FormHelperText> : null}
+                  </FormControl>
+
+                  <FormControl fullWidth size="small" sx={fieldSx} disabled={disabledAll}>
+                    <InputLabel id="good-type-label">Good Type</InputLabel>
+                    <Select
+                      labelId="good-type-label"
+                      value={formData.goodType}
+                      label="Good Type"
+                      onChange={handleChange('goodType')}
+                      required
+                      disabled={disabledAll}
+                    >
+                      <MenuItem value="">
+                        <em>Select Good Type</em>
+                      </MenuItem>
+                      <MenuItem value="Common">Common</MenuItem>
+                      <MenuItem value="Special">Special</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <Box>
+                    <Typography sx={{ fontWeight: 900, letterSpacing: 0.3, fontSize: 12.5, mb: 0.6 }}>
+                      Currency
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 1.2,
+                        borderRadius: 3,
+                        bgcolor: alpha(theme.palette.common.white, 0.55),
+                        border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+                      }}
+                    >
+                      <RadioGroup
+                        row
+                        name="currency"
+                        value={formData.currency}
+                        onChange={handleChange('currency')}
+                      >
+                        <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={disabledAll} />
+                        <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={disabledAll} />
+                        <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={disabledAll} />
+                      </RadioGroup>
+                      {!formData.currency ? (
+                        <FormHelperText error sx={{ mt: 0.2 }}>
+                          Please select a currency
+                        </FormHelperText>
+                      ) : null}
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box
+                  sx={{
+                    mt: 1.8,
+                    p: 1.4,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.primary.main, 0.06),
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      <b>Tip:</b> Pick Currency first, then input Price to avoid format errors.
+                    </Typography>
+                  </Stack>
+                </Box>
+              </Box>
+
+              {/* Card 2: Core fields */}
+              <Box sx={{ ...subtleCardSx, p: 2 }}>
+                <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Core Information</Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                  These fields affect request matching and reporting
+                </Typography>
+                <Divider sx={{ my: 1.6 }} />
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                    gap: 1.8,
+                  }}
+                >
+                  <TextField
+                    label="Supplier Code"
+                    value={formData.supplierCode}
+                    onChange={handleChange('supplierCode')}
+                    size="small"
+                    fullWidth
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="(optional)"
+                  />
+
+                  <TextField
+                    label="Supplier Description"
+                    value={formData.supplierName}
+                    onChange={handleChange('supplierName')}
+                    size="small"
+                    fullWidth
+                    required
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="e.g., Supplier ABC - cookies"
+                  />
+
+                  <TextField
+                    label="SAP Code"
+                    value={formData.sapCode}
+                    onChange={handleChange('sapCode')}
+                    size="small"
+                    fullWidth
+                    required
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="e.g., 10002341"
+                  />
+
+                  <TextField
+                    label="Item No"
+                    value={formData.hanaSapCode}
+                    onChange={handleChange('hanaSapCode')}
+                    size="small"
+                    fullWidth
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="e.g., HANA-xxxx"
+                  />
+
+                  <TextField
+                    label="Size"
+                    value={formData.size}
+                    onChange={handleChange('size')}
+                    size="small"
+                    fullWidth
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="e.g., 500g"
+                  />
+
+                  <TextField
+                    label="Unit"
+                    value={formData.unit}
+                    onChange={handleChange('unit')}
+                    size="small"
+                    fullWidth
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="e.g., box / pcs"
+                  />
+
+                  <TextField
+                    label="Price"
+                    value={formattedPrice}
+                    onChange={handleChange('price')}
+                    size="small"
+                    fullWidth
+                    type="text"
+                    disabled={!formData.currency || disabledAll}
+                    sx={fieldSx}
+                    inputProps={{
+                      inputMode: 'numeric',
+                      pattern: formData.currency === 'VND' ? '[0-9]*' : '[0-9.]*',
+                    }}
+                    helperText={!formData.currency ? 'Please select a currency first' : ' '}
+                  />
+
+                  <Box sx={{ display: { xs: 'none', md: 'block' } }} />
+                </Box>
+              </Box>
+
+              {/* Card 3: Descriptions */}
+              <Box sx={{ ...subtleCardSx, p: 2 }}>
+                <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Descriptions</Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                  Keep short EN and detailed VN if needed
+                </Typography>
+                <Divider sx={{ my: 1.6 }} />
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.8 }}>
+                  <TextField
+                    label="Item Description (EN)"
+                    value={formData.itemDescriptionEN}
+                    onChange={handleChange('itemDescriptionEN')}
+                    size="small"
+                    fullWidth
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="Short english description"
+                  />
+
+                  <TextField
+                    label="Full Description (VN)"
+                    value={formData.itemDescriptionVN}
+                    onChange={handleChange('itemDescriptionVN')}
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={4}
+                    disabled={disabledAll}
+                    sx={fieldSx}
+                    placeholder="Mô tả chi tiết tiếng Việt..."
+                  />
+                </Box>
+              </Box>
+
+              {/* Card 4: Images */}
+              <Box sx={{ ...subtleCardSx, p: 2 }}>
+                <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Images</Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: 13, mt: 0.3 }}>
+                  Max 10 images. Leave empty to keep current.
+                </Typography>
+                <Divider sx={{ my: 1.6 }} />
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
                   <Button
                     variant="outlined"
                     component="label"
                     startIcon={<PhotoCamera />}
-                    disabled={saving || isUsedInRequests}
+                    disabled={disabledAll}
+                    sx={outlineBtnSx}
                   >
-                    Choose Image
+                    Choose Images
                     <input
                       hidden
                       type="file"
                       accept="image/*"
                       multiple
                       onChange={handleFileChange}
-                      disabled={saving || isUsedInRequests}
+                      disabled={disabledAll}
                     />
                   </Button>
-                  {(files.length > 0 || keptImageUrls.length > 0) && (
-                    <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                      {files.length + keptImageUrls.length} image(s) selected
-                    </Typography>
-                  )}
+
+                  {(files.length > 0 || keptImageUrls.length > 0) ? (
+                    <Chip
+                      size="small"
+                      label={`${files.length + keptImageUrls.length} image(s)`}
+                      sx={{
+                        fontWeight: 800,
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
+                      }}
+                    />
+                  ) : null}
                 </Stack>
-                {previews.length > 0 && (
-                  <Box mt={2} sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                    {previews.map((preview, index) => (
-                      <Box key={index} sx={{ position: 'relative' }}>
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          style={{
-                            maxHeight: '150px',
-                            borderRadius: 4,
-                            border: '1px solid #ddd',
+
+                {previews.length > 0 ? (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' },
+                      gap: 1.5,
+                    }}
+                  >
+                    {previews.map((preview, index) => {
+                      const isCurrent = index < keptImageUrls.length;
+                      const label = isCurrent ? 'Current' : (files[index - keptImageUrls.length]?.name || 'New');
+
+                      return (
+                        <Box
+                          key={index}
+                          sx={{
+                            position: 'relative',
+                            borderRadius: 3,
+                            overflow: 'hidden',
+                            border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+                            boxShadow: `0 10px 22px ${alpha('#000', 0.08)}`,
+                            bgcolor: alpha(theme.palette.common.white, 0.55),
                           }}
-                          onError={(e) => {
-                            console.error(`Failed to load preview image: ${preview}`);
-                            e.target.src = '/images/fallback.jpg';
-                            e.target.alt = 'Failed to load';
-                          }}
-                        />
-                        <IconButton
-                          sx={{ position: 'absolute', top: 0, right: 0, bgcolor: 'rgba(255,255,255,0.7)' }}
-                          onClick={() => handleRemoveFile(index)}
-                          disabled={saving || isUsedInRequests}
                         >
-                          <CloseIcon color="error" />
-                        </IconButton>
-                        <Typography variant="caption" sx={{ display: 'block', textAlign: 'center' }}>
-                          {index < keptImageUrls.length
-                            ? 'Current Image'
-                            : files[index - keptImageUrls.length]?.name || 'New Image'}
-                        </Typography>
-                      </Box>
-                    ))}
+                          <Box
+                            component="img"
+                            src={preview}
+                            alt={`Preview ${index + 1}`}
+                            onError={(e) => {
+                              e.target.src = '/images/fallback.jpg';
+                              e.target.alt = 'Failed to load';
+                            }}
+                            sx={{
+                              width: '100%',
+                              height: 140,
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                          />
+
+                          <Chip
+                            size="small"
+                            label={isCurrent ? 'Current' : 'New'}
+                            sx={{
+                              position: 'absolute',
+                              left: 10,
+                              top: 10,
+                              color: 'common.white',
+                              bgcolor: alpha('#000', 0.35),
+                              border: `1px solid ${alpha('#fff', 0.18)}`,
+                              fontWeight: 800,
+                              backdropFilter: 'blur(10px)',
+                            }}
+                          />
+
+                          <Tooltip title="Remove">
+                            <span>
+                              <IconButton
+                                onClick={() => handleRemoveFile(index)}
+                                disabled={disabledAll}
+                                sx={{
+                                  position: 'absolute',
+                                  right: 8,
+                                  top: 8,
+                                  color: 'common.white',
+                                  bgcolor: alpha('#000', 0.35),
+                                  border: `1px solid ${alpha('#fff', 0.18)}`,
+                                  '&:hover': { bgcolor: alpha('#000', 0.5) },
+                                }}
+                              >
+                                <CloseIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+
+                          <Box sx={{ p: 1 }}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                display: 'block',
+                                color: 'text.secondary',
+                                fontWeight: 700,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={label}
+                            >
+                              {label}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      );
+                    })}
                   </Box>
-                )}
+                ) : null}
               </Box>
             </Stack>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={saving || loadingProduct}>
+
+        <DialogActions sx={{ px: { xs: 2, sm: 2.5 }, py: 2, gap: 1 }}>
+          <Button onClick={handleDialogClose} disabled={locked || loadingProduct} variant="outlined" sx={outlineBtnSx}>
             Cancel
           </Button>
+
           <Button
             variant="contained"
             onClick={handleSaveClick}
-            disabled={saving || loadingProduct || isUsedInRequests}
+            disabled={disabledAll}
+            sx={gradientBtnSx}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>
+
         <Notification
           open={notification.open}
           message={notification.message}
@@ -795,31 +1081,58 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
           onClose={handleCloseNotification}
         />
       </Dialog>
-      <Dialog open={openConfirmDialog} onClose={handleCancelSave}>
-        <DialogTitle sx={{ fontSize: '1rem' }}>Confirm Edit Product</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: '#374151', fontSize: '0.9rem' }}>
-            Are you sure you want to save changes to the product with Supplier Code &quot;{formData.supplierCode || 'Unknown'}&quot;?
+
+      {/* Confirm dialog (same vibe) */}
+      <Dialog
+        open={openConfirmDialog}
+        onClose={handleCancelSave}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+            background: alpha('#FFFFFF', 0.92),
+            backdropFilter: 'blur(14px)',
+            boxShadow: `0 22px 70px ${alpha('#000', 0.18)}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm Update</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ color: 'text.secondary', fontSize: 13.5 }}>
+            Are you sure you want to save changes to this product?
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelSave} sx={{ fontSize: '0.875rem', textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmSave}
-            variant="contained"
+
+          <Box
             sx={{
-              fontSize: '0.875rem',
-              textTransform: 'none',
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              borderRadius: '8px',
-              '&:hover': { background: 'linear-gradient(to right, #3aa4f8, #016ae3)' },
+              mt: 2,
+              p: 1.4,
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
             }}
-            disabled={saving}
           >
-            Confirm
+            <Stack spacing={0.6}>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Supplier: <b>{formData.supplierName?.trim() || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • SAP Code: <b>{formData.sapCode?.trim() || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                • Currency: <b>{formData.currency || '—'}</b> • Price: <b>{formattedPrice || '—'}</b>
+              </Typography>
+            </Stack>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={handleCancelSave} disabled={saving} variant="outlined" sx={outlineBtnSx}>
+            No
+          </Button>
+          <Button onClick={handleConfirmSave} disabled={saving} variant="contained" sx={{ ...gradientBtnSx, px: 2.4 }}>
+            {saving ? <CircularProgress size={20} color="inherit" /> : 'Yes'}
           </Button>
         </DialogActions>
       </Dialog>

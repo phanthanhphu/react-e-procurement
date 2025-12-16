@@ -1,338 +1,351 @@
-import React, { useEffect, useState } from 'react';
-import { Paper, TextField, Button, Box, useTheme, Autocomplete, Snackbar, Alert } from '@mui/material';
+import React, { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
+import {
+  Paper,
+  TextField,
+  Button,
+  Box,
+  useTheme,
+  Autocomplete,
+  Snackbar,
+  Alert,
+  Stack,
+  Typography,
+} from '@mui/material';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config';
 
-export default function RequisitionSearch({ searchValues, onSearchChange, onSearch, onReset }) {
+export default function RequisitionSearch({ searchValues, onSearchChange, onSearch, onReset, disabled = false }) {
   const theme = useTheme();
+
   const [productType1Options, setProductType1Options] = useState([]);
-  const [filteredProductType1Options, setFilteredProductType1Options] = useState([]);
-  const [selectedProductType1Id, setSelectedProductType1Id] = useState(null);
   const [productType2Options, setProductType2Options] = useState([]);
-  const [filteredProductType2Options, setFilteredProductType2Options] = useState([]);
-  const [selectedProductType2Id, setSelectedProductType2Id] = useState(null);
+
+  const [selectedPT1, setSelectedPT1] = useState(null);
+  const [selectedPT2, setSelectedPT2] = useState(null);
+
+  const [loadingPT1, setLoadingPT1] = useState(false);
+  const [loadingPT2, setLoadingPT2] = useState(false);
+
   const [error, setError] = useState(null);
 
-  // Fetch product-type-1 list when component mounts
+  // Clean admin sizing
+  const inputSx = useMemo(
+    () => ({
+      '& .MuiInputBase-root': {
+        height: 34,
+        borderRadius: 1.2,
+        fontSize: '0.8rem',
+        backgroundColor: disabled ? '#f9fafb' : '#fff',
+      },
+      '& .MuiInputLabel-root': { fontSize: '0.8rem' },
+      '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e5e7eb' },
+      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.primary.main },
+      width: '100%',
+    }),
+    [theme.palette.primary.main, disabled]
+  );
+
+  const btnPrimarySx = useMemo(
+    () => ({
+      textTransform: 'none',
+      fontWeight: 400,
+      height: 34,
+      borderRadius: 1.2,
+      fontSize: '0.85rem',
+      px: 2,
+      backgroundColor: '#111827',
+      '&:hover': { backgroundColor: '#0b1220' },
+    }),
+    []
+  );
+
+  const btnOutlineSx = useMemo(
+    () => ({
+      textTransform: 'none',
+      fontWeight: 400,
+      height: 34,
+      borderRadius: 1.2,
+      fontSize: '0.85rem',
+      px: 2,
+      color: '#111827',
+      borderColor: '#e5e7eb',
+      '&:hover': { borderColor: '#d1d5db', backgroundColor: '#f9fafb' },
+    }),
+    []
+  );
+
+  /* =========================
+     Fetch product type lists
+     ========================= */
   useEffect(() => {
-    const fetchProductType1 = async () => {
+    let alive = true;
+
+    const fetchPT1 = async () => {
+      setLoadingPT1(true);
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/product-type-1/search?page=0&size=100`);
-        setProductType1Options(response.data.content);
-        setFilteredProductType1Options(response.data.content);
-      } catch (error) {
-        setError('Failed to load product-type-1 list. Please try again.');
-        console.error("Error fetching product type 1:", error);
+        const res = await axios.get(`${API_BASE_URL}/api/product-type-1/search`, {
+          params: { page: 0, size: 200 },
+        });
+        if (!alive) return;
+        setProductType1Options(res.data?.content || []);
+      } catch (e) {
+        console.error('PT1 fetch error:', e.response?.data || e.message);
+        if (!alive) return;
+        setError('Failed to load product-type-1 list.');
+      } finally {
+        if (alive) setLoadingPT1(false);
       }
     };
-    fetchProductType1();
+
+    fetchPT1();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // Fetch product-type-2 list, using selectedProductType1Id if available
   useEffect(() => {
-    const fetchProductType2 = async () => {
+    let alive = true;
+
+    const fetchPT2 = async () => {
+      setLoadingPT2(true);
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/product-type-2/search`, {
+        const res = await axios.get(`${API_BASE_URL}/api/product-type-2/search`, {
           params: {
-            productType1Id: selectedProductType1Id || undefined,
+            productType1Id: selectedPT1?.id || undefined,
             page: 0,
-            size: 100,
+            size: 200,
           },
         });
-        setProductType2Options(response.data.content);
-        setFilteredProductType2Options(response.data.content);
-      } catch (error) {
-        setError('Failed to load product-type-2 list. Please try again.');
-        console.error("Error fetching product type 2:", error);
+        if (!alive) return;
+        setProductType2Options(res.data?.content || []);
+      } catch (e) {
+        console.error('PT2 fetch error:', e.response?.data || e.message);
+        if (!alive) return;
+        setError('Failed to load product-type-2 list.');
+        setProductType2Options([]);
+      } finally {
+        if (alive) setLoadingPT2(false);
       }
     };
-    fetchProductType2();
-  }, [selectedProductType1Id]);
 
-  // Handle product-type-1 search input
-  const handleProductType1Change = async (event, value) => {
-    onSearchChange({ ...searchValues, productType1Name: value || '' });
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/product-type-1/search`, {
-        params: { page: 0, size: 100, name: value || '' },
-      });
-      setFilteredProductType1Options(response.data.content);
-    } catch (error) {
-      setError('Failed to search product-type-1. Please try again.');
-      console.error("Error searching product type 1:", error);
-    }
-  };
+    // nếu muốn bắt buộc chọn PT1 mới load PT2, thay bằng:
+    // if (!selectedPT1?.id) { setProductType2Options([]); return; }
+    fetchPT2();
 
-  // Handle product-type-1 selection
-  const handleProductType1Select = (event, value) => {
-    setSelectedProductType1Id(value ? value.id : null);
-    onSearchChange({ ...searchValues, productType1Name: value ? value.name : '' });
-  };
+    return () => {
+      alive = false;
+    };
+  }, [selectedPT1?.id]);
 
-  // Handle product-type-2 search input
-  const handleProductType2Change = async (event, value) => {
-    onSearchChange({ ...searchValues, productType2Name: value || '' });
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/product-type-2/search`, {
-        params: {
-          productType1Id: selectedProductType1Id || undefined,
-          page: 0,
-          size: 100,
-          name: value || '',
-        },
-      });
-      setProductType2Options(response.data.content);
-      setFilteredProductType2Options(response.data.content);
-    } catch (error) {
-      setError('Failed to search product-type-2. Please try again.');
-      console.error("Error searching product type 2:", error);
-    }
-  };
+  // Sync selected when parent clears names
+  useEffect(() => {
+    if (!searchValues?.productType1Name) setSelectedPT1(null);
+    if (!searchValues?.productType2Name) setSelectedPT2(null);
+  }, [searchValues?.productType1Name, searchValues?.productType2Name]);
 
-  // Handle product-type-2 selection
-  const handleProductType2Select = (event, value) => {
-    setSelectedProductType2Id(value ? value.id : null);
-    onSearchChange({ ...searchValues, productType2Name: value ? value.name : '' });
-  };
-
-  // Handle input changes for other fields
+  /* =========================
+     Handlers
+     ========================= */
   const handleInputChange = (field) => (e) => {
     onSearchChange({ ...searchValues, [field]: e.target.value });
   };
 
-  // Handle search action
   const handleSearch = () => {
-    onSearch({ productType1Id: selectedProductType1Id, productType2Id: selectedProductType2Id });
+    onSearch({
+      ...searchValues,
+      productType1Id: selectedPT1?.id || null,
+      productType2Id: selectedPT2?.id || null,
+    });
   };
 
-  // Handle reset action
   const handleReset = () => {
-    setSelectedProductType1Id(null);
-    setSelectedProductType2Id(null);
-    setFilteredProductType1Options(productType1Options);
-    setFilteredProductType2Options(productType2Options);
-    onReset();
+    setSelectedPT1(null);
+    setSelectedPT2(null);
+    setProductType2Options([]);
+
+    onSearchChange({
+      productType1Name: '',
+      productType2Name: '',
+      englishName: '',
+      vietnameseName: '',
+      oldSapCode: '',
+      hanaSapCode: '',
+      supplierName: '',
+      departmentName: '',
+    });
+
+    onReset?.();
   };
 
-  // Close error Snackbar
-  const handleCloseError = () => {
-    setError(null);
-  };
+  const busy = disabled || loadingPT1 || loadingPT2;
 
   return (
     <Paper
-      elevation={3}
+      elevation={0}
       sx={{
-        p: 1.5,
-        mb: 1.5,
-        background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 2,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-        border: `1px solid ${theme.palette.divider}`,
+        p: 1.25,
+        mb: 1,
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        backgroundColor: '#fff',
         width: '100%',
         boxSizing: 'border-box',
         overflowX: 'auto',
-        maxWidth: '100%',
       }}
     >
-      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
-        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%', fontSize: '0.65rem' }}>
+      <Snackbar
+        open={!!error}
+        autoHideDuration={4000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%', fontSize: '0.85rem' }}>
           {error}
         </Alert>
       </Snackbar>
 
-      {/* First Row: 4 Input Fields + Search Button */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography sx={{ fontSize: '0.9rem', color: '#111827', fontWeight: 600 }}>
+          Search filters
+        </Typography>
+      </Stack>
+
+      {/* ===== Row 1: 4 inputs + Search ===== */}
       <Box
         sx={{
-          display: 'flex',
-          flexWrap: 'nowrap',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, minmax(150px, 1fr))',
           gap: 1,
           mb: 1,
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Autocomplete
-            freeSolo
-            options={filteredProductType1Options}
-            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
-            value={searchValues.productType1Name || ''}
-            onInputChange={handleProductType1Change}
-            onChange={handleProductType1Select}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Product Type 1"
-                variant="outlined"
-                size="small"
-                sx={{
-                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-                  width: '100%',
-                }}
-              />
-            )}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Autocomplete
-            freeSolo
-            options={filteredProductType2Options}
-            getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
-            value={searchValues.productType2Name || ''}
-            onInputChange={handleProductType2Change}
-            onChange={handleProductType2Select}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Product Type 2"
-                variant="outlined"
-                size="small"
-                sx={{
-                  '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-                  '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-                  width: '100%',
-                }}
-              />
-            )}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Item Description (EN)"
-            variant="outlined"
-            size="small"
-            value={searchValues.englishName || ''}
-            onChange={handleInputChange('englishName')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Item Description (VN)"
-            variant="outlined"
-            size="small"
-            value={searchValues.vietnameseName || ''}
-            onChange={handleInputChange('vietnameseName')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Button
-            variant="contained"
-            onClick={handleSearch}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              background: 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              px: 1.5,
-              py: 0.3,
-              borderRadius: '6px',
-              fontSize: '0.65rem',
-              height: '30px',
-              width: '100%',
-            }}
-          >
-            Search
-          </Button>
-        </Box>
+        <Autocomplete
+          options={productType1Options}
+          loading={loadingPT1}
+          value={selectedPT1}
+          onChange={(_, opt) => {
+            setSelectedPT1(opt || null);
+            setSelectedPT2(null); // reset PT2 when PT1 changes
+
+            onSearchChange({
+              ...searchValues,
+              productType1Name: opt?.name || '',
+              productType2Name: '',
+            });
+          }}
+          getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt?.name || '')}
+          isOptionEqualToValue={(a, b) => a?.id === b?.id}
+          disabled={disabled}
+          loadingText="Loading…"
+          renderInput={(params) => <TextField {...params} label="Product Type 1" size="small" sx={inputSx} />}
+        />
+
+        <Autocomplete
+          options={productType2Options}
+          loading={loadingPT2}
+          value={selectedPT2}
+          onChange={(_, opt) => {
+            setSelectedPT2(opt || null);
+            onSearchChange({ ...searchValues, productType2Name: opt?.name || '' });
+          }}
+          getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt?.name || '')}
+          isOptionEqualToValue={(a, b) => a?.id === b?.id}
+          disabled={disabled || !selectedPT1} // chọn PT1 trước rồi mới chọn PT2
+          loadingText="Loading…"
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Product Type 2"
+              size="small"
+              sx={inputSx}
+              placeholder={selectedPT1 ? 'Select…' : 'Select Product Type 1 first'}
+            />
+          )}
+        />
+
+        <TextField
+          label="Item (EN)"
+          size="small"
+          value={searchValues.englishName || ''}
+          onChange={handleInputChange('englishName')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <TextField
+          label="Item (VN)"
+          size="small"
+          value={searchValues.vietnameseName || ''}
+          onChange={handleInputChange('vietnameseName')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <Button variant="contained" onClick={handleSearch} disabled={busy} sx={btnPrimarySx}>
+          Search
+        </Button>
       </Box>
 
-      {/* Second Row: 4 Input Fields + Reset Button */}
+      {/* ===== Row 2: 4 inputs + Reset ===== */}
       <Box
         sx={{
-          display: 'flex',
-          flexWrap: 'nowrap',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, minmax(150px, 1fr))',
           gap: 1,
           alignItems: 'center',
         }}
       >
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Old SAP Code"
-            variant="outlined"
-            size="small"
-            value={searchValues.oldSapCode || ''}
-            onChange={handleInputChange('oldSapCode')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Hana SAP Code"
-            variant="outlined"
-            size="small"
-            value={searchValues.hanaSapCode || ''}
-            onChange={handleInputChange('hanaSapCode')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Supplier Description"
-            variant="outlined"
-            size="small"
-            value={searchValues.supplierName || ''}
-            onChange={handleInputChange('supplierName')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <TextField
-            label="Department"
-            variant="outlined"
-            size="small"
-            value={searchValues.departmentName || ''}
-            onChange={handleInputChange('departmentName')}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
-        <Box sx={{ width: '20%', minWidth: 150 }}>
-          <Button
-            variant="outlined"
-            onClick={handleReset}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              px: 1.5,
-              py: 0.3,
-              borderRadius: '6px',
-              fontSize: '0.65rem',
-              color: theme.palette.grey[800],
-              borderColor: theme.palette.grey[400],
-              height: '30px',
-              width: '100%',
-            }}
-          >
-            Reset
-          </Button>
-        </Box>
+        <TextField
+          label="Old SAP"
+          size="small"
+          value={searchValues.oldSapCode || ''}
+          onChange={handleInputChange('oldSapCode')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <TextField
+          label="Hana SAP"
+          size="small"
+          value={searchValues.hanaSapCode || ''}
+          onChange={handleInputChange('hanaSapCode')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <TextField
+          label="Supplier"
+          size="small"
+          value={searchValues.supplierName || ''}
+          onChange={handleInputChange('supplierName')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <TextField
+          label="Department"
+          size="small"
+          value={searchValues.departmentName || ''}
+          onChange={handleInputChange('departmentName')}
+          disabled={disabled}
+          sx={inputSx}
+        />
+
+        <Button variant="outlined" onClick={handleReset} disabled={busy} sx={btnOutlineSx}>
+          Reset
+        </Button>
       </Box>
     </Paper>
   );
 }
+
+RequisitionSearch.propTypes = {
+  searchValues: PropTypes.object.isRequired,
+  onSearchChange: PropTypes.func.isRequired,
+  onSearch: PropTypes.func.isRequired,
+  onReset: PropTypes.func,
+  disabled: PropTypes.bool,
+};

@@ -1,18 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Paper, 
-  TextField, 
-  Button, 
-  Box, 
-  useTheme, 
-  FormControl, 
-  InputLabel, 
-  Select, 
+import React, { useMemo, useState, useCallback } from 'react';
+import PropTypes from 'prop-types';
+import {
+  Alert,
+  Box,
+  Button,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+  FormControl,
+  InputLabel,
+  Select,
   MenuItem,
-  Snackbar, 
-  Alert 
 } from '@mui/material';
-import { API_BASE_URL } from '../../config';
 
 export default function UserSearch({
   searchUsername,
@@ -28,267 +30,253 @@ export default function UserSearch({
   setPage,
   onSearch,
   onReset,
+  disabled = false,
 }) {
   const theme = useTheme();
+
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Handle role change
-  const handleRoleChange = (event) => {
-    const value = event.target.value;
-    setSearchRole(value);
-    setPage(0);
+  const closeError = () => setError(null);
+  const busy = disabled || loading;
+  const setPage0 = () => setPage?.(0);
+
+  const inputSx = useMemo(
+    () => ({
+      '& .MuiInputBase-root': {
+        height: 34,
+        borderRadius: 1.2,
+        fontSize: '0.8rem',
+        backgroundColor: disabled ? '#f9fafb' : '#fff',
+      },
+      '& .MuiInputLabel-root': { fontSize: '0.8rem' },
+      '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e5e7eb' },
+      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.primary.main },
+      width: '100%',
+    }),
+    [disabled, theme.palette.primary.main]
+  );
+
+  const btnPrimarySx = useMemo(
+    () => ({
+      textTransform: 'none',
+      fontWeight: 400,
+      borderRadius: 1.2,
+      height: 34,
+      fontSize: '0.85rem',
+      px: 2,
+      backgroundColor: '#111827',
+      '&:hover': { backgroundColor: '#0b1220' },
+    }),
+    []
+  );
+
+  const btnOutlineSx = useMemo(
+    () => ({
+      textTransform: 'none',
+      fontWeight: 400,
+      borderRadius: 1.2,
+      height: 34,
+      fontSize: '0.85rem',
+      px: 2,
+      color: '#111827',
+      borderColor: '#e5e7eb',
+      '&:hover': { borderColor: '#d1d5db', backgroundColor: '#f9fafb' },
+    }),
+    []
+  );
+
+  const isValidEmail = useCallback((email) => {
+    if (!email) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }, []);
+
+  const onEnterSearch = (e) => {
+    if (e.key === 'Enter') handleSearch();
   };
 
-  // Handle username change
-  const handleUsernameChange = (event) => {
-    const value = event.target.value;
-    setSearchUsername(value);
-    setPage(0);
-  };
+  const handleSearch = useCallback(async () => {
+    if (busy) return;
 
-  // Handle address change
-  const handleAddressChange = (event) => {
-    const value = event.target.value;
-    setSearchAddress(value);
-    setPage(0);
-  };
+    if (searchEmail && !isValidEmail(searchEmail)) {
+      setError('Email không đúng định dạng.');
+      return;
+    }
 
-  // Handle phone change
-  const handlePhoneChange = (event) => {
-    const value = event.target.value;
-    setSearchPhone(value);
-    setPage(0);
-  };
-
-  // Handle email change
-  const handleEmailChange = (event) => {
-    const value = event.target.value;
-    setSearchEmail(value);
-    setPage(0);
-  };
-
-  // Handle search
-  const handleSearch = async () => {
     setLoading(true);
-    setPage(0);
+    setPage0();
     try {
-      await onSearch();
-    } catch (error) {
+      await onSearch?.();
+    } catch (e) {
+      console.error('Search error:', e);
       setError('Search failed. Please try again.');
-      console.error('Search error:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [busy, isValidEmail, onSearch, searchEmail]);
 
-  // Handle reset
-  const handleReset = () => {
-    setPage(0);
+  const handleReset = useCallback(() => {
+    setPage0();
     setSearchUsername('');
     setSearchAddress('');
     setSearchPhone('');
     setSearchEmail('');
     setSearchRole('');
-    onReset();
-  };
+    onReset?.();
+  }, [
+    onReset,
+    setSearchAddress,
+    setSearchEmail,
+    setSearchPhone,
+    setSearchRole,
+    setSearchUsername,
+    setPage,
+  ]);
 
-  // Close error Snackbar
-  const handleCloseError = () => {
-    setError(null);
-  };
-
-  // Validate email format
-  const isValidEmail = (email) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
+  const emailError = !!searchEmail && !isValidEmail(searchEmail);
 
   return (
     <Paper
-      elevation={3}
+      elevation={0}
       sx={{
-        p: 1.5,
-        mb: 1.5,
-        background: 'linear-gradient(to right, #f7faff, #ffffff)',
-        borderRadius: 2,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-        border: `1px solid ${theme.palette.divider}`,
+        p: 1.25,
+        mb: 1,
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        backgroundColor: '#fff',
         width: '100%',
         boxSizing: 'border-box',
-        overflowX: 'auto',
-        maxWidth: '100%',
+        overflowX: 'auto', // quan trọng: giữ 1 hàng + màn nhỏ vẫn kéo ngang
       }}
     >
-      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
-        <Alert onClose={handleCloseError} severity="error" sx={{ width: '100%', fontSize: '0.65rem' }}>
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={closeError}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={closeError} severity="error" sx={{ width: '100%', fontSize: '0.85rem' }}>
           {error}
         </Alert>
       </Snackbar>
 
-      {/* Single Row: Username, Email, Phone, Role, Address, Search, Reset */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#111827' }}>
+          Filters
+        </Typography>
+      </Stack>
+
+      {/* ONE ROW ONLY */}
       <Box
         sx={{
-          display: 'flex',
-          flexWrap: 'nowrap',
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(7, minmax(180px, 1fr))',
+            md: 'repeat(7, minmax(160px, 1fr))',
+          },
           gap: 1,
           alignItems: 'center',
+          minWidth: { xs: 7 * 180, md: 'unset' }, // ép nó thành 1 hàng thật sự (xs sẽ scroll)
         }}
       >
-        {/* Username - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 120 }}>
-          <TextField
-            label="Username"
-            variant="outlined"
-            size="small"
-            value={searchUsername}
-            onChange={handleUsernameChange}
-            placeholder="Username"
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
+        <TextField
+          label="Username"
+          size="small"
+          value={searchUsername}
+          onChange={(e) => {
+            setPage0();
+            setSearchUsername(e.target.value);
+          }}
+          disabled={disabled}
+          sx={inputSx}
+          onKeyDown={onEnterSearch}
+        />
 
-        {/* Email - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 130 }}>
-          <TextField
-            label="Email"
-            variant="outlined"
-            size="small"
-            value={searchEmail}
-            onChange={handleEmailChange}
-            placeholder="Email"
-            error={searchEmail && !isValidEmail(searchEmail)}
-            helperText={searchEmail && !isValidEmail(searchEmail) ? "Invalid email" : ""}
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
+        <TextField
+          label="Email"
+          size="small"
+          value={searchEmail}
+          onChange={(e) => {
+            setPage0();
+            setSearchEmail(e.target.value);
+          }}
+          disabled={disabled}
+          sx={inputSx}
+          onKeyDown={onEnterSearch}
+          error={emailError}
+          helperText={emailError ? 'Invalid email' : ''}
+        />
 
-        {/* Phone - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 120 }}>
-          <TextField
-            label="Phone"
-            variant="outlined"
-            size="small"
-            value={searchPhone}
-            onChange={handlePhoneChange}
-            placeholder="Phone"
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
-            }}
-          />
-        </Box>
+        <TextField
+          label="Phone"
+          size="small"
+          value={searchPhone}
+          onChange={(e) => {
+            setPage0();
+            setSearchPhone(e.target.value);
+          }}
+          disabled={disabled}
+          sx={inputSx}
+          onKeyDown={onEnterSearch}
+        />
 
-        {/* Role Select - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 110 }}>
-          <FormControl fullWidth size="small">
-            <InputLabel id="role-label" sx={{ fontSize: '0.55rem', top: '-6px' }}>
-              Role
-            </InputLabel>
-            <Select
-              labelId="role-label"
-              value={searchRole || ''}
-              label="Role"
-              onChange={handleRoleChange}
-              sx={{
-                height: '30px',
-                borderRadius: '6px',
-                fontSize: '0.55rem',
-              }}
-            >
-              <MenuItem value="">
-                <em>All</em>
-              </MenuItem>
-              <MenuItem value="User">User</MenuItem>
-              <MenuItem value="Leader">Leader</MenuItem>
-              <MenuItem value="Admin">Admin</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-
-        {/* Address - 25% (wider for better input) */}
-        <Box sx={{ width: '25%', minWidth: 200 }}>
-          <TextField
-            label="Address"
-            variant="outlined"
-            size="small"
-            value={searchAddress}
-            onChange={handleAddressChange}
-            placeholder="Address"
-            sx={{
-              '& .MuiInputBase-root': { height: '30px', borderRadius: '6px', fontSize: '0.55rem' },
-              '& .MuiInputLabel-root': { fontSize: '0.55rem', top: '-6px' },
-              width: '100%',
+        <FormControl fullWidth size="small" sx={inputSx}>
+          <InputLabel sx={{ fontSize: '0.8rem' }}>Role</InputLabel>
+          <Select
+            value={searchRole || ''}
+            label="Role"
+            onChange={(e) => {
+              setPage0();
+              setSearchRole(e.target.value);
             }}
-          />
-        </Box>
-
-        {/* Search Button - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 100 }}>
-          <Button
-            variant="contained"
-            onClick={handleSearch}
-            disabled={loading}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              background: loading 
-                ? theme.palette.action.disabledBackground 
-                : 'linear-gradient(to right, #4cb8ff, #027aff)',
-              color: '#fff',
-              px: 1,
-              py: 0.3,
-              borderRadius: '6px',
-              fontSize: '0.65rem',
-              height: '30px',
-              width: '100%',
-              whiteSpace: 'nowrap',
-              '&:hover': {
-                background: 'linear-gradient(to right, #027aff, #4cb8ff)',
-              },
-            }}
+            disabled={disabled}
           >
-            {loading ? 'Searching...' : 'Search'}
-          </Button>
-        </Box>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="User">User</MenuItem>
+            <MenuItem value="Leader">Leader</MenuItem>
+            <MenuItem value="Admin">Admin</MenuItem>
+          </Select>
+        </FormControl>
 
-        {/* Reset Button - 12.5% */}
-        <Box sx={{ width: '12.5%', minWidth: 100 }}>
-          <Button
-            variant="outlined"
-            onClick={handleReset}
-            disabled={loading}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 500,
-              px: 1,
-              py: 0.3,
-              borderRadius: '6px',
-              fontSize: '0.65rem',
-              color: theme.palette.grey[800],
-              borderColor: theme.palette.grey[400],
-              height: '30px',
-              width: '100%',
-              whiteSpace: 'nowrap',
-              '&:hover': {
-                borderColor: theme.palette.error.main,
-                color: theme.palette.error.main,
-                backgroundColor: theme.palette.error.lighter,
-              },
-            }}
-          >
-            Reset
-          </Button>
-        </Box>
+        <TextField
+          label="Address"
+          size="small"
+          value={searchAddress}
+          onChange={(e) => {
+            setPage0();
+            setSearchAddress(e.target.value);
+          }}
+          disabled={disabled}
+          sx={inputSx}
+          onKeyDown={onEnterSearch}
+        />
+
+        <Button variant="contained" onClick={handleSearch} disabled={busy} sx={btnPrimarySx}>
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
+
+        <Button variant="outlined" onClick={handleReset} disabled={busy} sx={btnOutlineSx}>
+          Reset
+        </Button>
       </Box>
     </Paper>
   );
 }
+
+UserSearch.propTypes = {
+  searchUsername: PropTypes.string,
+  setSearchUsername: PropTypes.func.isRequired,
+  searchAddress: PropTypes.string,
+  setSearchAddress: PropTypes.func.isRequired,
+  searchPhone: PropTypes.string,
+  setSearchPhone: PropTypes.func.isRequired,
+  searchEmail: PropTypes.string,
+  setSearchEmail: PropTypes.func.isRequired,
+  searchRole: PropTypes.string,
+  setSearchRole: PropTypes.func.isRequired,
+  setPage: PropTypes.func,
+  onSearch: PropTypes.func,
+  onReset: PropTypes.func,
+  disabled: PropTypes.bool,
+};

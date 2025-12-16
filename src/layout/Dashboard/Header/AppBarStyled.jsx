@@ -13,12 +13,12 @@ const AppBarStyled = styled(AppBar, { shouldForwardProp: (prop) => prop !== 'ope
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen
   }),
-  ...(!open && {
-    width: `calc(100% - ${MINI_DRAWER_WIDTH})`
-  }),
+
+  // ✅ Header chỉ nằm trong content, không phủ lên menu
+  marginLeft: open ? DRAWER_WIDTH : MINI_DRAWER_WIDTH,
+  width: open ? `calc(100% - ${DRAWER_WIDTH}px)` : `calc(100% - ${MINI_DRAWER_WIDTH}px)`,
+
   ...(open && {
-    marginLeft: DRAWER_WIDTH,
-    width: `calc(100% - ${DRAWER_WIDTH}px)`,
     transition: theme.transitions.create(['width', 'margin'], {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.enteringScreen

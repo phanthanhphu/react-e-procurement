@@ -1,30 +1,36 @@
-import PropTypes from 'prop-types';
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { useTheme } from '@mui/material/styles';
+import { useTheme, alpha } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
+
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Chip from '@mui/material/Chip';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import { Snackbar, Alert, Tooltip, Portal } from '@mui/material';
 import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
+import Stack from '@mui/material/Stack';
+
+import { Snackbar, Alert, Tooltip, Portal } from '@mui/material';
+
+import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
+
 import { useUser } from './useUser';
 import { User, Edit2, Lock, Logout } from 'iconsax-react';
+
 import ProfileEditDialog from '../../../../../pages/dashboard/ProfileEditDialog';
 import ChangePasswordDialog from '../../../../../pages/dashboard/ChangePasswordDialog';
 import ViewUserDialog from '../../../../../pages/dashboard/ViewUserDialog';
 import { API_BASE_URL } from '../../../../../config';
 
-function TabContent() {
+export default function TabContent({ onRequestClose }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const cacheBust = useMemo(() => Date.now(), []);
+
   const imageCacheRef = useRef(new Map());
   const [imageErrors, setImageErrors] = useState({});
+
   const [openViewDialog, setOpenViewDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openChangePassDialog, setOpenChangePassDialog] = useState(false);
@@ -48,20 +54,17 @@ function TabContent() {
   } = useUser();
 
   useEffect(() => {
-    if (error || success) {
-      setSnackbarOpen(true);
-    }
+    if (error || success) setSnackbarOpen(true);
   }, [error, success]);
 
   const normalizeImageUrl = useCallback((url) => {
     if (!url) return null;
+
     const cacheKey = `url_${url}`;
     if (imageCacheRef.current.has(cacheKey)) return imageCacheRef.current.get(cacheKey);
-    let normalized = url.replace(/\\/g, '/');
-    let finalUrl;
-    const DEFAULT_IMAGE_URL = `/Uploads/users/default-user.png`;
 
-    normalized = normalized.split('?')[0];
+    let normalized = url.replace(/\\/g, '/').split('?')[0];
+    let finalUrl;
 
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
       finalUrl = normalized.replace(/^https?:\/\/[^\/]+/, '');
@@ -71,153 +74,145 @@ function TabContent() {
       const cleanPath = normalized.replace(/^\/?uploads\/users\//i, '');
       finalUrl = `/Uploads/users/${cleanPath}`;
     }
-    imageCacheRef.current.set(cacheKey, finalUrl || DEFAULT_IMAGE_URL);
-    return finalUrl || DEFAULT_IMAGE_URL;
+
+    imageCacheRef.current.set(cacheKey, finalUrl);
+    return finalUrl;
   }, []);
 
   const processedUser = useMemo(() => {
     const imageUrl = normalizeImageUrl(profileImage);
     const finalImageUrl = imageUrl || `/Uploads/users/default-user.png`;
-    return { id: userId, username, profileImageUrl: imageUrl, displayImageUrl: finalImageUrl };
+    return { id: userId, username, displayImageUrl: finalImageUrl };
   }, [profileImage, userId, username, normalizeImageUrl]);
 
-  const handleImageError = useCallback((userId) => {
-    if (imageErrors[userId]) return;
-    setImageErrors((prev) => ({ ...prev, [userId]: true }));
-  }, [imageErrors]);
+  const handleImageError = useCallback(
+    (id) => {
+      if (!id || imageErrors[id]) return;
+      setImageErrors((prev) => ({ ...prev, [id]: true }));
+    },
+    [imageErrors]
+  );
 
   const handleLogout = async () => {
     try {
       const token = localStorage.getItem('token');
       await fetch(`${API_BASE_URL}/users/logout`, {
         method: 'DELETE',
-        headers: {
-          'accept': '*/*',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
+        headers: { accept: '*/*', ...(token && { Authorization: `Bearer ${token}` }) }
       });
+
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       localStorage.removeItem('role');
+
       setSnackbarOpen(true);
-      setTimeout(() => {
-        window.location.href = '/react/login';
-      }, 1000);
+      if (onRequestClose) onRequestClose();
+
+      setTimeout(() => (window.location.href = '/react/login'), 900);
     } catch (err) {
-      console.error('Logout error:', err);
       setSnackbarOpen(true);
+      if (onRequestClose) onRequestClose();
     }
   };
 
-  const UserImage = () => {
-    const { id, username, displayImageUrl } = processedUser;
-    const hasError = imageErrors[id];
+  const CARD_AVATAR = isMobile ? 44 : 52;
 
-    const renderContent = () => {
-      if (displayImageUrl && !hasError) {
-        return (
-          <img
-            src={`${API_BASE_URL}${displayImageUrl}`}
-            alt={username}
-            width={48}
-            height={48}
-            style={{
-              borderRadius: '50%',
-              objectFit: 'cover',
-              display: 'block',
-              border: '2px solid',
-              borderColor: theme.palette.primary.main,
-            }}
-            loading="lazy"
-            onError={(e) => {
-              console.error(`Failed to load image: ${displayImageUrl}`);
-              handleImageError(id);
-            }}
-          />
-        );
-      }
-
-      return (
-        <Box
-          sx={{
-            bgcolor: '#f5f5f5',
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.5rem',
-            fontWeight: 600,
-            color: theme.palette.primary.main,
-            border: `2px solid ${theme.palette.primary.main}`,
-          }}
-        >
-          {firstLetter || '?'}
-        </Box>
-      );
-    };
-
-    return (
-      <Tooltip
-        title={
-          <Box>
-            <Box
-              sx={{
-                bgcolor: '#f5f5f5',
-                width: 64,
-                height: 64,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '2rem',
-                fontWeight: 600,
-                color: theme.palette.primary.main,
-              }}
-            >
-              {firstLetter || '?'}
-            </Box>
-            <Typography
-              variant="caption"
-              sx={{ mt: 0.5, display: 'block', textAlign: 'center', fontSize: '0.8rem' }}
-            >
-              {username}
-            </Typography>
-          </Box>
-        }
-        arrow
-        sx={{
-          '& .MuiTooltip-tooltip': {
-            bgcolor: 'white',
-            borderRadius: 2,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-          },
-        }}
-      >
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            '&:hover': {
-              transform: 'scale(1.05)',
-              transition: '0.2s',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            },
-          }}
-        >
-          {renderContent()}
-        </Box>
-      </Tooltip>
-    );
+  // ===== Modern tokens =====
+  const cardSx = {
+    borderRadius: 4,
+    overflow: 'hidden',
+    border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
+    background:
+      theme.palette.mode === 'dark'
+        ? alpha(theme.palette.background.paper, 0.72)
+        : alpha('#FFFFFF', 0.92),
+    backdropFilter: 'blur(14px)',
+    boxShadow: `0 22px 70px ${alpha('#000', 0.22)}`
   };
 
+  const headerSx = {
+    px: 1.6,
+    pt: 1.6,
+    pb: 1.2,
+    textAlign: 'center',
+    color: 'common.white',
+    background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`
+  };
+
+  const pillChipSx = {
+    mt: 0.8,
+    height: 24,
+    borderRadius: 999,
+    fontWeight: 900,
+    letterSpacing: 0.6,
+    border: `1px solid ${alpha('#fff', 0.24)}`,
+    bgcolor: alpha('#000', 0.16),
+    color: 'common.white',
+    '& .MuiChip-label': { px: 1.1 }
+  };
+
+  const menuItemSx = (tone = 'primary') => ({
+    borderRadius: 2.2,
+    py: 0.9,
+    px: 1.1,
+    transition: 'transform .15s ease, background-color .15s ease',
+    '&:hover': {
+      transform: 'translateY(-1px)',
+      backgroundColor: alpha(theme.palette[tone].main, 0.08)
+    }
+  });
+
+  const tooltipSx = {
+    '& .MuiTooltip-tooltip': {
+      background: alpha('#FFFFFF', 0.92),
+      color: theme.palette.text.primary,
+      borderRadius: 12,
+      border: `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+      boxShadow: `0 16px 40px ${alpha('#000', 0.14)}`,
+      backdropFilter: 'blur(10px)',
+      padding: '10px 12px'
+    },
+    '& .MuiTooltip-arrow': { color: alpha('#FFFFFF', 0.92) }
+  };
+
+  const cardAvatarNode = (() => {
+    const { id, displayImageUrl } = processedUser;
+    const hasError = id && imageErrors[id];
+    const src = `${API_BASE_URL}${displayImageUrl}?t=${Date.now()}`;
+
+    return !hasError ? (
+      <Avatar
+        src={src}
+        alt={username || 'User'}
+        sx={{
+          width: CARD_AVATAR,
+          height: CARD_AVATAR,
+          border: `2px solid ${alpha(theme.palette.common.white, 0.55)}`,
+          boxShadow: `0 14px 34px ${alpha('#000', 0.18)}`,
+          bgcolor: alpha(theme.palette.common.white, 0.15)
+        }}
+        imgProps={{ loading: 'lazy' }}
+        onError={() => handleImageError(id)}
+      />
+    ) : (
+      <Avatar
+        sx={{
+          width: CARD_AVATAR,
+          height: CARD_AVATAR,
+          fontWeight: 900,
+          color: theme.palette.primary.main,
+          bgcolor: alpha(theme.palette.primary.main, 0.12),
+          border: `2px solid ${alpha(theme.palette.common.white, 0.55)}`,
+          boxShadow: `0 14px 34px ${alpha('#000', 0.18)}`
+        }}
+      >
+        {(firstLetter || 'U').toUpperCase()}
+      </Avatar>
+    );
+  })();
+
   const handleView = () => {
+    if (onRequestClose) onRequestClose();
     setOpenViewDialog(true);
     setOpenEditDialog(false);
     setOpenChangePassDialog(false);
@@ -225,109 +220,161 @@ function TabContent() {
   };
 
   const handleEdit = () => {
+    if (onRequestClose) onRequestClose();
     setOpenViewDialog(false);
     setOpenEditDialog(true);
     setOpenChangePassDialog(false);
   };
 
   const handleChangePassword = () => {
+    if (onRequestClose) onRequestClose();
     setOpenViewDialog(false);
     setOpenEditDialog(false);
     setOpenChangePassDialog(true);
   };
 
-  const handleCloseViewDialog = () => setOpenViewDialog(false);
-  const handleCloseEditDialog = () => setOpenEditDialog(false);
-  const handleCloseChangePassDialog = () => setOpenChangePassDialog(false);
-
   return (
     <>
-      <Card
-        sx={{
-          mb: 1,
-          boxShadow: '0 6px 24px rgba(0,0,0,0.07)',
-          border: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <CardContent sx={{ textAlign: 'center', py: 1 }}>
-          <UserImage />
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 0.5, mb: 0.5 }}>
-            {username || 'User'}
-          </Typography>
-          <Chip
-            label={role?.toUpperCase() || 'USER'}
-            size="small"
-            color="primary"
-            sx={{ fontWeight: 600, mb: 0.5, fontSize: '0.8rem', py: 0.75, height: '24px' }}
-          />
-          <Box sx={{ mt: 0.5, minWidth: 160, backgroundColor: theme.palette.background.paper, padding: 0.5, textAlign: 'left' }}>
-            <MenuItem onClick={handleView} sx={{ py: 0.75 }}>
-              <ListItemIcon>
-                <User size={16} color={theme.palette.primary.main} />
-              </ListItemIcon>
-              <ListItemText primary="View" sx={{ '& .MuiTypography-root': { fontSize: '0.85rem' } }} />
-            </MenuItem>
-            <Divider sx={{ my: 0.25 }} />
-            <MenuItem onClick={handleEdit} sx={{ py: 0.75 }}>
-              <ListItemIcon>
-                <Edit2 size={16} color={theme.palette.warning.main} />
-              </ListItemIcon>
-              <ListItemText primary="Edit" sx={{ '& .MuiTypography-root': { fontSize: '0.85rem' } }} />
-            </MenuItem>
-            <Divider sx={{ my: 0.25 }} />
-            <MenuItem onClick={handleChangePassword} sx={{ py: 0.75 }}>
-              <ListItemIcon>
-                <Lock size={16} color={theme.palette.info.main} />
-              </ListItemIcon>
-              <ListItemText primary="Change Password" sx={{ '& .MuiTypography-root': { fontSize: '0.85rem' } }} />
-            </MenuItem>
-            <Divider sx={{ my: 0.25 }} />
-            <MenuItem onClick={handleLogout} sx={{ py: 0.75 }}>
-              <ListItemIcon>
-                <Logout size={16} color={theme.palette.error.main} />
-              </ListItemIcon>
-              <ListItemText primary="Logout" sx={{ '& .MuiTypography-root': { fontSize: '0.85rem' } }} />
-            </MenuItem>
-          </Box>
-        </CardContent>
-      </Card>
+      {/* Only content (NO trigger, NO popover) */}
+      <Box sx={cardSx}>
+        <Box sx={headerSx}>
+          <Stack spacing={1} alignItems="center">
+            <Tooltip
+              arrow
+              placement="bottom"
+              sx={tooltipSx}
+              title={
+                <Box sx={{ minWidth: 220 }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.7 }}>
+                    <Typography sx={{ fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4 }}>
+                      USER SUMMARY
+                    </Typography>
+
+                    <Chip
+                      size="small"
+                      icon={<VerifiedRoundedIcon sx={{ fontSize: 16 }} />}
+                      label={(role || 'USER').toUpperCase()}
+                      sx={{
+                        height: 22,
+                        borderRadius: 999,
+                        fontWeight: 900,
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`
+                      }}
+                    />
+                  </Stack>
+
+                  <Divider sx={{ my: 0.8 }} />
+
+                  <Stack spacing={0.6}>
+                    <Typography sx={{ fontWeight: 900, fontSize: 13 }}>
+                      {username || 'User'}
+                    </Typography>
+                    <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
+                      {email || '—'}
+                    </Typography>
+                    <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
+                      ID: {userId || '—'}
+                    </Typography>
+                  </Stack>
+                </Box>
+              }
+            >
+              <Box sx={{ display: 'inline-flex', borderRadius: '50%' }}>
+                {cardAvatarNode}
+              </Box>
+            </Tooltip>
+
+            <Typography
+              sx={{
+                mt: 0.3,
+                fontWeight: 900,
+                lineHeight: 1.05,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+                fontSize: isMobile ? 14.5 : 15.5
+              }}
+            >
+              {username || 'User'}
+            </Typography>
+
+            <Chip label={(role || 'USER').toUpperCase()} size="small" sx={pillChipSx} />
+          </Stack>
+        </Box>
+
+        <Divider />
+
+        <Box sx={{ p: 1 }}>
+          <MenuItem onClick={handleView} sx={menuItemSx('primary')}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <User size={18} color={theme.palette.primary.main} />
+            </ListItemIcon>
+            <ListItemText primary="View" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+          </MenuItem>
+
+          <MenuItem onClick={handleEdit} sx={menuItemSx('primary')}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <Edit2 size={18} color={theme.palette.primary.main} />
+            </ListItemIcon>
+            <ListItemText primary="Edit" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+          </MenuItem>
+
+          <MenuItem onClick={handleChangePassword} sx={menuItemSx('info')}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <Lock size={18} color={theme.palette.info.main} />
+            </ListItemIcon>
+            <ListItemText primary="Change Password" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+          </MenuItem>
+
+          <Divider sx={{ my: 0.8 }} />
+
+          <MenuItem onClick={handleLogout} sx={menuItemSx('error')}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <Logout size={18} color={theme.palette.error.main} />
+            </ListItemIcon>
+            <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+          </MenuItem>
+        </Box>
+      </Box>
+
+      {/* dialogs */}
       <ViewUserDialog
         open={openViewDialog}
-        onClose={handleCloseViewDialog}
+        onClose={() => setOpenViewDialog(false)}
         user={{ username, email, address, phone, role, profileImageUrl: profileImage, createdAt }}
       />
+
       <ProfileEditDialog
         open={openEditDialog}
-        onClose={handleCloseEditDialog}
+        onClose={() => setOpenEditDialog(false)}
         onUpdate={handleUpdateUser}
         user={{ id: userId, username, email, address, phone, role, profileImageUrl: profileImage }}
       />
+
       <ChangePasswordDialog
         open={openChangePassDialog}
-        onClose={handleCloseChangePassDialog}
+        onClose={() => setOpenChangePassDialog(false)}
         onUpdate={handleUpdatePassword}
         user={{ email }}
       />
+
+      {/* Snackbar */}
       <Portal>
         <Snackbar
           open={snackbarOpen}
-          autoHideDuration={5000}
+          autoHideDuration={4000}
           onClose={() => setSnackbarOpen(false)}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
           <Alert
             onClose={() => setSnackbarOpen(false)}
             severity={error ? 'error' : 'success'}
-            sx={{ width: '100%', fontSize: '0.85rem', py: 1 }}
+            sx={{ width: '100%', fontSize: '0.9rem', py: 1 }}
           >
-            {error || success || 'Logout successful'}
+            {error || success || 'Done'}
           </Alert>
         </Snackbar>
       </Portal>
     </>
   );
 }
-
-TabContent.propTypes = { children: PropTypes.node };
-export default TabContent;

@@ -1,19 +1,41 @@
-// material-ui
-import { useTheme } from '@mui/material/styles';
+import PropTypes from 'prop-types';
 
-// import ảnh logo bạn muốn dùng
+// material-ui
+import Box from '@mui/material/Box';
+import { useTheme, alpha } from '@mui/material/styles';
+
+// logo asset
 import logoYoungone from '../../assets/svg/logos/logo-youngone.png';
 
-export default function LogoMain() {
+export default function LogoMain({ sx }) {
   const theme = useTheme();
 
   return (
-    <img
+    <Box
+      component="img"
       src={logoYoungone}
-      alt="icon logo"
-      width="260"
-    
-      style={{ height: 'auto', marginLeft: '-15px' }}
+      alt="Youngone logo"
+      draggable={false}
+      sx={{
+        display: 'block',
+        width: '100%',
+        height: 'auto',
+        maxWidth: 150,
+        mr: 'auto',
+
+        // tinh tế hơn (đỡ gắt)
+        opacity: 0.92,
+        filter: `
+          drop-shadow(0 10px 22px ${alpha(theme.palette.common.black, 0.35)})
+          saturate(1.05)
+        `,
+
+        ...sx
+      }}
     />
   );
 }
+
+LogoMain.propTypes = {
+  sx: PropTypes.object
+};
