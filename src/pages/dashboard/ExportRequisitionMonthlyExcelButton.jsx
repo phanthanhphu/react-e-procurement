@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../../config.js';
 
 export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
   const [createdDate, setCreatedDate] = useState('');
+  const [currency, setCurrency] = useState('VND'); // ✅ currency from group summary
 
   useEffect(() => {
     if (!groupId) return;
@@ -17,11 +18,17 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
       try {
         const res = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`);
         const data = await res.json();
+
+        // ✅ currency
+        setCurrency(String(data.currency || 'VND').trim().toUpperCase());
+
+        // createdDate: [year, month, day]
         if (data.createdDate && Array.isArray(data.createdDate)) {
           const [y, m, d] = data.createdDate;
           setCreatedDate(`${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`);
         }
       } catch (e) {
+        setCurrency('VND');
         setCreatedDate('05/12/2025');
       }
     };
@@ -35,21 +42,141 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
     return Number.isNaN(n) ? 0 : n;
   };
 
-  const fmtVN = (v) => {
-    const n = safeNum(v);
-    return n.toLocaleString('vi-VN');
+  // lastPurchaseDate is array [y,m,d,h,mi,s,nano]
+  const fmtDateTime = (arr) => {
+    if (!arr || !Array.isArray(arr) || arr.length < 3) return '';
+    const [y, m, d, hh = 0, mm = 0] = arr;
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y} ${String(hh).padStart(
+      2,
+      '0'
+    )}:${String(mm).padStart(2, '0')}`;
+  };
+
+  // ✅ Only 3 currencies: VND, USD, EURO (also accept EUR)
+  const getMoneyNumFmt = (curr) => {
+    const code = String(curr || 'VND').trim().toUpperCase();
+    if (code === 'VND') return '#,##0'; // 12,000
+    if (code === 'USD' || code === 'EURO' || code === 'EUR') return '#,##0.00'; // 12,000.00
+    return '#,##0.00';
+  };
+
+  // ✅ derive previous month display from createdDate (dd/MM/yyyy)
+  const getPreviousMonthDisplay = (createdDateStr) => {
+    try {
+      if (!createdDateStr || typeof createdDateStr !== 'string')
+        return { prevMonthNum: null, prevMonthName: null };
+      const parts = createdDateStr.split('/');
+      if (parts.length !== 3) return { prevMonthNum: null, prevMonthName: null };
+
+      const m = Number(parts[1]); // 1..12
+      if (!Number.isFinite(m) || m < 1 || m > 12) return { prevMonthNum: null, prevMonthName: null };
+
+      const prevMonth = m === 1 ? 12 : m - 1;
+      const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const prevMonthName = monthNamesShort[prevMonth - 1] || null;
+
+      return { prevMonthNum: prevMonth, prevMonthName };
+    } catch {
+      return { prevMonthNum: null, prevMonthName: null };
+    }
   };
 
   const exportToExcel = async () => {
-    if (!groupId) return alert('Thiếu groupId');
+    if (!groupId) return alert('Missing groupId');
 
     try {
+      const moneyNumFmt = getMoneyNumFmt(currency);
+
+      // ✅ dynamic label (example: createdDate month=12 => prev month=11 => "Total Purchase (Nov)")
+      const { prevMonthNum, prevMonthName } = getPreviousMonthDisplay(createdDate);
+      const totalPurchasePrevMonthLabel =
+        prevMonthName && prevMonthNum
+          ? `Total Purchase (${prevMonthName})`
+          : 'Total Purchase (Previous Month)';
+
+      // 1) Main grouped API
       const res = await axios.get(`${API_BASE_URL}/comparison-monthly-grouped`, {
         params: { groupId, removeDuplicateSuppliers: false },
       });
 
       const { groups: rawGroups, grandTotal } = res.data;
       const groups = rawGroups || [];
+
+      // 2) Fetch MONTHLY requisitions (remark + last purchase fields)
+      const remarkMap = new Map();
+      const lastPurchaseMap = new Map(); // key: requisitionId -> { qty, supplier, price, dateArr }
+
+      try {
+        const remarkRes = await axios.get(`${API_BASE_URL}/requisition-monthly/filter`, {
+          params: {
+            groupId,
+            hasFilter: false,
+            disablePagination: true,
+            includeMonthlyLastPurchase: true, // ✅ IMPORTANT
+            page: 0,
+            size: 2147483647,
+            sort: 'string',
+          },
+          headers: { Accept: '*/*' },
+        });
+
+        const list = remarkRes?.data?.requisitions?.content || [];
+        list.forEach((item) => {
+          if (!item?.id) return;
+
+          remarkMap.set(item.id, item.remark ?? '');
+
+          lastPurchaseMap.set(item.id, {
+            qty: item.lastPurchaseOrderQty ?? null,
+            supplier: item.lastPurchaseSupplierName ?? '',
+            price: item.lastPurchasePrice ?? null,
+            dateArr: item.lastPurchaseDate ?? null,
+          });
+        });
+      } catch (e) {
+        console.warn('Failed to fetch requisition-monthly/filter (remark/last purchase).', e);
+      }
+
+      const pickRemark = (req) => {
+        const direct =
+          req?.remark ??
+          req?.remarkComparison ??
+          req?.requisition?.remark ??
+          req?.requisitionDetail?.remark ??
+          null;
+
+        if (direct != null && direct !== '') return String(direct);
+
+        const keys = [
+          req?.id,
+          req?.requisitionId,
+          req?.reqId,
+          req?.requisition?.id,
+          req?.requisitionDetail?.id,
+        ].filter(Boolean);
+
+        for (const k of keys) {
+          const v = remarkMap.get(k);
+          if (v != null && v !== '') return String(v);
+        }
+        return '';
+      };
+
+      const pickLastPurchase = (req) => {
+        const keys = [
+          req?.id,
+          req?.requisitionId,
+          req?.reqId,
+          req?.requisition?.id,
+          req?.requisitionDetail?.id,
+        ].filter(Boolean);
+
+        for (const k of keys) {
+          const v = lastPurchaseMap.get(k);
+          if (v) return v;
+        }
+        return { qty: null, supplier: '', price: null, dateArr: null };
+      };
 
       // ===== Departments list =====
       const deptSet = new Set();
@@ -66,18 +193,35 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
       const deptLen = departments.length;
 
       // ===== Columns index =====
-      // A..H = 0..7  (No, Type1, Type2, EN, VN, OldSAP, HanaSAP, Unit)
       const FIXED_COLS = 8;
-      const deptStartCol = FIXED_COLS; // 8
+      const deptStartCol = FIXED_COLS;
       const deptEndCol = deptStartCol + deptLen - 1;
 
-      const totalRequestCol = FIXED_COLS + deptLen; // after depts
-      const confirmedCol = totalRequestCol + 1;
-      const priceCol = confirmedCol + 1;
-      const amountCol = priceCol + 1;
-      const suppliersCol = amountCol + 1;
+      const totalRequestCol = FIXED_COLS + deptLen;
 
-      const totalCols = FIXED_COLS + deptLen + 5; // + TotalRequest + Confirmed + Price + Amount + Suppliers
+      // Confirmed MED (3 cols)
+      const medQtyCol = totalRequestCol + 1;
+      const medPriceCol = medQtyCol + 1;
+      const medAmountCol = medPriceCol + 1;
+
+      // ✅ LAST PURCHASE (PREVIOUS MONTH) (4 cols)
+      const lastTotalPurchaseCol = medAmountCol + 1;
+      const lastSupplierCol = lastTotalPurchaseCol + 1;
+      const lastPriceCol = lastSupplierCol + 1;
+      const lastDateCol = lastPriceCol + 1;
+
+      // Price/Amount OUTSIDE MED (from DB)
+      const priceCol = lastDateCol + 1;
+      const amountCol = priceCol + 1;
+
+      const suppliersCol = amountCol + 1;
+      const remarkCol = suppliersCol + 1;
+
+      // ✅ money columns (apply numFmt)
+      const moneyCols = [medPriceCol, medAmountCol, lastPriceCol, priceCol, amountCol];
+
+      // FIXED + dept + (TotalRequest 1) + (MED 3) + (LAST 4) + (Price/Amount 2) + (Suppliers 1) + (Remark 1)
+      const totalCols = FIXED_COLS + deptLen + 12;
 
       const wsData = [];
 
@@ -103,10 +247,21 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
           'Unit',
           ...departments.map(() => 'Departments'),
           'Total Request',
-          'Confirmed MED Quantity',
+
+          'Confirmed MED',
+          '',
+          '',
+
+          'LAST PURCHASE (PREVIOUS MONTH)',
+          '',
+          '',
+          '',
+
           'Price',
           'Amount',
+
           'Suppliers',
+          'Remark',
         ])
       );
 
@@ -122,7 +277,18 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
           '',
           '',
           ...departments,
+
           '',
+
+          "Q'TY",
+          'PRICE',
+          'AMOUNT',
+
+          totalPurchasePrevMonthLabel,
+          'Last Supplier (Latest)',
+          'Last Price (Latest)',
+          'Last Purchase Date (Latest)',
+
           '',
           '',
           '',
@@ -133,13 +299,12 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
       let itemNo = 1;
       let groupIndex = 1;
 
-      // grand totals
       const grandDeptQty = {};
       departments.forEach((d) => (grandDeptQty[d] = 0));
       let grandTotalRequest = 0;
       let grandConfirmedQty = 0;
+      let grandLastTotalPurchase = 0;
 
-      // track rows to merge A..H
       const mergeLabelRows = [];
 
       groups.forEach((group) => {
@@ -150,6 +315,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
         departments.forEach((d) => (groupDeptQty[d] = 0));
         let groupTotalRequest = 0;
         let groupConfirmedQty = 0;
+        let groupLastTotalPurchase = 0;
+
         let groupSumPrice = 0;
         let groupSumAmount = 0;
 
@@ -160,6 +327,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
           departments.forEach((d) => (subDeptQty[d] = 0));
           let subTotalRequest = 0;
           let subConfirmedQty = 0;
+          let subLastTotalPurchase = 0;
+
           let subSumPrice = 0;
           let subSumAmount = 0;
 
@@ -177,23 +346,37 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
               grandDeptQty[deptName] = safeNum(grandDeptQty[deptName]) + qty;
             });
 
-            const selected = (req.suppliers || []).find((s) => s.isSelected === 1) || req.suppliers?.[0] || {};
+            const selected =
+              (req.suppliers || []).find((s) => s.isSelected === 1) || req.suppliers?.[0] || {};
             const price = safeNum(selected.price ?? req.price ?? 0);
             const amount = safeNum(req.amount ?? 0);
 
-            subTotalRequest += safeNum(req.totalRequestQty ?? 0);
-            subConfirmedQty += safeNum(req.dailyMedInventory ?? 0);
+            const totalReq = safeNum(req.totalRequestQty ?? 0);
+            const confirmedQty = safeNum(req.dailyMedInventory ?? 0);
 
-            groupTotalRequest += safeNum(req.totalRequestQty ?? 0);
-            groupConfirmedQty += safeNum(req.dailyMedInventory ?? 0);
+            subTotalRequest += totalReq;
+            subConfirmedQty += confirmedQty;
 
-            grandTotalRequest += safeNum(req.totalRequestQty ?? 0);
-            grandConfirmedQty += safeNum(req.dailyMedInventory ?? 0);
+            groupTotalRequest += totalReq;
+            groupConfirmedQty += confirmedQty;
+
+            grandTotalRequest += totalReq;
+            grandConfirmedQty += confirmedQty;
 
             subSumPrice += price;
             subSumAmount += amount;
             groupSumPrice += price;
             groupSumAmount += amount;
+
+            const lp = pickLastPurchase(req);
+            const lpQty = safeNum(lp?.qty ?? 0);
+            const lpSupplier = lp?.supplier ?? '';
+            const lpPrice = lp?.price != null ? Number(lp.price) : ''; // ✅ keep number if exists
+            const lpDate = fmtDateTime(lp?.dateArr);
+
+            subLastTotalPurchase += lpQty;
+            groupLastTotalPurchase += lpQty;
+            grandLastTotalPurchase += lpQty;
 
             const currentItemNo = itemNo++;
 
@@ -208,49 +391,92 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
                 req.hanaSapCode || '',
                 req.unit || '',
                 ...departments.map((d) => (deptMap[d] != null ? deptMap[d] : '')),
-                safeNum(req.totalRequestQty ?? 0),
-                safeNum(req.dailyMedInventory ?? 0),
-                fmtVN(price),
-                fmtVN(amount),
+                totalReq,
+
+                confirmedQty,
+                '', // MED price (nếu có thì set số)
+                '', // MED amount (nếu có thì set số)
+
+                lpQty,
+                lpSupplier,
+                lpPrice,
+                lpDate,
+
+                price,
+                amount,
+
                 selected.supplierName || '',
+                pickRemark(req),
               ])
             );
           });
 
-          // ===== SUB TOTAL row (label in col A because merge A..H) =====
           const subLabel = `SUB TOTAL ${groupIndex}.${subgroupIndex}`;
           const subRowIndex = wsData.length;
 
           wsData.push(
             padRow([
-              subLabel, // col A
-              '', '', '', '', '', '', '',
+              subLabel,
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
               ...departments.map((d) => (subDeptQty[d] != null ? subDeptQty[d] : '')),
               subTotalRequest,
+
               subConfirmedQty,
-              fmtVN(subSumPrice),
-              fmtVN(subSumAmount),
+              '',
+              '',
+
+              subLastTotalPurchase,
+              '',
+              '',
+              '',
+
+              subSumPrice,
+              subSumAmount,
+
+              '',
               '',
             ])
           );
 
-          mergeLabelRows.push(subRowIndex); // merge A..H
+          mergeLabelRows.push(subRowIndex);
           subgroupIndex++;
         });
 
-        // ===== TOTAL group row =====
         const totalLabel = `TOTAL ${groupIndex}`;
         const totalRowIndex = wsData.length;
 
         wsData.push(
           padRow([
-            totalLabel, // col A
-            '', '', '', '', '', '', '',
+            totalLabel,
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
             ...departments.map((d) => (groupDeptQty[d] != null ? groupDeptQty[d] : '')),
             groupTotalRequest,
+
             groupConfirmedQty,
-            fmtVN(groupSumPrice),
-            fmtVN(groupSumAmount),
+            '',
+            '',
+
+            groupLastTotalPurchase,
+            '',
+            '',
+            '',
+
+            groupSumPrice,
+            groupSumAmount,
+
+            '',
             '',
           ])
         );
@@ -259,7 +485,6 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
         groupIndex++;
       });
 
-      // ===== Grand Total row =====
       const totalGrandPrice = groups.reduce(
         (sum, g) =>
           sum +
@@ -267,7 +492,8 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
             (s, sg) =>
               s +
               (sg.requisitions || []).reduce((t, req) => {
-                const sel = (req.suppliers || []).find((x) => x.isSelected === 1) || req.suppliers?.[0] || {};
+                const sel =
+                  (req.suppliers || []).find((x) => x.isSelected === 1) || req.suppliers?.[0] || {};
                 return t + safeNum(sel.price ?? req.price ?? 0);
               }, 0),
             0
@@ -279,13 +505,30 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
 
       wsData.push(
         padRow([
-          'TOTAL', // ✅ uppercase
-          '', '', '', '', '', '', '',
+          'TOTAL',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
           ...departments.map((d) => (grandDeptQty[d] != null ? grandDeptQty[d] : '')),
           grandTotalRequest,
+
           grandConfirmedQty,
-          fmtVN(totalGrandPrice),
-          fmtVN(grandTotal?.totalAmount || 0),
+          '',
+          '',
+
+          grandLastTotalPurchase,
+          '',
+          '',
+          '',
+
+          totalGrandPrice,
+          safeNum(grandTotal?.totalAmount || 0),
+
+          '',
           '',
         ])
       );
@@ -337,11 +580,10 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
 
       const border = { style: 'thin', color: { rgb: '000000' } };
       const commonBorder = { top: border, bottom: border, left: border, right: border };
-
       const centerStyle = { alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
       const range = XLSX.utils.decode_range(ws['!ref']);
 
-      // ===== Styles (create missing cells too) =====
+      // ===== Styles =====
       for (let R = 0; R <= range.e.r; R++) {
         for (let C = 0; C <= range.e.c; C++) {
           const ref = XLSX.utils.encode_cell({ r: R, c: C });
@@ -368,7 +610,6 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
               alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
               border: commonBorder,
             };
-            // label cell (col A) align left to look nicer
             if (C === 0) ws[ref].s.alignment.horizontal = 'left';
           } else if (upperLabel.startsWith('TOTAL')) {
             ws[ref].s = {
@@ -379,7 +620,6 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
             };
             if (C === 0) ws[ref].s.alignment.horizontal = 'left';
           } else if (R >= wsData.length - 7) {
-            // signature area
             if (R === wsData.length - 5) {
               ws[ref].s = { font: { bold: true, name: 'Times New Roman', sz: 12 }, alignment: { horizontal: 'center' } };
             } else if (R === wsData.length - 2) {
@@ -390,18 +630,33 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
           } else {
             ws[ref].s = { font: { sz: 11, name: 'Times New Roman' }, ...centerStyle, border: commonBorder };
           }
+
+          // ✅ Apply Excel number format for money columns (ONLY numeric cells, data rows)
+          if (R >= 3 && moneyCols.includes(C) && ws[ref]?.t === 'n') {
+            ws[ref].s = {
+              ...(ws[ref].s || {}),
+              numFmt: moneyNumFmt,
+            };
+          }
         }
       }
 
-      // ✅ FORCE CENTER for: Departments + Total Request + Confirmed + Price + Amount + Suppliers (header + values)
-      const signatureBlockStart = wsData.length - 7; // 7 rows signature block
+      // Force center alignment
+      const signatureBlockStart = wsData.length - 7;
       const centerCols = [
         ...Array.from({ length: deptLen }, (_, i) => deptStartCol + i),
         totalRequestCol,
-        confirmedCol,
+        medQtyCol,
+        medPriceCol,
+        medAmountCol,
+        lastTotalPurchaseCol,
+        lastSupplierCol,
+        lastPriceCol,
+        lastDateCol,
         priceCol,
         amountCol,
         suppliersCol,
+        remarkCol,
       ];
 
       const forceCenter = (r, c) => {
@@ -423,39 +678,37 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
 
       // ===== MERGES =====
       const merges = [
-        // title merge
         { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
 
-        // header fixed merges
-        { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, // No
-        { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } }, // Type1
-        { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } }, // Type2
-        { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } }, // Description group EN/VN
-        { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } }, // Old SAP
-        { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } }, // Hana
-        { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } }, // Unit
+        { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
+        { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
+        { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
+        { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } },
+        { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
+        { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } },
+        { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } },
       ];
 
-      // departments group header merge (only if deptLen > 0)
-      if (deptLen > 0) {
-        merges.push({ s: { r: 1, c: deptStartCol }, e: { r: 1, c: deptEndCol } });
-      }
+      if (deptLen > 0) merges.push({ s: { r: 1, c: deptStartCol }, e: { r: 1, c: deptEndCol } });
 
-      // totals columns vertical merge row1-row2
+      merges.push({ s: { r: 1, c: totalRequestCol }, e: { r: 2, c: totalRequestCol } });
+
+      merges.push({ s: { r: 1, c: medQtyCol }, e: { r: 1, c: medAmountCol } });
+
+      merges.push({ s: { r: 1, c: lastTotalPurchaseCol }, e: { r: 1, c: lastDateCol } });
+
       merges.push(
-        { s: { r: 1, c: totalRequestCol }, e: { r: 2, c: totalRequestCol } },
-        { s: { r: 1, c: confirmedCol }, e: { r: 2, c: confirmedCol } },
         { s: { r: 1, c: priceCol }, e: { r: 2, c: priceCol } },
-        { s: { r: 1, c: amountCol }, e: { r: 2, c: amountCol } },
-        { s: { r: 1, c: suppliersCol }, e: { r: 2, c: suppliersCol } }
+        { s: { r: 1, c: amountCol }, e: { r: 2, c: amountCol } }
       );
 
-      // ✅ merge SUB TOTAL / TOTAL / GRAND TOTAL rows from A..H (0..7)
-      mergeLabelRows.forEach((r) => {
-        merges.push({ s: { r, c: 0 }, e: { r, c: 7 } });
-      });
+      merges.push(
+        { s: { r: 1, c: suppliersCol }, e: { r: 2, c: suppliersCol } },
+        { s: { r: 1, c: remarkCol }, e: { r: 2, c: remarkCol } }
+      );
 
-      // signature merges
+      mergeLabelRows.forEach((r) => merges.push({ s: { r, c: 0 }, e: { r, c: 7 } }));
+
       startPositions.forEach((startCol) => {
         const endCol = Math.min(startCol + 2, totalCols - 1);
         merges.push(
@@ -473,28 +726,43 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
       ws['!cols'][5] = ws['!cols'][6] = { wch: 16 };
       ws['!cols'][7] = { wch: 10 };
 
-      // dept cols
       for (let i = 0; i < deptLen; i++) ws['!cols'][deptStartCol + i] = { wch: 16 };
 
       ws['!cols'][totalRequestCol] = { wch: 16 };
-      ws['!cols'][confirmedCol] = { wch: 22 };
+
+      ws['!cols'][medQtyCol] = { wch: 10 };
+      ws['!cols'][medPriceCol] = { wch: 12 };
+      ws['!cols'][medAmountCol] = { wch: 12 };
+
+      ws['!cols'][lastTotalPurchaseCol] = { wch: 22 };
+      ws['!cols'][lastSupplierCol] = { wch: 24 };
+      ws['!cols'][lastPriceCol] = { wch: 18 };
+      ws['!cols'][lastDateCol] = { wch: 24 };
+
       ws['!cols'][priceCol] = { wch: 14 };
       ws['!cols'][amountCol] = { wch: 16 };
+
       ws['!cols'][suppliersCol] = { wch: 22 };
+      ws['!cols'][remarkCol] = { wch: 22 };
 
       // ===== Export file =====
       const now = new Date();
-      const fileName = `request_monthly_${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}.xlsx`;
+      const fileName = `request_monthly_${String(now.getDate()).padStart(2, '0')}${String(
+        now.getMonth() + 1
+      ).padStart(2, '0')}${now.getFullYear()}_${String(now.getHours()).padStart(2, '0')}${String(
+        now.getMinutes()
+      ).padStart(2, '0')}.xlsx`;
 
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       saveAs(new Blob([wbout]), fileName);
     } catch (err) {
       console.error('Export error:', err);
-      alert('Lỗi xuất file');
+      alert('Failed to export file');
     }
   };
 
   return (
+    
     <Button
       variant="contained"
       color="success"
@@ -502,7 +770,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
       startIcon={<img src={ExcelIcon} alt="Excel" style={{ width: 20, height: 20 }} />}
       sx={{ textTransform: 'none', borderRadius: 1, px: 2, py: 0.6, fontWeight: 600, fontSize: '0.75rem' }}
     >
-      Export Monthly
+      Summary
     </Button>
   );
 }

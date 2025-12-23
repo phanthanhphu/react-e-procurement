@@ -99,15 +99,13 @@ const parseJwt = (token) => {
 const looksLikeEmail = (v) => typeof v === 'string' && v.includes('@') && v.includes('.');
 
 const getUserEmail = () => {
-  // 1) direct keys
   const direct =
     localStorage.getItem('email') ||
     localStorage.getItem('userEmail') ||
-    localStorage.getItem('username'); // nhiều hệ thống username = email
+    localStorage.getItem('username');
 
   if (direct && looksLikeEmail(String(direct).trim())) return String(direct).trim();
 
-  // 2) decode token
   const token = localStorage.getItem('token');
   if (!token) return null;
 
@@ -154,6 +152,141 @@ const toBoolStrict = (v) => {
     if (['false', '0', 'no', 'n', ''].includes(s)) return false;
   }
   return Boolean(v);
+};
+
+/* =========================
+   ✅ Frontend sort fallback
+   ========================= */
+const arrayDateToTime = (arr) => {
+  if (!Array.isArray(arr) || arr.length < 3) return null;
+  const [y, m, d, hh = 0, mm = 0, ss = 0, ns = 0] = arr;
+  return new Date(y, m - 1, d, hh, mm, ss, Math.floor(ns / 1e6)).getTime();
+};
+
+const normalizeForCompare = (v) => {
+  if (v == null) return { type: 'empty', val: '' };
+
+  if (Array.isArray(v)) {
+    const t = arrayDateToTime(v);
+    if (t != null && !Number.isNaN(t)) return { type: 'number', val: t };
+    return { type: 'string', val: String(v).toLowerCase() };
+  }
+
+  if (v instanceof Date) return { type: 'number', val: v.getTime() };
+  if (typeof v === 'number') return { type: 'number', val: v };
+  if (typeof v === 'boolean') return { type: 'number', val: v ? 1 : 0 };
+
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return { type: 'empty', val: '' };
+
+    const maybeNum = Number(s.replace(/,/g, ''));
+    if (!Number.isNaN(maybeNum) && /^[\d.,-]+$/.test(s)) {
+      return { type: 'number', val: maybeNum };
+    }
+
+    const t = Date.parse(s);
+    if (!Number.isNaN(t) && /\d/.test(s)) {
+      return { type: 'number', val: t };
+    }
+
+    return { type: 'string', val: s.toLowerCase() };
+  }
+
+  return { type: 'string', val: String(v).toLowerCase() };
+};
+
+const compareNormalized = (aN, bN) => {
+  if (aN.type === 'empty' && bN.type === 'empty') return 0;
+  if (aN.type === 'empty') return 1;
+  if (bN.type === 'empty') return -1;
+
+  if (aN.type === 'number' && bN.type === 'number') return aN.val - bN.val;
+
+  const aS = aN.type === 'number' ? String(aN.val) : aN.val;
+  const bS = bN.type === 'number' ? String(bN.val) : bN.val;
+  return aS.localeCompare(bS, 'vi', { numeric: true, sensitivity: 'base' });
+};
+
+const getSortValueWeekly = (item, key) => {
+  const r = item?.requisition || {};
+  const sp = item?.supplierProduct || null;
+
+  switch (key) {
+    case 'productType1Name':
+      return item?.productType1Name;
+    case 'productType2Name':
+      return item?.productType2Name;
+
+    case 'englishName':
+      return r?.englishName;
+    case 'vietnameseName':
+      return r?.vietnameseName;
+
+    case 'oldSapCode':
+      return r?.oldSapCode;
+    case 'hanaSapCode':
+      return r?.hanaSapCode;
+
+    case 'unit':
+      return item?.unit || r?.unit;
+
+    case 'requestQty':
+      return item?.requestQty;
+    case 'orderQty':
+      return r?.orderQty ?? item?.orderQty;
+
+    case 'supplierName':
+      return sp?.supplierName || item?.supplierName;
+
+    case 'price':
+      return sp?.price ?? item?.price;
+    case 'currency':
+      return item?.currency;
+
+    case 'amount':
+      return item?.amount;
+
+    case 'reason':
+      return r?.reason || item?.reason;
+    case 'remark':
+      return r?.remark || item?.remarkComparison || item?.remark;
+
+    case 'goodType':
+      return item?.goodType;
+
+    case 'createdDate':
+      return item?.createdDate || r?.createdAt;
+    case 'updatedDate':
+      return item?.updatedDate || r?.updatedAt;
+
+    case 'completedDate':
+      return item?.completedDate;
+
+    default:
+      return item?.[key];
+  }
+};
+
+const sortDataClientSide = (rows, sortKey, sortDir) => {
+  if (!sortKey || !sortDir) return rows;
+  const dirMul = sortDir === 'asc' ? 1 : -1;
+
+  return rows
+    .map((row, idx) => ({ row, idx }))
+    .sort((a, b) => {
+      const aV = getSortValueWeekly(a.row, sortKey);
+      const bV = getSortValueWeekly(b.row, sortKey);
+
+      const aN = normalizeForCompare(aV);
+      const bN = normalizeForCompare(bV);
+
+      const cmp = compareNormalized(aN, bN);
+      if (cmp !== 0) return cmp * dirMul;
+
+      return a.idx - b.idx;
+    })
+    .map((x) => x.row);
 };
 
 /* =========================
@@ -390,6 +523,7 @@ export default function SummaryPage() {
 
   /* =========================
      Fetch data (supports overrides)
+     ✅ Added: frontend fallback sort
      ========================= */
   const fetchData = useCallback(
     async (overrides = {}) => {
@@ -405,10 +539,10 @@ export default function SummaryPage() {
 
       try {
         const hasSearch = Object.values(effSearch).some((v) => v && String(v).trim() !== '');
+
         const canSort = effSort.key && effSort.key !== 'select' && effSort.key !== 'no' && effSort.direction;
-        const sortParam = canSort
-          ? `${HEADERS.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
-          : 'updatedDate,desc';
+        const backendKey = HEADERS.find((h) => h.key === effSort.key)?.backendKey || effSort.key;
+        const sortParam = canSort ? `${backendKey},${effSort.direction}` : 'updatedDate,desc';
 
         const params = {
           groupId,
@@ -446,8 +580,10 @@ export default function SummaryPage() {
           };
         });
 
-        setData(mapped);
-        setTotalElements(res.data?.totalElements ?? mapped.length);
+        const finalRows = canSort ? sortDataClientSide(mapped, effSort.key, effSort.direction) : mapped;
+
+        setData(finalRows);
+        setTotalElements(res.data?.totalElements ?? finalRows.length);
       } catch (e) {
         console.error('Fetch data error:', e.response?.data || e.message);
         setError(`Failed to fetch data: ${e.message}`);
@@ -469,14 +605,14 @@ export default function SummaryPage() {
     fetchData();
   }, [fetchGroupStatus, fetchData, navigate]);
 
-  // ✅ NEW: chỉ reset pending khi đổi context (group/page/size/sort/search)
+  // ✅ reset pending khi đổi context (group/page/size/sort/search)
   const searchKey = useMemo(() => JSON.stringify(searchValues), [searchValues]);
   useEffect(() => {
     setPendingComplete(new Set());
     setPendingUncomplete(new Set());
   }, [groupId, page, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
 
-  // ✅ NEW: nếu group Completed thì clear pending (read-only)
+  // ✅ nếu group Completed thì clear pending (read-only)
   useEffect(() => {
     if (isGroupCompleted) {
       setPendingComplete(new Set());
@@ -576,9 +712,7 @@ export default function SummaryPage() {
   };
 
   /* =========================
-     API actions (✅ FIXED)
-     ✅ Mark Completed chỉ clear pendingComplete
-     ✅ Mark Uncompleted chỉ clear pendingUncomplete
+     API actions
      ========================= */
   const handleMarkCompleted = async () => {
     if (loading || isGroupCompleted || pendingCompleteIds.length === 0) return;
@@ -601,10 +735,7 @@ export default function SummaryPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
-
-      // ✅ FIX: chỉ clear pendingComplete
       setPendingComplete(new Set());
-
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark completed error:', e.response?.data || e.message);
@@ -639,10 +770,7 @@ export default function SummaryPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
-
-      // ✅ FIX: chỉ clear pendingUncomplete
       setPendingUncomplete(new Set());
-
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark uncompleted error:', e.response?.data || e.message);
@@ -710,6 +838,20 @@ export default function SummaryPage() {
       setLoading(false);
       cancelDelete();
     }
+  };
+
+  // ✅ NEW: click row -> open edit (trừ khi click vào control)
+  const shouldIgnoreRowClick = (e) => {
+    const t = e?.target;
+    return !!t?.closest?.(
+      'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root'
+    );
+  };
+
+  const handleRowClick = (item) => (e) => {
+    if (isGroupCompleted) return;
+    if (shouldIgnoreRowClick(e)) return;
+    openEdit(item);
   };
 
   // Click header -> asc -> desc -> none
@@ -826,7 +968,6 @@ export default function SummaryPage() {
     borderRight: 'none',
   });
 
-  // icon sort luôn hiện ở cột sortable
   const renderSortIndicator = (key) => {
     const active = sortConfig.key === key && !!sortConfig.direction;
 
@@ -880,10 +1021,18 @@ export default function SummaryPage() {
 
   return (
     <Box sx={{ p: 1.5, minHeight: '100vh', backgroundColor: '#f7f7f7' }}>
-      <Notification open={notification.open} message={notification.message} severity={notification.severity} onClose={closeNotification} />
+      <Notification
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={closeNotification}
+      />
 
       {/* Header */}
-      <Paper elevation={0} sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+      <Paper
+        elevation={0}
+        sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
+      >
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
           <Stack spacing={0.5}>
             <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Weekly Requisition</Typography>
@@ -925,7 +1074,10 @@ export default function SummaryPage() {
       </Paper>
 
       {/* Bulk actions */}
-      <Paper elevation={0} sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+      <Paper
+        elevation={0}
+        sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
+      >
         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={1}>
           <Button
             variant="contained"
@@ -952,7 +1104,12 @@ export default function SummaryPage() {
       </Paper>
 
       {/* Search */}
-      <RequisitionSearch searchValues={searchValues} onSearchChange={handleSearchChange} onSearch={handleSearch} onReset={handleReset} />
+      <RequisitionSearch
+        searchValues={searchValues}
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearch}
+        onReset={handleReset}
+      />
 
       {loading && (
         <Typography align="center" sx={{ mt: 1.5, fontSize: '0.85rem', color: 'text.secondary' }}>
@@ -986,7 +1143,22 @@ export default function SummaryPage() {
                     <TableCell
                       key={key}
                       align={
-                        ['select', 'no', 'price', 'currency', 'amount', 'requestQty', 'orderQty', 'goodType', 'createdDate', 'updatedDate', 'completedDate', 'image', 'actions', 'unit'].includes(key)
+                        [
+                          'select',
+                          'no',
+                          'price',
+                          'currency',
+                          'amount',
+                          'requestQty',
+                          'orderQty',
+                          'goodType',
+                          'createdDate',
+                          'updatedDate',
+                          'completedDate',
+                          'image',
+                          'actions',
+                          'unit',
+                        ].includes(key)
                           ? 'center'
                           : 'left'
                       }
@@ -1002,6 +1174,7 @@ export default function SummaryPage() {
                               checked={headerChecked}
                               indeterminate={headerIndeterminate}
                               onChange={(e) => setDesiredForAll(e.target.checked)}
+                              onClick={(e) => e.stopPropagation()}
                               sx={{ p: 0.2 }}
                             />
                           </span>
@@ -1012,7 +1185,22 @@ export default function SummaryPage() {
                           spacing={0.6}
                           alignItems="center"
                           justifyContent={
-                            ['select', 'no', 'price', 'currency', 'amount', 'requestQty', 'orderQty', 'goodType', 'createdDate', 'updatedDate', 'completedDate', 'image', 'actions', 'unit'].includes(key)
+                            [
+                              'select',
+                              'no',
+                              'price',
+                              'currency',
+                              'amount',
+                              'requestQty',
+                              'orderQty',
+                              'goodType',
+                              'createdDate',
+                              'updatedDate',
+                              'completedDate',
+                              'image',
+                              'actions',
+                              'unit',
+                            ].includes(key)
                               ? 'center'
                               : 'flex-start'
                           }
@@ -1042,23 +1230,32 @@ export default function SummaryPage() {
                     return (
                       <TableRow
                         key={rowId || idx}
+                        onClick={handleRowClick(item)} // ✅ CLICK ROW OPEN EDIT
                         sx={{
                           backgroundColor: zebra,
                           '&:hover': { backgroundColor: '#f1f5f9' },
                           '& > *': { borderBottom: '1px solid #f3f4f6' },
+                          cursor: isGroupCompleted ? 'default' : 'pointer',
                         }}
                       >
-                        <TableCell align="center" sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}>
+                        <TableCell
+                          align="center"
+                          sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}
+                        >
                           <Checkbox
                             size="small"
                             disabled={isGroupCompleted || !rowId}
                             checked={desiredCompleted}
                             onChange={(e) => setDesiredForOne(rowId, currentCompleted, e.target.checked)}
+                            onClick={(e) => e.stopPropagation()} // ✅ IMPORTANT
                             sx={{ p: 0.2 }}
                           />
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}>
+                        <TableCell
+                          align="center"
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}
+                        >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
 
@@ -1078,7 +1275,10 @@ export default function SummaryPage() {
                           {r.vietnameseName || ''}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}>
+                        <TableCell
+                          align="center"
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}
+                        >
                           {r.oldSapCode || ''}
                         </TableCell>
 
@@ -1119,7 +1319,10 @@ export default function SummaryPage() {
                             cursor: isGroupCompleted ? 'default' : 'pointer',
                             color: isGroupCompleted ? 'text.secondary' : theme.palette.primary.main,
                           }}
-                          onClick={() => handleCurrencyClick(item.currency)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // ✅ IMPORTANT
+                            handleCurrencyClick(item.currency);
+                          }}
                         >
                           {item.currency || '-'}
                         </TableCell>
@@ -1157,6 +1360,7 @@ export default function SummaryPage() {
                             <IconButton
                               size="small"
                               onMouseEnter={(e) => openPopover(e, imageUrls)}
+                              onClick={(e) => e.stopPropagation()} // ✅ IMPORTANT
                               aria-owns={isPopoverOpen ? 'mouse-over-popover' : undefined}
                               aria-haspopup="true"
                             >
@@ -1171,7 +1375,16 @@ export default function SummaryPage() {
                           <Stack direction="row" spacing={0.5} justifyContent="center">
                             <Tooltip title={isGroupCompleted ? 'Disabled' : 'Edit'}>
                               <span>
-                                <IconButton aria-label="edit" color="primary" size="small" onClick={() => openEdit(item)} disabled={isGroupCompleted}>
+                                <IconButton
+                                  aria-label="edit"
+                                  color="primary"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // ✅ IMPORTANT
+                                    openEdit(item);
+                                  }}
+                                  disabled={isGroupCompleted}
+                                >
                                   <EditIcon fontSize="small" />
                                 </IconButton>
                               </span>
@@ -1179,7 +1392,16 @@ export default function SummaryPage() {
 
                             <Tooltip title={isGroupCompleted ? 'Disabled' : 'Delete'}>
                               <span>
-                                <IconButton aria-label="delete" color="error" size="small" onClick={() => askDelete(item)} disabled={isGroupCompleted}>
+                                <IconButton
+                                  aria-label="delete"
+                                  color="error"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // ✅ IMPORTANT
+                                    askDelete(item);
+                                  }}
+                                  disabled={isGroupCompleted}
+                                >
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>
                               </span>

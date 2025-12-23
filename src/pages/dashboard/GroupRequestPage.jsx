@@ -186,12 +186,61 @@ const deleteGroup = async (id) => {
 };
 
 /* =========================
+   ✅ Sorting helpers (CLIENT fallback) — giống Monthly
+   ========================= */
+const toTimestamp = (v) => {
+  if (!v) return 0;
+  if (Array.isArray(v)) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0] = v;
+    const dt = new Date(y, m - 1, d, hh, mm, ss);
+    const t = dt.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const getComparableValue = (row, key) => {
+  const dateKeys = new Set(['createdDate']);
+  if (dateKeys.has(key)) return toTimestamp(row?.[key]);
+
+  // mặc định string
+  const s = row?.[key];
+  return (s == null ? '' : String(s)).trim().toLowerCase();
+};
+
+const sortRowsClient = (rows, sortConfig) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  if (!sortConfig?.key || !sortConfig?.direction) return rows;
+
+  const dir = sortConfig.direction === 'desc' ? -1 : 1;
+  const key = sortConfig.key;
+
+  const withIndex = rows.map((r, i) => ({ r, i }));
+  withIndex.sort((a, b) => {
+    const va = getComparableValue(a.r, key);
+    const vb = getComparableValue(b.r, key);
+
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return (va - vb) * dir;
+      return a.i - b.i;
+    }
+
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+    return a.i - b.i;
+  });
+
+  return withIndex.map((x) => x.r);
+};
+
+/* =========================
    Sort indicator (tri-state like SupplierProductsPage)
    ========================= */
 const SortIndicator = ({ active, direction }) => {
   if (!active) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
         <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
         <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
       </Box>
@@ -200,7 +249,7 @@ const SortIndicator = ({ active, direction }) => {
 
   if (direction === 'asc') {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
         <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
         <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
       </Box>
@@ -208,7 +257,7 @@ const SortIndicator = ({ active, direction }) => {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
       <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
       <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
     </Box>
@@ -355,47 +404,56 @@ export default function GroupRequestPage() {
     []
   );
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  /* =========================
+     ✅ Fetch data (support overrides like Monthly)
+     ========================= */
+  const fetchData = useCallback(
+    async (overrides = {}) => {
+      setLoading(true);
 
-    const [startDate, endDate] = dateRange || [];
+      const effPage = Number.isInteger(overrides.page) ? overrides.page : page;
+      const effSize = Number.isInteger(overrides.size) ? overrides.size : rowsPerPage;
+      const effSort = overrides.sortConfig ?? sortConfig;
 
-    const sortParam = sortConfig.key
-      ? `${headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key},${sortConfig.direction}`
-      : 'createdDate,desc';
+      const effName = overrides.nameFilter ?? nameFilter;
+      const effStatus = overrides.statusFilter ?? statusFilter;
+      const effCreatedBy = overrides.createdByFilter ?? createdByFilter;
+      const effType = overrides.typeFilter ?? typeFilter;
+      const effCurrency = overrides.currencyFilter ?? currencyFilter;
+      const effDateRange = overrides.dateRange ?? dateRange;
 
-    const { content, totalElements, totalPages } = await fetchGroups(
-      page,
-      rowsPerPage,
-      nameFilter,
-      statusFilter,
-      createdByFilter,
-      typeFilter,
-      currencyFilter,
-      startDate,
-      endDate,
-      null,
-      null,
-      sortParam
-    );
+      const [startDate, endDate] = effDateRange || [];
 
-    setData(content);
-    setTotalElements(totalElements);
-    setTotalPages(totalPages);
+      const sortParam = effSort.key && effSort.direction
+        ? `${headers.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
+        : 'createdDate,desc';
 
-    setLoading(false);
-  }, [
-    page,
-    rowsPerPage,
-    nameFilter,
-    statusFilter,
-    createdByFilter,
-    typeFilter,
-    currencyFilter,
-    dateRange,
-    stockDateRange,
-    sortConfig,
-  ]);
+      const { content, totalElements: te, totalPages: tp } = await fetchGroups(
+        effPage,
+        effSize,
+        effName,
+        effStatus,
+        effCreatedBy,
+        effType,
+        effCurrency,
+        startDate,
+        endDate,
+        null,
+        null,
+        sortParam
+      );
+
+      // ✅ client fallback sort để đảm bảo bấm icon là UI đổi thứ tự (trong page hiện tại)
+      const finalData = sortRowsClient(content, effSort);
+
+      setData(finalData);
+      setTotalElements(te);
+      setTotalPages(tp);
+
+      setLoading(false);
+    },
+    [page, rowsPerPage, nameFilter, statusFilter, createdByFilter, typeFilter, currencyFilter, dateRange, sortConfig]
+  );
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -412,15 +470,21 @@ export default function GroupRequestPage() {
     setPage(0);
   }, [isLargeScreen]);
 
+  // ✅ NEW: khi page/rowsPerPage đổi, fetch ngay (đỡ phụ thuộc useEffect phức tạp)
+  useEffect(() => {
+    fetchData({ page, size: rowsPerPage });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, rowsPerPage]);
+
   const handleAddOk = () => {
     setIsAddModalOpen(false);
-    fetchData();
+    fetchData({ page: 0 });
   };
 
   const handleEditOk = () => {
     setIsEditModalOpen(false);
     setCurrentItem(null);
-    fetchData();
+    fetchData({ page });
   };
 
   const handleDelete = (group) => {
@@ -441,8 +505,12 @@ export default function GroupRequestPage() {
 
       if (success) {
         const maxPage = Math.max(0, Math.ceil((totalElements - 1) / rowsPerPage) - 1);
-        if (page > maxPage) setPage(maxPage);
-        else await fetchData();
+        if (page > maxPage) {
+          setPage(maxPage);
+          await fetchData({ page: maxPage });
+        } else {
+          await fetchData({ page });
+        }
       }
 
       setNotification({ open: true, message, severity: success ? 'success' : 'error' });
@@ -463,9 +531,20 @@ export default function GroupRequestPage() {
   const handleSearch = () => {
     setPage(0);
     setSortConfig({ key: null, direction: null });
+    fetchData({ page: 0, sortConfig: { key: null, direction: null } });
   };
 
   const handleReset = () => {
+    const cleared = {
+      nameFilter: '',
+      statusFilter: '',
+      createdByFilter: '',
+      typeFilter: '',
+      currencyFilter: '',
+      dateRange: [],
+      stockDateRange: [],
+    };
+
     setNameFilter('');
     setStatusFilter('');
     setCreatedByFilter('');
@@ -475,18 +554,36 @@ export default function GroupRequestPage() {
     setStockDateRange([]);
     setPage(0);
     setSortConfig({ key: null, direction: null });
+
+    fetchData({
+      page: 0,
+      sortConfig: { key: null, direction: null },
+      ...cleared,
+    });
   };
 
-  const handleSort = (key) => {
-    if (!headers.find((h) => h.key === key)?.sortable) return;
+  /* =========================
+     ✅ Sort: bấm icon (asc -> desc -> none) + fetch ngay
+     ========================= */
+  const handleSort = useCallback(
+    (key) => {
+      if (loading) return;
+      const meta = headers.find((h) => h.key === key);
+      if (!meta?.sortable) return;
 
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
+      let direction = 'asc';
+      if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+      else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
 
-    setSortConfig({ key: direction ? key : null, direction });
-    setPage(0);
-  };
+      const nextSort = { key: direction ? key : null, direction };
+      setSortConfig(nextSort);
+      setPage(0);
+
+      // ✅ fetch ngay (không chờ render)
+      fetchData({ page: 0, sortConfig: nextSort });
+    },
+    [loading, sortConfig, fetchData]
+  );
 
   const sortLabel = useMemo(() => {
     if (!sortConfig.key || !sortConfig.direction) return 'createdDate,desc';
@@ -614,7 +711,6 @@ export default function GroupRequestPage() {
                     <TableCell
                       key={key}
                       align={align}
-                      onClick={() => sortable && handleSort(key)}
                       sx={{
                         fontSize: '0.75rem',
                         fontWeight: 600,
@@ -624,7 +720,6 @@ export default function GroupRequestPage() {
                         py: 0.6,
                         px: 0.7,
                         whiteSpace: 'nowrap',
-                        cursor: sortable ? 'pointer' : 'default',
                         userSelect: 'none',
                         ...(stickyNo && {
                           position: 'sticky',
@@ -634,7 +729,6 @@ export default function GroupRequestPage() {
                         }),
                         ...(key === 'actions' && { width: 140 }),
                         ...hideXs,
-                        '&:hover': sortable ? { backgroundColor: '#eef2f7' } : undefined,
                       }}
                     >
                       <Stack
@@ -646,7 +740,30 @@ export default function GroupRequestPage() {
                         <Tooltip title={label} arrow>
                           <span>{label}</span>
                         </Tooltip>
-                        {sortable ? <SortIndicator active={active} direction={sortConfig.direction} /> : null}
+
+                        {/* ✅ Chỉ bấm icon sort mới đổi sort */}
+                        {sortable ? (
+                          <Tooltip title="Sort" arrow>
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={loading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSort(key);
+                                }}
+                                sx={{
+                                  p: 0.25,
+                                  border: '1px solid transparent',
+                                  '&:hover': { borderColor: '#e5e7eb', backgroundColor: '#eef2f7' },
+                                }}
+                                aria-label={`sort-${key}`}
+                              >
+                                <SortIndicator active={active} direction={sortConfig.direction} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        ) : null}
                       </Stack>
                     </TableCell>
                   );
@@ -731,7 +848,7 @@ export default function GroupRequestPage() {
                         <UpdateStatusGroup
                           groupId={group.id}
                           currentStatus={group.status || 'Not Started'}
-                          onSuccess={fetchData}
+                          onSuccess={() => fetchData({ page })}
                           userRole={localStorage.getItem('role') || ''}
                         />
                       </TableCell>
@@ -744,7 +861,10 @@ export default function GroupRequestPage() {
                           color: '#374151',
                           whiteSpace: 'normal',
                           wordBreak: 'break-word',
-                          display: { xs: headers.find((h) => h.key === 'createdBy')?.hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                          display: {
+                            xs: headers.find((h) => h.key === 'createdBy')?.hideOnSmall ? 'none' : 'table-cell',
+                            md: 'table-cell',
+                          },
                         }}
                       >
                         {group.createdBy || ''}
@@ -759,12 +879,13 @@ export default function GroupRequestPage() {
                         sx={{
                           py: 0.45,
                           px: 0.7,
-                          display: { xs: headers.find((h) => h.key === 'currency')?.hideOnSmall ? 'none' : 'table-cell', md: 'table-cell' },
+                          display: {
+                            xs: headers.find((h) => h.key === 'currency')?.hideOnSmall ? 'none' : 'table-cell',
+                            md: 'table-cell',
+                          },
                         }}
                       >
-                        <Box sx={{ ...tagPillSx, backgroundColor: curColor }}>
-                          {group.currency || 'N/A'}
-                        </Box>
+                        <Box sx={{ ...tagPillSx, backgroundColor: curColor }}>{group.currency || 'N/A'}</Box>
                       </TableCell>
 
                       <TableCell align="center" sx={{ py: 0.45, px: 0.7 }}>
@@ -838,7 +959,7 @@ export default function GroupRequestPage() {
 
         <Divider />
 
-        {/* PaginationBar (same UX as SupplierProductsPage) */}
+        {/* PaginationBar */}
         <Box sx={{ p: 1.0, backgroundColor: '#fff' }}>
           <PaginationBar
             count={totalElements}
@@ -878,7 +999,7 @@ export default function GroupRequestPage() {
         onOk={handleEditOk}
       />
 
-      {/* Delete dialog (match clean border + header) */}
+      {/* Delete dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={loading ? undefined : handleCancelDelete}
@@ -888,10 +1009,13 @@ export default function GroupRequestPage() {
       >
         <DialogTitle sx={{ px: 1.5, py: 1.1, borderBottom: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography sx={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
-              Delete group
-            </Typography>
-            <IconButton size="small" onClick={handleCancelDelete} disabled={loading} sx={{ border: '1px solid #e5e7eb' }}>
+            <Typography sx={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>Delete group</Typography>
+            <IconButton
+              size="small"
+              onClick={handleCancelDelete}
+              disabled={loading}
+              sx={{ border: '1px solid #e5e7eb' }}
+            >
               <Close fontSize="small" />
             </IconButton>
           </Stack>

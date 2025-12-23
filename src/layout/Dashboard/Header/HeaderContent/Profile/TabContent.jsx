@@ -118,16 +118,18 @@ export default function TabContent({ onRequestClose }) {
   const CARD_AVATAR = isMobile ? 44 : 52;
 
   // ===== Modern tokens =====
+  // ✅ FIX: nền card + phần body OPAQUE để chữ "Good Type" phía sau không xuyên qua
   const cardSx = {
     borderRadius: 4,
     overflow: 'hidden',
     border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
-    background:
-      theme.palette.mode === 'dark'
-        ? alpha(theme.palette.background.paper, 0.72)
-        : alpha('#FFFFFF', 0.92),
+    // trước bạn dùng alpha(0.92) nên bị “xuyên”
+    backgroundColor: theme.palette.mode === 'dark'
+      ? alpha(theme.palette.background.paper, 0.96)
+      : '#FFFFFF',
     backdropFilter: 'blur(14px)',
-    boxShadow: `0 22px 70px ${alpha('#000', 0.22)}`
+    boxShadow: `0 22px 70px ${alpha('#000', 0.22)}`,
+    isolation: 'isolate' // ✅ tránh blend weird
   };
 
   const headerSx = {
@@ -235,7 +237,6 @@ export default function TabContent({ onRequestClose }) {
 
   return (
     <>
-      {/* Only content (NO trigger, NO popover) */}
       <Box sx={cardSx}>
         <Box sx={headerSx}>
           <Stack spacing={1} alignItems="center">
@@ -304,7 +305,8 @@ export default function TabContent({ onRequestClose }) {
 
         <Divider />
 
-        <Box sx={{ p: 1 }}>
+        {/* ✅ FIX: phần menu items đặt bgcolor trắng đặc để không xuyên chữ table */}
+        <Box sx={{ p: 1, bgcolor: theme.palette.mode === 'dark' ? theme.palette.background.paper : '#fff' }}>
           <MenuItem onClick={handleView} sx={menuItemSx('primary')}>
             <ListItemIcon sx={{ minWidth: 36 }}>
               <User size={18} color={theme.palette.primary.main} />

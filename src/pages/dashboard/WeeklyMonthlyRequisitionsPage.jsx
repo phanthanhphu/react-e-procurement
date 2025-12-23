@@ -17,6 +17,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Tooltip,
@@ -73,17 +74,121 @@ const formatDate = (arr) => {
 };
 
 const formatCurrency = (value, currency) => {
-  if (value === null || value === undefined || isNaN(value)) return '0';
-  if (currency === 'VND') return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value);
-  if (currency === 'USD') return `$${Number(value).toFixed(0)}`;
-  if (currency === 'EUR') return `€${Number(value).toFixed(0)}`;
-  return Number(value).toFixed(0);
+  if (value === null || value === undefined || value === '' || isNaN(Number(value))) return '0';
+  const n = Number(value);
+  if (currency === 'VND') return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n);
+  if (currency === 'USD') return `$${n.toFixed(0)}`;
+  if (currency === 'EUR' || currency === 'EURO') return `€${n.toFixed(0)}`;
+  return n.toFixed(0);
 };
 
 const getTypeColor = (t) => (t === 'WEEKLY' ? '#2563eb' : '#16a34a');
 
+const tagSx = {
+  padding: '2px 8px',
+  borderRadius: '999px',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  color: '#fff',
+  display: 'inline-flex',
+  justifyContent: 'center',
+  minWidth: 70,
+  mx: 'auto',
+};
+
 /* =========================
-   DeptRequestTable (match SummaryPage style)
+   ✅ Sorting helpers (CLIENT fallback) — giống GroupRequestPage
+   ========================= */
+const toTimestamp = (v) => {
+  if (!v) return 0;
+
+  // backend hay trả date dạng [y,m,d,hh,mm,ss]
+  if (Array.isArray(v)) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0] = v;
+    const dt = new Date(y, m - 1, d, hh, mm, ss);
+    const t = dt.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  // string / Date
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const getComparableValue = (row, key) => {
+  if (!row) return '';
+
+  const dateKeys = new Set(['createdDate', 'updatedDate']);
+  const numberKeys = new Set(['totalRequestQty', 'orderQty', 'price', 'amount']);
+
+  if (dateKeys.has(key)) return toTimestamp(row?.[key]);
+  if (numberKeys.has(key)) {
+    const n = Number(row?.[key]);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // default string
+  const s = row?.[key];
+  return (s == null ? '' : String(s)).trim().toLowerCase();
+};
+
+const sortRowsClient = (rows, sortConfig) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  if (!sortConfig?.key || !sortConfig?.direction) return rows;
+
+  const dir = sortConfig.direction === 'desc' ? -1 : 1;
+  const key = sortConfig.key;
+
+  const withIndex = rows.map((r, i) => ({ r, i }));
+  withIndex.sort((a, b) => {
+    const va = getComparableValue(a.r, key);
+    const vb = getComparableValue(b.r, key);
+
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return (va - vb) * dir;
+      return a.i - b.i;
+    }
+
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+    return a.i - b.i;
+  });
+
+  return withIndex.map((x) => x.r);
+};
+
+/* =========================
+   ✅ Sort indicator (tri-state like GroupRequestPage)
+   ========================= */
+const SortIndicator = ({ active, direction }) => {
+  if (!active) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  if (direction === 'asc') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+      <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
+      <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
+    </Box>
+  );
+};
+
+/* =========================
+   DeptRequestTable
    ========================= */
 function DeptRequestTable({ departmentRequests }) {
   if (!departmentRequests?.length) {
@@ -135,7 +240,7 @@ function DeptRequestTable({ departmentRequests }) {
 }
 
 /* =========================
-   PaginationBar (copied UX from SummaryPage)
+   PaginationBar
    ========================= */
 function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageChange, loading }) {
   const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
@@ -228,45 +333,408 @@ function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageCh
 }
 
 /* =========================
-   Headers + sticky left offsets
+   Headers (sticky columns)
+   ✅ thêm backendKey để build sort param giống GroupRequestPage
    ========================= */
 const HEADERS = [
-  { label: 'No', key: 'no', align: 'center', width: 50, sticky: true },
-  { label: 'Product Type 1', key: 'productType1Name', sortable: true, width: 120, sticky: true, wrap: true },
-  { label: 'Product Type 2', key: 'productType2Name', sortable: true, width: 120, sticky: true, wrap: true },
-  { label: 'Type', key: 'type', sortable: true, align: 'center', width: 90, sticky: true },
-  { label: 'Item (EN)', key: 'itemDescriptionEN', sortable: true, width: 170, sticky: true, wrap: true },
-  { label: 'Item (VN)', key: 'itemDescriptionVN', sortable: true, width: 170, sticky: true, wrap: true },
-  { label: 'Old SAP', key: 'oldSAPCode', sortable: true, align: 'center', width: 100 },
-  { label: 'Hana SAP', key: 'hanaSAPCode', sortable: true, align: 'center', width: 110 },
-  { label: 'Supplier', key: 'supplierName', sortable: true, width: 160, wrap: true },
-  { label: 'Depts', key: 'departmentRequisitions', width: 240 },
-  { label: 'Unit', key: 'unit', sortable: true, align: 'center', width: 70 },
-  { label: 'Req Qty', key: 'totalRequestQty', sortable: true, align: 'center', width: 90 },
-  { label: 'Order Qty', key: 'orderQty', sortable: true, align: 'center', width: 90 },
-  { label: 'Price', key: 'price', sortable: true, align: 'center', width: 90 },
-  { label: 'Curr', key: 'currency', sortable: true, align: 'center', width: 70 },
-  { label: 'Amount', key: 'amount', sortable: true, align: 'center', width: 110 },
-  { label: 'Created', key: 'createdDate', sortable: true, align: 'center', width: 110 },
-  { label: 'Updated', key: 'updatedDate', sortable: true, align: 'center', width: 110 },
-  { label: 'Img', key: 'imageUrls', align: 'center', width: 70 },
+  { label: 'No', key: 'no', backendKey: 'no', align: 'center', width: 50, sticky: true, sortable: false },
+
+  { label: 'Product Type 1', key: 'productType1Name', backendKey: 'productType1Name', sortable: true, width: 120, sticky: true },
+  { label: 'Product Type 2', key: 'productType2Name', backendKey: 'productType2Name', sortable: true, width: 120, sticky: true },
+  { label: 'Type', key: 'type', backendKey: 'type', sortable: true, align: 'center', width: 90, sticky: true },
+  { label: 'Item (EN)', key: 'itemDescriptionEN', backendKey: 'itemDescriptionEN', sortable: true, width: 170, sticky: true },
+  { label: 'Item (VN)', key: 'itemDescriptionVN', backendKey: 'itemDescriptionVN', sortable: true, width: 170, sticky: true },
+
+  { label: 'Old SAP', key: 'oldSAPCode', backendKey: 'oldSAPCode', sortable: true, align: 'center', width: 110 },
+  { label: 'Hana SAP', key: 'hanaSAPCode', backendKey: 'hanaSAPCode', sortable: true, align: 'center', width: 110 },
+  { label: 'Supplier', key: 'supplierName', backendKey: 'supplierName', sortable: true, width: 160 },
+  { label: 'Depts', key: 'departmentRequisitions', backendKey: 'departmentRequisitions', width: 240, sortable: false },
+  { label: 'Unit', key: 'unit', backendKey: 'unit', sortable: true, align: 'center', width: 70 },
+  { label: 'Req Qty', key: 'totalRequestQty', backendKey: 'totalRequestQty', sortable: true, align: 'center', width: 90 },
+  { label: 'Order Qty', key: 'orderQty', backendKey: 'orderQty', sortable: true, align: 'center', width: 90 },
+  { label: 'Price', key: 'price', backendKey: 'price', sortable: true, align: 'center', width: 90 },
+  { label: 'Curr', key: 'currency', backendKey: 'currency', sortable: true, align: 'center', width: 70 },
+  { label: 'Amount', key: 'amount', backendKey: 'amount', sortable: true, align: 'center', width: 110 },
+  { label: 'Created', key: 'createdDate', backendKey: 'createdDate', sortable: true, align: 'center', width: 110 },
+  { label: 'Updated', key: 'updatedDate', backendKey: 'updatedDate', sortable: true, align: 'center', width: 110 },
+  { label: 'Img', key: 'imageUrls', backendKey: 'imageUrls', align: 'center', width: 70, sortable: false },
 ];
 
-let leftOffset = 0;
-HEADERS.forEach((h) => {
-  if (h.sticky) {
-    h.left = leftOffset;
-    leftOffset += h.width;
+/* =========================
+   WeeklyMonthlyTable
+   ✅ Sort chỉ bấm icon (y hệt GroupRequestPage)
+   ========================= */
+function WeeklyMonthlyTable({ rows, page, rowsPerPage, sortConfig, loading, onSort, onHoverImages }) {
+  // ✅ Wrap mạnh: chuỗi không có space vẫn bẻ dòng
+  const WRAP_SX = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.35,
+  };
+
+  // widths map
+  const W = useMemo(() => {
+    const o = {};
+    HEADERS.forEach((h) => (o[h.key] = h.width || 120));
+    return o;
+  }, []);
+
+  const stickyKeys = useMemo(() => HEADERS.filter((h) => h.sticky).map((h) => h.key), []);
+  const LEFT = useMemo(() => {
+    let left = 0;
+    const m = {};
+    stickyKeys.forEach((k) => {
+      m[k] = left;
+      left += W[k] || 120;
+    });
+    return m;
+  }, [stickyKeys, W]);
+
+  const headCellSx = useCallback(
+    (key, sortable, sticky) => ({
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      color: '#111827',
+      backgroundColor: '#f3f4f6',
+      borderBottom: '1px solid #e5e7eb',
+      py: 0.6,
+      px: 0.7,
+      position: 'sticky',
+      top: 0,
+      zIndex: key === 'no' ? 22 : sticky ? 21 : 20,
+      cursor: 'default',
+      whiteSpace: 'nowrap',
+      minWidth: W[key] || 120,
+      width: W[key] || 120,
+      ...(sticky ? { left: LEFT[key] } : {}),
+    }),
+    [LEFT, W]
+  );
+
+  const stickyBodySx = useCallback(
+    (key, bg, sticky, z = 3) => {
+      const base = {
+        backgroundColor: bg,
+        minWidth: W[key] || 120,
+        width: W[key] || 120,
+        ...WRAP_SX,
+      };
+      if (!sticky) return base;
+
+      return {
+        ...base,
+        position: 'sticky',
+        left: LEFT[key],
+        zIndex: z,
+        boxShadow: '1px 0 0 rgba(0,0,0,0.04)',
+        borderRight: 'none',
+      };
+    },
+    [LEFT, W]
+  );
+
+  if (!rows?.length) {
+    return (
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 1.5,
+          border: '1px solid #e5e7eb',
+          backgroundColor: '#fff',
+          overflow: 'hidden',
+        }}
+      >
+        <Box p={3} textAlign="center" sx={{ color: 'text.secondary' }}>
+          <InboxIcon sx={{ fontSize: 30, opacity: 0.6 }} />
+          <Typography sx={{ fontSize: '0.85rem' }}>No data</Typography>
+        </Box>
+      </Paper>
+    );
   }
-});
-const gridTemplate = HEADERS.map((h) => `${h.width}px`).join(' ');
+
+  const MIN_W = Object.values(W).reduce((a, b) => a + b, 0);
+
+  return (
+    <TableContainer
+      component={Paper}
+      elevation={0}
+      sx={{
+        borderRadius: 1.5,
+        border: '1px solid #e5e7eb',
+        maxHeight: 650,
+        overflowX: 'auto',
+        backgroundColor: '#fff',
+      }}
+    >
+      <Table stickyHeader size="small" sx={{ minWidth: MIN_W, tableLayout: 'fixed' }}>
+        <TableHead>
+          <TableRow>
+            {HEADERS.map((h) => {
+              const active = sortConfig.key === h.key && !!sortConfig.direction;
+
+              return (
+                <TableCell
+                  key={h.key}
+                  align={h.align || 'left'}
+                  sx={{
+                    ...headCellSx(h.key, h.sortable, h.sticky),
+                    ...(h.sticky ? { borderRight: 'none' } : {}),
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    spacing={0.6}
+                    alignItems="center"
+                    justifyContent={(h.align || 'left') === 'center' ? 'center' : 'flex-start'}
+                  >
+                    <Tooltip title={h.label} arrow>
+                      <span>{h.label}</span>
+                    </Tooltip>
+
+                    {/* ✅ CHỈ BẤM ICON */}
+                    {h.sortable ? (
+                      <Tooltip title="Sort" arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={loading}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSort(h.key);
+                            }}
+                            sx={{
+                              p: 0.25,
+                              border: '1px solid transparent',
+                              '&:hover': { borderColor: '#e5e7eb', backgroundColor: '#eef2f7' },
+                            }}
+                            aria-label={`sort-${h.key}`}
+                          >
+                            <SortIndicator active={active} direction={sortConfig.direction} />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                  </Stack>
+                </TableCell>
+              );
+            })}
+          </TableRow>
+        </TableHead>
+
+        <TableBody>
+          {rows.map((r, i) => {
+            const zebra = i % 2 === 0 ? '#ffffff' : '#fafafa';
+            const globalIndex = page * rowsPerPage + i + 1;
+
+            return (
+              <TableRow
+                key={r.id || `${r.oldSAPCode || ''}_${i}`}
+                sx={{
+                  backgroundColor: zebra,
+                  '&:hover': { backgroundColor: '#f1f5f9' },
+                  '& > *': { borderBottom: '1px solid #f3f4f6' },
+                }}
+              >
+                {/* No (sticky) */}
+                <TableCell
+                  align="center"
+                  sx={{
+                    fontSize: '0.75rem',
+                    py: 0.4,
+                    px: 0.6,
+                    fontWeight: 700,
+                    ...stickyBodySx('no', zebra, true, 3),
+                  }}
+                >
+                  {globalIndex}
+                </TableCell>
+
+                {/* ProductType1 (sticky) */}
+                <TableCell
+                  sx={{
+                    fontSize: '0.75rem',
+                    py: 0.4,
+                    px: 0.6,
+                    ...stickyBodySx('productType1Name', zebra, true, 3),
+                  }}
+                >
+                  {r.productType1Name || '-'}
+                </TableCell>
+
+                {/* ProductType2 (sticky) */}
+                <TableCell
+                  sx={{
+                    fontSize: '0.75rem',
+                    py: 0.4,
+                    px: 0.6,
+                    ...stickyBodySx('productType2Name', zebra, true, 3),
+                  }}
+                >
+                  {r.productType2Name || '-'}
+                </TableCell>
+
+                {/* Type (sticky) */}
+                <TableCell
+                  align="center"
+                  sx={{
+                    py: 0.4,
+                    px: 0.6,
+                    ...stickyBodySx('type', zebra, true, 3),
+                  }}
+                >
+                  <Box sx={{ ...tagSx, backgroundColor: getTypeColor(r.type) }}>{r.type || '—'}</Box>
+                </TableCell>
+
+                {/* Item EN (sticky) */}
+                <TableCell
+                  sx={{
+                    fontSize: '0.75rem',
+                    py: 0.4,
+                    px: 0.6,
+                    ...stickyBodySx('itemDescriptionEN', zebra, true, 3),
+                  }}
+                >
+                  {r.itemDescriptionEN || '-'}
+                </TableCell>
+
+                {/* Item VN (sticky) */}
+                <TableCell
+                  sx={{
+                    fontSize: '0.75rem',
+                    py: 0.4,
+                    px: 0.6,
+                    ...stickyBodySx('itemDescriptionVN', zebra, true, 3),
+                  }}
+                >
+                  {r.itemDescriptionVN || '-'}
+                </TableCell>
+
+                {/* Old SAP */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('oldSAPCode', zebra, false) }}
+                >
+                  {r.oldSAPCode || '-'}
+                </TableCell>
+
+                {/* Hana SAP */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('hanaSAPCode', zebra, false) }}
+                >
+                  {r.hanaSAPCode || '-'}
+                </TableCell>
+
+                {/* Supplier */}
+                <TableCell
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('supplierName', zebra, false) }}
+                >
+                  {r.supplierName || '-'}
+                </TableCell>
+
+                {/* Depts */}
+                <TableCell sx={{ py: 0.35, px: 0.6, ...stickyBodySx('departmentRequisitions', zebra, false) }}>
+                  <DeptRequestTable departmentRequests={r.departmentRequisitions} />
+                </TableCell>
+
+                {/* Unit */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('unit', zebra, false) }}
+                >
+                  {r.unit || '-'}
+                </TableCell>
+
+                {/* Req Qty */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('totalRequestQty', zebra, false) }}
+                >
+                  {r.totalRequestQty || 0}
+                </TableCell>
+
+                {/* Order Qty */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('orderQty', zebra, false) }}
+                >
+                  {r.orderQty || 0}
+                </TableCell>
+
+                {/* Price */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('price', zebra, false) }}
+                >
+                  {formatCurrency(r.price, r.currency)}
+                </TableCell>
+
+                {/* Curr */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('currency', zebra, false) }}
+                >
+                  {r.currency || 'VND'}
+                </TableCell>
+
+                {/* Amount */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('amount', zebra, false) }}
+                >
+                  {formatCurrency(r.amount, r.currency)}
+                </TableCell>
+
+                {/* Created */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('createdDate', zebra, false) }}
+                >
+                  {r.createdDateDisplay}
+                </TableCell>
+
+                {/* Updated */}
+                <TableCell
+                  align="center"
+                  sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('updatedDate', zebra, false) }}
+                >
+                  {r.updatedDateDisplay}
+                </TableCell>
+
+                {/* Img */}
+                <TableCell
+                  align="center"
+                  sx={{ py: 0.4, px: 0.6, ...stickyBodySx('imageUrls', zebra, false) }}
+                >
+                  {r.displayImageUrls?.length ? (
+                    <IconButton
+                      size="small"
+                      onMouseEnter={(e) => onHoverImages(e, r.displayImageUrls)}
+                      aria-haspopup="true"
+                      sx={{ p: 0.2 }}
+                    >
+                      <ImageIcon sx={{ fontSize: '1rem' }} />
+                    </IconButton>
+                  ) : (
+                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+}
 
 /* =========================
    Main
    ========================= */
 export default function WeeklyMonthlyRequisitionsPage() {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  useMediaQuery(theme.breakpoints.down('sm')); // giữ import theo project (không cần dùng)
 
   const cacheBust = useMemo(() => Date.now(), []);
   const imageCache = useRef(new Map());
@@ -298,8 +766,8 @@ export default function WeeklyMonthlyRequisitionsPage() {
     hanaSapCode: '',
   });
 
-  // tri-state: null/null => fallback updatedDate,desc
-  const [sort, setSort] = useState({ key: null, dir: null });
+  // ✅ giống GroupRequestPage: sortConfig {key, direction}
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   const [popover, setPopover] = useState({ anchor: null, images: [] });
   const [imgErr, setImgErr] = useState({});
@@ -339,18 +807,26 @@ export default function WeeklyMonthlyRequisitionsPage() {
     [data, normalizeImg]
   );
 
-  const sortParam = useMemo(() => {
-    if (sort?.key && sort?.dir) return `${sort.key},${sort.dir}`;
-    return 'updatedDate,desc';
-  }, [sort]);
+  const sortLabel = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return 'updatedDate,desc';
+    const backendKey = HEADERS.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    return `${backendKey},${sortConfig.direction}`;
+  }, [sortConfig]);
 
+  /* =========================
+     ✅ Fetch data (support overrides like GroupRequestPage)
+     ========================= */
   const fetchData = useCallback(
     async (overrides = {}) => {
       const effPage = Number.isInteger(overrides.page) ? overrides.page : page;
       const effSize = Number.isInteger(overrides.size) ? overrides.size : rowsPerPage;
       const effSearch = overrides.searchValues ?? searchValues;
-      const effSort = overrides.sort ?? sort;
-      const effSortParam = effSort?.key && effSort?.dir ? `${effSort.key},${effSort.dir}` : 'updatedDate,desc';
+      const effSort = overrides.sortConfig ?? sortConfig;
+
+      const sortParam =
+        effSort?.key && effSort?.direction
+          ? `${HEADERS.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
+          : 'updatedDate,desc';
 
       setLoading(true);
       try {
@@ -367,11 +843,16 @@ export default function WeeklyMonthlyRequisitionsPage() {
           hanaSapCode: effSearch.hanaSapCode?.trim() || undefined,
           page: effPage,
           size: effSize,
-          sort: effSortParam,
+          sort: sortParam,
         };
 
         const res = await axios.get(`${API_BASE_URL}/api/requisitions/search_2`, { params });
-        setData(res.data?.content || []);
+        const content = res.data?.content || [];
+
+        // ✅ client fallback sort để đảm bảo bấm icon là UI đổi thứ tự
+        const finalData = sortRowsClient(content, effSort);
+
+        setData(finalData);
         setTotal(res.data?.totalElements || 0);
       } catch (err) {
         setSnack({
@@ -379,66 +860,49 @@ export default function WeeklyMonthlyRequisitionsPage() {
           msg: 'Load failed: ' + (err.response?.data?.message || err.message),
           sev: 'error',
         });
+        setData([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
     },
-    [page, rowsPerPage, searchValues, sort]
+    [page, rowsPerPage, searchValues, sortConfig]
   );
 
+  // initial
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Sort indicator (always visible like SummaryPage)
-  const renderSortIndicator = (key) => {
-    const active = sort.key === key && !!sort.dir;
+  // ✅ giống GroupRequestPage: khi page/rowsPerPage đổi => fetch ngay
+  useEffect(() => {
+    fetchData({ page, size: rowsPerPage });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, rowsPerPage]);
 
-    if (!active) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    if (sort.dir === 'asc') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
-        <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
-      </Box>
-    );
-  };
-
-  // click header -> asc -> desc -> none (fallback)
+  /* =========================
+     ✅ Sort: bấm icon (asc -> desc -> none) + fetch ngay
+     ========================= */
   const handleSort = useCallback(
     (key) => {
-      const h = HEADERS.find((x) => x.key === key);
-      if (!h?.sortable) return;
+      if (loading) return;
+      const meta = HEADERS.find((h) => h.key === key);
+      if (!meta?.sortable) return;
 
-      let next = { key, dir: 'asc' };
+      let direction = 'asc';
+      if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+      else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
 
-      if (sort.key === key && sort.dir === 'asc') next = { key, dir: 'desc' };
-      else if (sort.key === key && sort.dir === 'desc') next = { key: null, dir: null };
-
-      setSort(next);
+      const nextSort = { key: direction ? key : null, direction };
+      setSortConfig(nextSort);
       setPage(0);
-      fetchData({ page: 0, sort: next });
+
+      // ✅ fetch ngay
+      fetchData({ page: 0, sortConfig: nextSort });
     },
-    [sort.key, sort.dir, fetchData]
+    [loading, sortConfig, fetchData]
   );
 
-  // search from WeeklyMonthlyGroupSearch (don’t add duplicate buttons here)
   const onSearch = useCallback(
     (nextSearch) => {
       const eff = nextSearch ?? searchValues;
@@ -465,28 +929,16 @@ export default function WeeklyMonthlyRequisitionsPage() {
       oldSapCode: '',
       hanaSapCode: '',
     };
-    const defaultSort = { key: null, dir: null };
+    const defaultSort = { key: null, direction: null };
 
     setSearchValues(cleared);
-    setSort(defaultSort);
+    setSortConfig(defaultSort);
     setPage(0);
-    fetchData({ page: 0, searchValues: cleared, sort: defaultSort });
+    fetchData({ page: 0, searchValues: cleared, sortConfig: defaultSort });
   }, [fetchData]);
 
   const openPopover = (event, images) => setPopover({ anchor: event.currentTarget, images: images || [] });
   const closePopover = () => setPopover({ anchor: null, images: [] });
-
-  const tagSx = {
-    padding: '2px 8px',
-    borderRadius: '999px',
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: '#fff',
-    display: 'inline-flex',
-    justifyContent: 'center',
-    minWidth: 70,
-    mx: 'auto',
-  };
 
   return (
     <Box sx={{ bgcolor: '#f7f7f7', minHeight: '100vh', p: 1.5 }}>
@@ -508,13 +960,13 @@ export default function WeeklyMonthlyRequisitionsPage() {
                 Weekly & Monthly Requisitions
               </Typography>
               <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
-                Sort: <span style={{ color: '#111827' }}>{sortParam}</span>
+                Sort: <span style={{ color: '#111827' }}>{sortLabel}</span>
               </Typography>
             </Stack>
           </Stack>
         </Paper>
 
-        {/* Search box (already has Search/Reset buttons) */}
+        {/* Search box */}
         <WeeklyMonthlyGroupSearch
           searchValues={searchValues}
           onSearchChange={setSearchValues}
@@ -530,202 +982,34 @@ export default function WeeklyMonthlyRequisitionsPage() {
           </Typography>
         )}
 
-        {/* Table */}
+        {/* Table + Pagination */}
         {!loading && (
           <>
-            <Paper
-              elevation={0}
-              sx={{
-                borderRadius: 1.5,
-                border: '1px solid #e5e7eb',
-                backgroundColor: '#fff',
-                overflow: 'hidden',
-              }}
-            >
-              <Box sx={{ maxHeight: 650, overflow: 'auto' }}>
-                {/* Header */}
-                <Box
-                  display="grid"
-                  gridTemplateColumns={gridTemplate}
-                  position="sticky"
-                  top={0}
-                  zIndex={22}
-                  sx={{
-                    backgroundColor: '#f3f4f6',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
-                >
-                  {HEADERS.map((h) => {
-                    const sticky = !isMobile && h.sticky;
-                    return (
-                      <Box
-                        key={h.key}
-                        onClick={() => h.sortable && handleSort(h.key)}
-                        sx={{
-                          py: 0.6,
-                          px: 0.7,
-                          fontWeight: 600,
-                          fontSize: '0.75rem',
-                          color: '#111827',
-                          textAlign: h.align || 'left',
-                          whiteSpace: h.wrap ? 'normal' : 'nowrap',
-                          wordBreak: h.wrap ? 'break-word' : 'normal',
-                          cursor: h.sortable ? 'pointer' : 'default',
-                          position: sticky ? 'sticky' : 'relative',
-                          left: sticky ? h.left : 'auto',
-                          zIndex: sticky ? 21 : 20,
-                          backgroundColor: '#f3f4f6',
-                          borderRight: '1px solid #eef2f7',
-                          '&:last-child': { borderRight: 'none' },
-                          '&:hover': h.sortable ? { backgroundColor: '#eef2f7' } : {},
-                        }}
-                      >
-                        <Stack
-                          direction="row"
-                          spacing={0.6}
-                          alignItems="center"
-                          justifyContent={h.align === 'center' ? 'center' : 'flex-start'}
-                        >
-                          <Tooltip title={h.label} arrow>
-                            <span>{h.label}</span>
-                          </Tooltip>
-                          {h.sortable ? renderSortIndicator(h.key) : null}
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-                </Box>
+            <WeeklyMonthlyTable
+              rows={processed}
+              page={page}
+              rowsPerPage={rowsPerPage}
+              sortConfig={sortConfig}
+              loading={loading}
+              onSort={handleSort}
+              onHoverImages={openPopover}
+            />
 
-                {/* Body */}
-                <Box>
-                  {processed.length ? (
-                    processed.map((r, i) => {
-                      const globalIndex = page * rowsPerPage + i + 1;
-                      const rowBg = i % 2 === 0 ? '#ffffff' : '#fafafa';
-
-                      return (
-                        <Box
-                          key={r.id || `${r.oldSAPCode || ''}_${i}`}
-                          display="grid"
-                          gridTemplateColumns={gridTemplate}
-                          sx={{
-                            backgroundColor: rowBg,
-                            borderBottom: '1px solid #f3f4f6',
-                            '&:hover': { backgroundColor: '#f1f5f9' },
-                          }}
-                        >
-                          {HEADERS.map((h) => {
-                            const sticky = !isMobile && h.sticky;
-                            return (
-                              <Box
-                                key={h.key}
-                                sx={{
-                                  py: 0.45,
-                                  px: 0.7,
-                                  fontSize: '0.75rem',
-                                  fontWeight: 400,
-                                  lineHeight: 1.4,
-                                  textAlign: h.align || 'left',
-                                  whiteSpace: 'normal',
-                                  wordBreak: 'break-word',
-                                  position: sticky ? 'sticky' : 'relative',
-                                  left: sticky ? h.left : 'auto',
-                                  zIndex: sticky ? 2 : 'auto',
-                                  backgroundColor: rowBg,
-                                  borderRight: '1px solid #f8fafc',
-                                  '&:last-child': { borderRight: 'none' },
-                                  color: '#111827',
-                                }}
-                              >
-                                {h.key === 'no' && <Box textAlign="center" fontWeight={700}>{globalIndex}</Box>}
-
-                                {h.key === 'type' && (
-                                  <Box sx={{ ...tagSx, backgroundColor: getTypeColor(r.type) }}>
-                                    {r.type || '—'}
-                                  </Box>
-                                )}
-
-                                {h.key === 'productType1Name' && (r.productType1Name || '-')}
-                                {h.key === 'productType2Name' && (r.productType2Name || '-')}
-                                {h.key === 'itemDescriptionVN' && (r.itemDescriptionVN || '-')}
-                                {h.key === 'itemDescriptionEN' && (r.itemDescriptionEN || '-')}
-                                {h.key === 'oldSAPCode' && (r.oldSAPCode || '-')}
-                                {h.key === 'hanaSAPCode' && (r.hanaSAPCode || '-')}
-                                {h.key === 'supplierName' && (r.supplierName || '-')}
-
-                                {h.key === 'departmentRequisitions' && (
-                                  <DeptRequestTable departmentRequests={r.departmentRequisitions} />
-                                )}
-
-                                {h.key === 'unit' && <Box textAlign="center">{r.unit || '-'}</Box>}
-                                {h.key === 'totalRequestQty' && <Box textAlign="center">{r.totalRequestQty || 0}</Box>}
-                                {h.key === 'orderQty' && <Box textAlign="center">{r.orderQty || 0}</Box>}
-
-                                {h.key === 'price' && (
-                                  <Box textAlign="center">{formatCurrency(r.price, r.currency)}</Box>
-                                )}
-
-                                {h.key === 'currency' && <Box textAlign="center">{r.currency || 'VND'}</Box>}
-
-                                {h.key === 'amount' && (
-                                  <Box textAlign="center">{formatCurrency(r.amount, r.currency)}</Box>
-                                )}
-
-                                {h.key === 'createdDate' && <Box textAlign="center">{r.createdDateDisplay}</Box>}
-                                {h.key === 'updatedDate' && <Box textAlign="center">{r.updatedDateDisplay}</Box>}
-
-                                {h.key === 'imageUrls' && (
-                                  r.displayImageUrls.length ? (
-                                    <IconButton
-                                      size="small"
-                                      onMouseEnter={(e) => openPopover(e, r.displayImageUrls)}
-                                      aria-haspopup="true"
-                                      sx={{ p: 0.2 }}
-                                    >
-                                      <ImageIcon sx={{ fontSize: '1rem' }} />
-                                    </IconButton>
-                                  ) : (
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', textAlign: 'center' }}>
-                                      —
-                                    </Typography>
-                                  )
-                                )}
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      );
-                    })
-                  ) : (
-                    <Box p={3} textAlign="center" sx={{ color: 'text.secondary' }}>
-                      <InboxIcon sx={{ fontSize: 30, opacity: 0.6 }} />
-                      <Typography sx={{ fontSize: '0.85rem' }}>No data</Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-            </Paper>
-
-            {/* Pagination (SummaryPage UX) */}
             <PaginationBar
               count={total}
               page={page}
               rowsPerPage={rowsPerPage}
               loading={loading}
-              onPageChange={(p) => {
-                setPage(p);
-                fetchData({ page: p });
-              }}
+              onPageChange={(p) => setPage(p)}
               onRowsPerPageChange={(size) => {
                 setRowsPerPage(size);
                 setPage(0);
-                fetchData({ page: 0, size });
               }}
             />
           </>
         )}
 
-        {/* Image popover (hover + scroll like SummaryPage) */}
+        {/* Image popover */}
         <Popover
           open={!!popover.anchor}
           anchorEl={popover.anchor}
@@ -735,11 +1019,7 @@ export default function WeeklyMonthlyRequisitionsPage() {
           disableRestoreFocus
           sx={{ pointerEvents: 'auto' }}
         >
-          <Box
-            p={1}
-            sx={{ maxWidth: 280, maxHeight: 280, overflowY: 'auto' }}
-            onMouseLeave={closePopover}
-          >
+          <Box p={1} sx={{ maxWidth: 280, maxHeight: 280, overflowY: 'auto' }} onMouseLeave={closePopover}>
             {popover.images?.length ? (
               <Stack spacing={1}>
                 {popover.images.map((src, i) => (

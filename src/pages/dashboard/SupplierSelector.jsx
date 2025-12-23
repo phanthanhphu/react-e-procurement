@@ -1,3 +1,4 @@
+// src/pages/.../SupplierSelector.jsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Paper,
@@ -12,16 +13,18 @@ import {
   Button,
   IconButton,
   Box,
+  TextField,
+  Stack,
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import ClearIcon from '@mui/icons-material/Clear';
 import { API_BASE_URL } from '../../config';
 
-// ✅ Format number with comma thousands (12.000 -> 12,000)
+// Format money with comma thousands
 // - VND: 0 decimals
-// - USD/EURO: 2 decimals
+// - others: 2 decimals
 const formatMoneyNumber = (value, currencyCode = 'VND') => {
   if (value == null || value === '') return '0';
-
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
 
@@ -42,7 +45,7 @@ const formatMoneyNumber = (value, currencyCode = 'VND') => {
   }
 };
 
-// ✅ Qty: chỉ cần dấu phẩy, không decimals
+// Qty: comma grouping, no decimals
 const formatQtyNumber = (value) => {
   if (value == null || value === '') return '';
   const num = Number(value);
@@ -59,7 +62,7 @@ const formatQtyNumber = (value) => {
   }
 };
 
-// ✅ Format date string "2025-12-14T07:30:23" -> "14/12/2025 07:30:23"
+// "2025-12-14T07:30:23" -> "14/12/2025 07:30:23"
 const formatDateTime = (d) => {
   if (!d) return '';
   try {
@@ -76,12 +79,17 @@ const formatDateTime = (d) => {
 };
 
 export default function SupplierSelector({
-  oldSapCode = '',
-  itemNo = '', // backend đang map qua hanaSapCode (theo response của bạn)
   onSelectSupplier,
+  currency = 'VND',
+  disabled = false,
+
+  // ✅ Only prefill these two (safe)
+  prefillSapCode = '',
+  prefillHanaCode = '',
+
+  // Optional lists if you want
   productType1List = [],
   productType2List = [],
-  currency = 'VND',
 }) {
   const PAGE_SIZE = 10;
 
@@ -93,13 +101,43 @@ export default function SupplierSelector({
   const [hasMore, setHasMore] = useState(false);
 
   const containerRef = useRef(null);
+  const debounceRef = useRef(null);
 
-  const hasSapCode = oldSapCode?.trim();
-  const hasItemNo = itemNo?.trim();
+  // ✅ Filters (NOTICE: itemDescriptionVN is NOT prefilled from parent)
+  const [filters, setFilters] = useState({
+    sapCode: (prefillSapCode || '').trim(),
+    hanaSapCode: (prefillHanaCode || '').trim(),
+    itemDescriptionVN: '',
+    itemDescriptionEN: '',
+    supplierName: '',
+  });
+
+  // ✅ Keep only sap/hana synced from parent (not VN/EN)
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      sapCode: (prefillSapCode || '').trim(),
+      hanaSapCode: (prefillHanaCode || '').trim(),
+    }));
+  }, [prefillSapCode, prefillHanaCode]);
+
+  const hasAnyFilter =
+    !!filters.sapCode?.trim() ||
+    !!filters.hanaSapCode?.trim() ||
+    !!filters.itemDescriptionVN?.trim() ||
+    !!filters.itemDescriptionEN?.trim() ||
+    !!filters.supplierName?.trim();
 
   const queryKey = useMemo(() => {
-    return `${(oldSapCode || '').trim()}|${(itemNo || '').trim()}|${(currency || 'VND').trim().toUpperCase()}`;
-  }, [oldSapCode, itemNo, currency]);
+    return [
+      (filters.sapCode || '').trim(),
+      (filters.hanaSapCode || '').trim(),
+      (filters.itemDescriptionVN || '').trim(),
+      (filters.itemDescriptionEN || '').trim(),
+      (filters.supplierName || '').trim(),
+      (currency || 'VND').trim().toUpperCase(),
+    ].join('|');
+  }, [filters, currency]);
 
   const getProductTypeName = (id, typeList) => {
     if (!typeList || !Array.isArray(typeList)) return '-';
@@ -115,6 +153,8 @@ export default function SupplierSelector({
   };
 
   const fetchSuppliers = async ({ pageToLoad = 0, append = false } = {}) => {
+    if (disabled) return;
+
     if (append) setLoadingMore(true);
     else setSearchLoading(true);
 
@@ -124,28 +164,27 @@ export default function SupplierSelector({
         size: String(PAGE_SIZE),
       });
 
-      if (oldSapCode?.trim()) queryParams.append('sapCode', oldSapCode.trim());
-      if (itemNo?.trim()) queryParams.append('itemNo', itemNo.trim()); // backend hiểu = hanaSapCode
+      if (filters.sapCode?.trim()) queryParams.append('sapCode', filters.sapCode.trim());
+      if (filters.hanaSapCode?.trim()) queryParams.append('hanaSapCode', filters.hanaSapCode.trim());
+      if (filters.itemDescriptionVN?.trim()) queryParams.append('itemDescriptionVN', filters.itemDescriptionVN.trim());
+      if (filters.itemDescriptionEN?.trim()) queryParams.append('itemDescriptionEN', filters.itemDescriptionEN.trim());
+      if (filters.supplierName?.trim()) queryParams.append('supplierName', filters.supplierName.trim());
+
       queryParams.append('currency', (currency || 'VND').trim());
 
       const endpoint = `${API_BASE_URL}/api/supplier-products/filter-by-sapcode?${queryParams.toString()}`;
-      console.log('Calling API:', endpoint);
-
       const res = await fetch(endpoint, { headers: { accept: '*/*' } });
       if (!res.ok) throw new Error('Failed to load suppliers');
 
       const json = await res.json();
-
-      const pageObj = json?.data || json; // tùy backend trả data hay không
+      const pageObj = json?.data || json;
       const content = pageObj?.content || [];
 
-      // paging flags
       const isLast = !!pageObj?.last;
       const totalPages = Number(pageObj?.totalPages || 0);
       const pageNumber = Number(pageObj?.number ?? pageToLoad);
 
       setHasMore(!isLast && pageNumber + 1 < totalPages);
-
       setSupplierOptions((prev) => (append ? mergeUniqueById(prev, content) : content));
       setPage(pageNumber);
     } catch (e) {
@@ -158,61 +197,126 @@ export default function SupplierSelector({
     }
   };
 
-  // ✅ reset & load page 0 khi filter đổi
+  // ✅ debounce fetch when filters change
   useEffect(() => {
     setSupplierOptions([]);
     setPage(0);
     setHasMore(false);
-    fetchSuppliers({ pageToLoad: 0, append: false });
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchSuppliers({ pageToLoad: 0, append: false });
+    }, 350);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey]);
+  }, [queryKey, disabled]);
 
   const loadNextPage = () => {
-    if (searchLoading || loadingMore || !hasMore) return;
+    if (searchLoading || loadingMore || !hasMore || disabled) return;
     fetchSuppliers({ pageToLoad: page + 1, append: true });
   };
 
-  // ✅ infinite scroll
   const handleScroll = (e) => {
     const el = e.currentTarget;
     const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 60;
     if (nearBottom) loadNextPage();
   };
 
+  // ✅ When selecting, return both SAP + Hana (for AddDialog auto-fill)
   const handleSelectSupplier = (opt) => {
-    onSelectSupplier({
-      fullItemDescriptionVN: opt.materialGroupFullDescription || opt.itemDescriptionVN || '',
+    onSelectSupplier?.({
       oldSapCode: opt.sapCode || '',
+      hanaSapCode: opt.hanaSapCode || '',
+
       supplierId: opt.id,
       unit: opt.unit || '',
       supplierPrice: opt.price || 0,
       productType1Id: opt.productType1Id || '',
       productType2Id: opt.productType2Id || '',
-      itemDescriptionVN: opt.itemDescriptionVN || opt.itemDescriptionEN || '',
       supplierName: opt.supplierName || opt.supplierCode || 'Unknown Supplier',
       currency: opt.currency || currency,
     });
   };
 
-  // ✅ style cho 3 cột last purchase (màu khác nhẹ)
+  const handleChangeFilter = (key) => (e) => {
+    setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      sapCode: '',
+      hanaSapCode: '',
+      itemDescriptionVN: '',
+      itemDescriptionEN: '',
+      supplierName: '',
+    });
+  };
+
   const lastPurchaseHeaderSx = { fontWeight: 'bold', bgcolor: '#e3f2fd' };
   const lastPurchaseCellSx = { bgcolor: '#f6fbff' };
-
-  const colSpanCount = 14; // tổng số cột hiện tại (để row load more span đúng)
+  const colSpanCount = 14;
 
   return (
-    <Paper variant="outlined" sx={{ mb: 1, p: 1 }}>
+    <Paper variant="outlined" sx={{ mb: 1, p: 1, opacity: disabled ? 0.7 : 1 }}>
       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-        Select Supplier
-        {hasSapCode && hasItemNo
-          ? ` (SAP: ${oldSapCode} + Item: "${itemNo}")`
-          : hasSapCode
-          ? ` (SAP Code: ${oldSapCode})`
-          : hasItemNo
-          ? ` (Item No: "${itemNo}")`
-          : ' (All products)'}{' '}
-        | Currency: <strong>{currency}</strong>
+        Select Supplier | Currency: <strong>{currency}</strong>
       </Typography>
+
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1 }}>
+        <TextField
+          size="small"
+          label="SAP Code"
+          value={filters.sapCode}
+          onChange={handleChangeFilter('sapCode')}
+          fullWidth
+          disabled={disabled}
+        />
+        <TextField
+          size="small"
+          label="Hana Code"
+          value={filters.hanaSapCode}
+          onChange={handleChangeFilter('hanaSapCode')}
+          fullWidth
+          disabled={disabled}
+        />
+        <TextField
+          size="small"
+          label="Item Des (VN)"
+          value={filters.itemDescriptionVN}
+          onChange={handleChangeFilter('itemDescriptionVN')}
+          fullWidth
+          disabled={disabled}
+        />
+        <TextField
+          size="small"
+          label="Item Des (EN)"
+          value={filters.itemDescriptionEN}
+          onChange={handleChangeFilter('itemDescriptionEN')}
+          fullWidth
+          disabled={disabled}
+        />
+        <TextField
+          size="small"
+          label="Supplier"
+          value={filters.supplierName}
+          onChange={handleChangeFilter('supplierName')}
+          fullWidth
+          disabled={disabled}
+        />
+
+        <IconButton
+          onClick={clearFilters}
+          size="small"
+          sx={{ alignSelf: { xs: 'flex-start', md: 'center' } }}
+          disabled={!hasAnyFilter || disabled}
+          title="Clear filters"
+        >
+          <ClearIcon fontSize="small" />
+        </IconButton>
+      </Stack>
 
       {searchLoading ? (
         <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -231,18 +335,15 @@ export default function SupplierSelector({
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Type 1</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Type 2</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>SAP Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Item No</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Hana Code</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Description</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Price</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Currency</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Unit</TableCell>
-
-                {/* ✅ 3 cột last purchase (bỏ Last Supplier) */}
                 <TableCell sx={lastPurchaseHeaderSx}>Last Purchase Date</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Price</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Order Qty</TableCell>
-
                 <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Action</TableCell>
               </TableRow>
             </TableHead>
@@ -264,11 +365,14 @@ export default function SupplierSelector({
                     </TableCell>
 
                     <TableCell>{opt.sapCode || '-'}</TableCell>
-
-                    {/* backend trả hanaSapCode */}
                     <TableCell>{opt.hanaSapCode || '-'}</TableCell>
 
-                    <TableCell>{opt.itemDescriptionVN || opt.itemDescriptionEN || '-'}</TableCell>
+                    <TableCell>
+                      <div style={{ fontWeight: 600 }}>{opt.itemDescriptionVN || '-'}</div>
+                      {opt.itemDescriptionEN ? (
+                        <div style={{ fontSize: 12, color: '#666' }}>{opt.itemDescriptionEN}</div>
+                      ) : null}
+                    </TableCell>
 
                     <TableCell>{opt.supplierName || opt.supplierCode || '-'}</TableCell>
 
@@ -279,7 +383,6 @@ export default function SupplierSelector({
                     <TableCell align="center">{code}</TableCell>
                     <TableCell align="center">{opt.unit || '-'}</TableCell>
 
-                    {/* ✅ last purchase */}
                     <TableCell sx={lastPurchaseCellSx} align="center">
                       {opt.lastPurchaseDate ? formatDateTime(opt.lastPurchaseDate) : '-'}
                     </TableCell>
@@ -297,7 +400,13 @@ export default function SupplierSelector({
                     </TableCell>
 
                     <TableCell>
-                      <Button variant="contained" color="primary" size="small" onClick={() => handleSelectSupplier(opt)}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        onClick={() => handleSelectSupplier(opt)}
+                        disabled={disabled}
+                      >
                         Select
                       </Button>
                     </TableCell>
@@ -305,14 +414,13 @@ export default function SupplierSelector({
                 );
               })}
 
-              {/* ✅ Row load more (icon) */}
               {hasMore && (
                 <TableRow>
                   <TableCell colSpan={colSpanCount} sx={{ py: 1.2 }}>
                     <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
                       <IconButton
                         onClick={loadNextPage}
-                        disabled={loadingMore || searchLoading}
+                        disabled={loadingMore || searchLoading || disabled}
                         size="small"
                         color="primary"
                       >
@@ -338,7 +446,7 @@ export default function SupplierSelector({
         </TableContainer>
       ) : (
         <Typography variant="body2" color="text.secondary" align="center" sx={{ p: 3 }}>
-          {hasSapCode || hasItemNo ? 'No products match your search criteria.' : `No products available for currency: ${currency}`}
+          {hasAnyFilter ? 'No products match your search criteria.' : `No products available for currency: ${currency}`}
         </Typography>
       )}
     </Paper>

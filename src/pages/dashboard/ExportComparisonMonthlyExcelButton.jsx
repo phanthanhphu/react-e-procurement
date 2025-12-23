@@ -13,25 +13,46 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
   const [currency, setCurrency] = useState('VND');
   const [createdDate, setCreatedDate] = useState('');
 
-  // ===== helper: format date array [yyyy,MM,dd,HH,mm,ss,nano] =====
-  const formatLastPurchaseDate = (d) => {
-    if (!d) return '';
-    if (Array.isArray(d) && d.length >= 6) {
-      const [y, m, day, hh, mm, ss] = d;
-      const pad = (x) => String(x).padStart(2, '0');
-      return `${pad(day)}/${pad(m)}/${y} ${pad(hh)}:${pad(mm)}:${pad(ss)}`;
-    }
+  // ✅ map: requisitionId -> { qty, supplier, price, dateArr }
+  const [lastPurchaseMap, setLastPurchaseMap] = useState(() => new Map());
+
+  const safeNum = (v) => {
+    if (v == null || v === '') return 0;
+    const n = Number(v);
+    return Number.isNaN(n) ? 0 : n;
+  };
+
+  // lastPurchaseDate is array [y,m,d,h,mi,s,nano]
+  const fmtDateTime = (arr) => {
+    if (!arr || !Array.isArray(arr) || arr.length < 3) return '';
+    const [y, m, d, hh = 0, mm = 0] = arr;
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y} ${String(hh).padStart(
+      2,
+      '0'
+    )}:${String(mm).padStart(2, '0')}`;
+  };
+
+  // ✅ derive previous month display from createdDate (dd/MM/yyyy)
+  const getPreviousMonthDisplay = (createdDateStr) => {
     try {
-      const dt = new Date(d);
-      if (!Number.isNaN(dt.getTime())) return dt.toLocaleString();
-      return String(d);
+      if (!createdDateStr || typeof createdDateStr !== 'string') return { prevMonthNum: null, prevMonthName: null };
+      const parts = createdDateStr.split('/');
+      if (parts.length !== 3) return { prevMonthNum: null, prevMonthName: null };
+
+      const m = Number(parts[1]); // 1..12
+      if (!Number.isFinite(m) || m < 1 || m > 12) return { prevMonthNum: null, prevMonthName: null };
+
+      const prevMonth = m === 1 ? 12 : m - 1;
+      const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const prevMonthName = monthNamesShort[prevMonth - 1] || null;
+
+      return { prevMonthNum: prevMonth, prevMonthName };
     } catch {
-      return String(d);
+      return { prevMonthNum: null, prevMonthName: null };
     }
   };
 
   // ===== helper: format money with comma thousands (no currency symbol) =====
-  // VND: 0 decimals, USD/EUR: 2 decimals (nếu muốn 0 cho tất cả thì đổi decimals = 0)
   const formatMoneyNumber = (value, curr) => {
     if (value == null || value === '') return '0';
     const num = Number(value);
@@ -54,18 +75,39 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
     }
   };
 
+  // ✅ pick last purchase (ưu tiên field từ API comparison nếu có, fallback sang map từ filter)
+  const pickLastPurchase = (item) => {
+    // 1) nếu /search/comparison-monthly trả thẳng các field này (sau khi backend update)
+    const direct = {
+      qty: item?.lastPurchaseOrderQty ?? null,
+      supplier: item?.lastPurchaseSupplierName ?? '',
+      price: item?.lastPurchasePrice ?? null,
+      dateArr: item?.lastPurchaseDate ?? null,
+    };
+    const hasDirect =
+      direct.qty != null || (direct.supplier && direct.supplier !== '') || direct.price != null || direct.dateArr != null;
+    if (hasDirect) return direct;
+
+    // 2) fallback: lấy từ requisition-monthly/filter
+    const key = item?.id;
+    if (!key) return { qty: null, supplier: '', price: null, dateArr: null };
+    const v = lastPurchaseMap.get(key);
+    return v || { qty: null, supplier: '', price: null, dateArr: null };
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const groupResponse = await fetch(
-          `${API_BASE_URL}/api/group-summary-requisitions/${groupId}`,
-          { headers: { Accept: '*/*' } }
-        );
+        if (!groupId) return;
+
+        // 1) fetch group summary (currency + createdDate)
+        const groupResponse = await fetch(`${API_BASE_URL}/api/group-summary-requisitions/${groupId}`, {
+          headers: { Accept: '*/*' },
+        });
         if (!groupResponse.ok) throw new Error('Failed to fetch group summary');
         const groupResult = await groupResponse.json();
         setCurrency(groupResult.currency || 'VND');
 
-        // Convert createdDate array thành dd/mm/yyyy
         if (groupResult.createdDate && Array.isArray(groupResult.createdDate)) {
           const [y, m, d] = groupResult.createdDate;
           const formatted = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
@@ -74,8 +116,10 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
           setCreatedDate('');
         }
 
+        // 2) fetch comparison data
+        // ✅ truyền includeMonthlyLastPurchase=true luôn (backend update xong là dùng trực tiếp)
         const response = await fetch(
-          `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false&removeDuplicateSuppliers=false`,
+          `${API_BASE_URL}/search/comparison-monthly?groupId=${groupId}&filter=false&removeDuplicateSuppliers=false&includeMonthlyLastPurchase=true`,
           { headers: { Accept: '*/*' } }
         );
         if (!response.ok) throw new Error('Network response was not ok');
@@ -85,10 +129,43 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
         setTotalAmt(result.totalAmt || 0);
         setTotalAmtDifference(result.totalAmtDifference || 0);
         setTotalDifferencePercentage(result.totalDifferencePercentage || 0);
+
+        // 3) ✅ fetch monthly requisitions for LAST PURCHASE fields (giống ExportRequisitionMonthlyExcelButton)
+        try {
+          const remarkRes = await fetch(
+            `${API_BASE_URL}/requisition-monthly/filter?groupId=${groupId}&hasFilter=false&disablePagination=true&includeMonthlyLastPurchase=true&page=0&size=2147483647&sort=string`,
+            { headers: { Accept: '*/*' } }
+          );
+
+          if (remarkRes.ok) {
+            const payload = await remarkRes.json();
+            const list = payload?.requisitions?.content || [];
+            const map = new Map();
+
+            list.forEach((it) => {
+              if (!it?.id) return;
+              map.set(it.id, {
+                qty: it.lastPurchaseOrderQty ?? null,
+                supplier: it.lastPurchaseSupplierName ?? '',
+                price: it.lastPurchasePrice ?? null,
+                dateArr: it.lastPurchaseDate ?? null,
+              });
+            });
+
+            setLastPurchaseMap(map);
+          } else {
+            console.warn('Failed to fetch requisition-monthly/filter includeMonthlyLastPurchase');
+            setLastPurchaseMap(new Map());
+          }
+        } catch (e) {
+          console.warn('Failed to fetch requisition-monthly/filter includeMonthlyLastPurchase.', e);
+          setLastPurchaseMap(new Map());
+        }
       } catch (error) {
         console.error('Failed to fetch data:', error);
       }
     };
+
     fetchData();
   }, [groupId]);
 
@@ -97,6 +174,11 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
       alert('No requisition data available to export. Please check your filters or try again later.');
       return;
     }
+
+    // ✅ dynamic label: createdDate month=12 => prev month=11 => "Total Purchase (Nov)"
+    const { prevMonthNum, prevMonthName } = getPreviousMonthDisplay(createdDate);
+    const totalPurchasePrevMonthLabel =
+      prevMonthName && prevMonthNum ? `Total Purchase (${prevMonthName})` : 'Total Purchase (Previous Month)';
 
     // Bước 1: Xác định các cột supplier duy nhất theo logic mới
     const supplierColumnMap = new Map(); // key: "name|price", value: supplier object (ưu tiên isSelected=1)
@@ -131,7 +213,7 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
       key: `${s.supplierName}|${s.price ?? 'null'}`,
     }));
 
-    // ===== add LAST PURCHASE (4 cols) =====
+    // ✅ LAST PURCHASE (4 cols): qty, supplier, price, date  (giống file mẫu)
     const LAST_PURCHASE_COLS = 4;
 
     // 9 fixed + suppliers + (lastPurchase 4 + selected 3 + diff 2 + remark 1 = 10)
@@ -164,7 +246,7 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
     headerRow2[8] = 'Order Qty';
 
     if (allSupplierKeys.length > 0) headerRow2[supplierStartCol] = 'SUPPLIER';
-    headerRow2[lastPurchaseStartCol] = 'LAST PURCHASE';
+    headerRow2[lastPurchaseStartCol] = 'LAST PURCHASE (PREVIOUS MONTH)';
     headerRow2[selectedStartCol] = 'Selected Supplier';
     headerRow2[differenceStartCol] = 'Difference';
     headerRow2[remarkCol] = 'Remark';
@@ -185,23 +267,17 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
 
     const supplierNames = allSupplierKeys.map((s) => s.name);
 
+    // ✅ đổi tên + thứ tự giống ExportRequisitionMonthlyExcelButton
     const lastPurchaseColumns = [
-      'Last Supplier',
-      'Last Purchase Date',
-      `Last Price (${currency})`,
-      'Last Order Qty',
+      totalPurchasePrevMonthLabel,        // qty (sum)
+      'Last Supplier (Latest)',           // latest supplier
+      `Last Price (Latest) (${currency})`,
+      'Last Purchase Date (Latest)',
     ];
 
-    const selectedColumns = [
-      'Supplier Description',
-      `Price (${currency})`,
-      `Amount (${currency})`,
-    ];
+    const selectedColumns = ['Supplier Description', `Price (${currency})`, `Amount (${currency})`];
 
-    const differenceColumns = [
-      `Difference (${currency})`,
-      '%',
-    ];
+    const differenceColumns = [`Difference (${currency})`, '%'];
 
     wsData.push([
       ...fixedColumns,
@@ -224,6 +300,12 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
         supplierPriceMap.set(key, sup.price != null ? formatMoneyNumber(sup.price, currency) : '');
       });
 
+      const lp = pickLastPurchase(item);
+      const lpQty = lp?.qty != null ? lp.qty : '';
+      const lpSupplier = lp?.supplier ?? '';
+      const lpPrice = lp?.price != null ? formatMoneyNumber(lp.price, currency) : '';
+      const lpDate = fmtDateTime(lp?.dateArr);
+
       const row = [
         index + 1,
         item.type1Name || '',
@@ -238,11 +320,11 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
         // supplier matrix
         ...allSupplierKeys.map((col) => supplierPriceMap.get(col.key) || ''),
 
-        // ✅ last purchase 4 cols
-        item.lastPurchaseSupplierName || '',
-        formatLastPurchaseDate(item.lastPurchaseDate),
-        item.lastPurchasePrice != null ? formatMoneyNumber(item.lastPurchasePrice, currency) : '',
-        item.lastPurchaseOrderQty != null ? item.lastPurchaseOrderQty : '',
+        // ✅ last purchase 4 cols (qty, supplier, price, date)
+        lpQty,
+        lpSupplier,
+        lpPrice,
+        lpDate,
 
         // selected supplier 3 cols
         selectedSupplier ? selectedSupplier.supplierName : '',
@@ -375,7 +457,7 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
         ? [{ s: { r: 1, c: supplierStartCol }, e: { r: 1, c: supplierEndCol } }]
         : []),
 
-      // ✅ LAST PURCHASE group
+      // ✅ LAST PURCHASE group (4 cols)
       { s: { r: 1, c: lastPurchaseStartCol }, e: { r: 1, c: lastPurchaseStartCol + 3 } },
 
       // Selected Supplier group
@@ -411,11 +493,11 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
       ws['!cols'][9 + i] = { wch: 18 };
     });
 
-    // ✅ LAST PURCHASE widths
-    ws['!cols'][lastPurchaseStartCol] = { wch: 22 };     // Last Supplier
-    ws['!cols'][lastPurchaseStartCol + 1] = { wch: 22 }; // Last Purchase Date
-    ws['!cols'][lastPurchaseStartCol + 2] = { wch: 16 }; // Last Price
-    ws['!cols'][lastPurchaseStartCol + 3] = { wch: 12 }; // Last Order Qty
+    // ✅ LAST PURCHASE widths (qty, supplier, price, date)
+    ws['!cols'][lastPurchaseStartCol] = { wch: 22 }; // Total Purchase (Prev Month)
+    ws['!cols'][lastPurchaseStartCol + 1] = { wch: 24 }; // Last Supplier
+    ws['!cols'][lastPurchaseStartCol + 2] = { wch: 18 }; // Last Price
+    ws['!cols'][lastPurchaseStartCol + 3] = { wch: 24 }; // Last Purchase Date
 
     // Selected Supplier widths
     ws['!cols'][selectedStartCol] = { wch: 22 };
@@ -430,10 +512,7 @@ export default function ExportComparisonMonthlyExcelButton({ disabled, groupId }
     ws['!cols'][remarkCol] = { wch: 30 };
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(
-      new Blob([wbout], { type: 'application/octet-stream' }),
-      `comparison_price_${groupId}.xlsx`
-    );
+    saveAs(new Blob([wbout], { type: 'application/octet-stream' }), `comparison_price_${groupId}.xlsx`);
   };
 
   return (

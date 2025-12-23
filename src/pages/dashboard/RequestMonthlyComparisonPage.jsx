@@ -1,3 +1,4 @@
+// src/pages/ComparisonPage/RequestMonthlyComparisonPage.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -59,6 +60,8 @@ const normalizeCurrencyCode = (currency) => {
       return 'VND';
     case 'USD':
       return 'USD';
+    case 'EUR':
+      return 'EUR';
     default:
       return 'VND';
   }
@@ -90,7 +93,9 @@ const formatCurrency = (value, currency) => {
   }
 };
 
-/* ========= Headers ========= */
+/* ========= Headers =========
+   ✅ FIX: "Good Type" dùng key riêng: goodType
+*/
 const getHeaders = (currency = 'VND') => [
   { label: 'No', key: 'no' },
   { label: 'Product Type 1', key: 'type1Name' },
@@ -112,7 +117,7 @@ const getHeaders = (currency = 'VND') => [
   { label: `Amt Diff (${getDisplayCurrency(currency)})`, key: 'amtDifference' },
   { label: 'Diff (%)', key: 'percentage' },
   { label: 'Remark', key: 'remarkComparison' },
-  { label: 'Good Type', key: 'productType2Name' },
+  { label: 'Good Type', key: 'goodType' },
   { label: 'Action', key: 'action' },
 ];
 
@@ -258,7 +263,10 @@ function DeptRequestTable({ departmentRequests }) {
       {departmentRequests.length > 3 && (
         <Button
           size="small"
-          onClick={() => setShowAllDepts(!showAllDepts)}
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ IMPORTANT: không trigger row click
+            setShowAllDepts(!showAllDepts);
+          }}
           sx={{ mt: 0.5, fontSize: '0.75rem', textTransform: 'none', fontWeight: 400 }}
         >
           {showAllDepts ? 'Show less' : 'Show more'}
@@ -268,9 +276,7 @@ function DeptRequestTable({ departmentRequests }) {
   );
 }
 
-/* ========= SupplierTable (admin style) =========
-   ✅ default chỉ show 2 NCC, Show more mới bung hết
-*/
+/* ========= SupplierTable (admin style) ========= */
 function SupplierTable({ suppliers, currency }) {
   const [showAllSuppliers, setShowAllSuppliers] = useState(false);
   const displaySuppliers = showAllSuppliers ? suppliers : suppliers?.slice(0, 2);
@@ -287,7 +293,7 @@ function SupplierTable({ suppliers, currency }) {
       <Table
         size="small"
         sx={{
-          minWidth: 300, // ✅ rộng hơn
+          minWidth: 300,
           border: '1px solid #e5e7eb',
           borderRadius: 1,
           overflow: 'hidden',
@@ -339,7 +345,10 @@ function SupplierTable({ suppliers, currency }) {
       {suppliers.length > 2 && (
         <Button
           size="small"
-          onClick={() => setShowAllSuppliers(!showAllSuppliers)}
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ IMPORTANT: không trigger row click
+            setShowAllSuppliers(!showAllSuppliers);
+          }}
           sx={{ mt: 0.5, fontSize: '0.75rem', textTransform: 'none', fontWeight: 400 }}
         >
           {showAllSuppliers ? 'Show less' : 'Show more'}
@@ -433,11 +442,12 @@ export default function RequestMonthlyComparisonPage() {
           headers: { Accept: '*/*' },
         });
 
+        /* ✅ FIX Good Type: map ra field riêng goodType (ưu tiên goodtype/goodType/good_type) */
         const mappedData =
           response.data.requisitions?.map((item) => ({
             ...item,
             id: item.id,
-            productType2Name: item.goodtype || item.productType2Name || '',
+            goodType: item.goodtype ?? item.goodType ?? item.good_type ?? '',
           })) || [];
 
         setData(mappedData);
@@ -485,7 +495,10 @@ export default function RequestMonthlyComparisonPage() {
     fetchData();
   };
 
-  const paginatedData = useMemo(() => data.slice(page * rowsPerPage, (page + 1) * rowsPerPage), [data, page, rowsPerPage]);
+  const paginatedData = useMemo(
+    () => data.slice(page * rowsPerPage, (page + 1) * rowsPerPage),
+    [data, page, rowsPerPage]
+  );
 
   const mappedDataForExport = useMemo(
     () =>
@@ -500,12 +513,12 @@ export default function RequestMonthlyComparisonPage() {
         totalRequestQty: item.totalRequestQty || 0,
         medConfirmed: item.medConfirmed ?? item.orderQty ?? 0,
         currency: item.currency || 'VND',
-        productType2Name: item.productType2Name || '',
+        goodType: item.goodType || '',
       })),
     [paginatedData]
   );
 
-  const handleOpenEdit = (item) => {
+  const handleOpenEditDialog = (item) => {
     setSelectedItem(item);
     setOpenEdit(true);
   };
@@ -517,7 +530,20 @@ export default function RequestMonthlyComparisonPage() {
     await fetchUnfilteredTotals();
   };
 
-  /* ========= Table UX (sticky & neutral) ========= */
+  /* ========= NEW: click row -> open edit (trừ khi click vào control) ========= */
+  const shouldIgnoreRowClick = (e) => {
+    const t = e?.target;
+    return !!t?.closest?.(
+      'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root, .MuiButtonBase-root'
+    );
+  };
+
+  const handleRowClick = (item) => (e) => {
+    if (shouldIgnoreRowClick(e)) return;
+    handleOpenEditDialog(item);
+  };
+
+  /* ========= Table UX (sticky & wrap) ========= */
   const zebraBg = (idx) => (idx % 2 === 0 ? '#ffffff' : '#fafafa');
 
   const stickyKeys = ['no', 'type1Name', 'type2Name', 'vietnameseName', 'englishName', 'oldSapCode'];
@@ -555,8 +581,9 @@ export default function RequestMonthlyComparisonPage() {
     ...(key === 'vietnameseName' && { left: LEFT_VN, minWidth: VN_W }),
     ...(key === 'englishName' && { left: LEFT_EN, minWidth: EN_W }),
     ...(key === 'oldSapCode' && { left: LEFT_OLD, minWidth: OLD_W }),
-    ...(key === 'suppliers' && { minWidth: 380 }), // ✅ cột Supplier dài ra
+    ...(key === 'suppliers' && { minWidth: 380 }),
     ...(key === 'remarkComparison' && { minWidth: 240 }),
+    ...(key === 'goodType' && { minWidth: 140 }),
   });
 
   const stickyBodySx = (left, minWidth, bg) => ({
@@ -567,6 +594,22 @@ export default function RequestMonthlyComparisonPage() {
     backgroundColor: bg,
     borderRight: 'none',
   });
+
+  /* ✅ Wrap chung cho cell value dài */
+  const wrapCellSx = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.25,
+  };
+
+  /* ✅ Wrap riêng cho code (SAP/Hana) -> break mạnh hơn */
+  const codeWrapSx = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-all',
+    lineHeight: 1.2,
+  };
 
   const alignByKey = (key) => {
     const centerKeys = [
@@ -591,13 +634,20 @@ export default function RequestMonthlyComparisonPage() {
   const cur = normalizeCurrencyCode(currency);
   const locale = getLocaleForCurrency(cur);
 
-  const totalAmtText = unfilteredTotals.totalAmt ? unfilteredTotals.totalAmt.toLocaleString(locale, { style: 'currency', currency: cur }) : '0';
+  const totalAmtText = unfilteredTotals.totalAmt
+    ? unfilteredTotals.totalAmt.toLocaleString(locale, { style: 'currency', currency: cur })
+    : '0';
+
   const totalDiffText = unfilteredTotals.totalAmtDifference
     ? unfilteredTotals.totalAmtDifference.toLocaleString(locale, { style: 'currency', currency: cur })
     : '0';
-  const totalPctText = unfilteredTotals.totalDifferencePercentage ? `${unfilteredTotals.totalDifferencePercentage.toFixed(2)}%` : '0%';
 
-  const diffIsNegative = (unfilteredTotals.totalAmtDifference || 0) < 0 || (unfilteredTotals.totalDifferencePercentage || 0) < 0;
+  const totalPctText = unfilteredTotals.totalDifferencePercentage
+    ? `${unfilteredTotals.totalDifferencePercentage.toFixed(2)}%`
+    : '0%';
+
+  const diffIsNegative =
+    (unfilteredTotals.totalAmtDifference || 0) < 0 || (unfilteredTotals.totalDifferencePercentage || 0) < 0;
 
   return (
     <Box sx={{ p: 1.5, backgroundColor: '#f7f7f7', minHeight: '100vh' }}>
@@ -625,7 +675,12 @@ export default function RequestMonthlyComparisonPage() {
       </Paper>
 
       {/* Search giữ component hiện có */}
-      <ComparisonSearch searchValues={searchValues} onSearchChange={handleSearchChange} onSearch={handleSearch} onReset={handleReset} />
+      <ComparisonSearch
+        searchValues={searchValues}
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearch}
+        onReset={handleReset}
+      />
 
       {/* Totals bar */}
       <Paper
@@ -638,19 +693,28 @@ export default function RequestMonthlyComparisonPage() {
           backgroundColor: '#fff',
         }}
       >
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={1}
+          alignItems={{ xs: 'flex-start', md: 'center' }}
+          justifyContent="space-between"
+        >
           <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>
             Total Amount: <span style={{ color: '#111827', fontWeight: 600 }}>{totalAmtText}</span>
           </Typography>
 
           <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>
             Total Difference:{' '}
-            <span style={{ color: diffIsNegative ? theme.palette.error.main : '#111827', fontWeight: 600 }}>{totalDiffText}</span>
+            <span style={{ color: diffIsNegative ? theme.palette.error.main : '#111827', fontWeight: 600 }}>
+              {totalDiffText}
+            </span>
           </Typography>
 
           <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>
             Total Diff (%):{' '}
-            <span style={{ color: diffIsNegative ? theme.palette.error.main : '#111827', fontWeight: 600 }}>{totalPctText}</span>
+            <span style={{ color: diffIsNegative ? theme.palette.error.main : '#111827', fontWeight: 600 }}>
+              {totalPctText}
+            </span>
           </Typography>
         </Stack>
       </Paper>
@@ -697,25 +761,53 @@ export default function RequestMonthlyComparisonPage() {
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, idx) => {
                     const bg = zebraBg(idx);
+
                     return (
                       <TableRow
                         key={(item.oldSapCode || item.id || idx) + idx}
+                        onClick={handleRowClick(item)} // ✅ CLICK ROW OPEN EDIT
                         sx={{
                           backgroundColor: bg,
                           '&:hover': { backgroundColor: '#f1f5f9' },
                           '& > *': { borderBottom: '1px solid #f3f4f6' },
+                          cursor: 'pointer',
                         }}
                       >
                         {/* Sticky cells */}
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, bg) }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            ...wrapCellSx,
+                            ...stickyBodySx(LEFT_NO, NO_W, bg),
+                          }}
+                        >
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap', ...stickyBodySx(LEFT_T1, T1_W, bg) }}>
+                        <TableCell
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            ...wrapCellSx,
+                            ...stickyBodySx(LEFT_T1, T1_W, bg),
+                          }}
+                        >
                           {item.type1Name || ''}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap', ...stickyBodySx(LEFT_T2, T2_W, bg) }}>
+                        <TableCell
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            ...wrapCellSx,
+                            ...stickyBodySx(LEFT_T2, T2_W, bg),
+                          }}
+                        >
                           {item.type2Name || ''}
                         </TableCell>
 
@@ -724,32 +816,49 @@ export default function RequestMonthlyComparisonPage() {
                             fontSize: '0.75rem',
                             py: 0.4,
                             px: 0.6,
-                            whiteSpace: 'nowrap',
                             fontWeight: 600,
+                            ...wrapCellSx,
                             ...stickyBodySx(LEFT_VN, VN_W, bg),
                           }}
                         >
                           {item.vietnameseName || ''}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap', ...stickyBodySx(LEFT_EN, EN_W, bg) }}>
+                        <TableCell
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            ...wrapCellSx,
+                            ...stickyBodySx(LEFT_EN, EN_W, bg),
+                          }}
+                        >
                           {item.englishName || ''}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, bg) }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            ...codeWrapSx,
+                            ...stickyBodySx(LEFT_OLD, OLD_W, bg),
+                          }}
+                        >
                           {item.oldSapCode || ''}
                         </TableCell>
 
                         {/* Non-sticky */}
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...codeWrapSx }}>
                           {item.hanaSapCode || ''}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...wrapCellSx }}>
                           {item.unit || ''}
                         </TableCell>
 
-                        {/* ✅ Supplier column rộng + table con chỉ show 2 */}
+                        {/* Supplier column */}
                         <TableCell sx={{ py: 0.4, px: 0.6, minWidth: 380 }}>
                           <SupplierTable suppliers={item.suppliers} currency={item.currency || currency} />
                         </TableCell>
@@ -775,7 +884,10 @@ export default function RequestMonthlyComparisonPage() {
                           {item.totalRequestQty != null ? String(item.totalRequestQty) : '0'}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, fontWeight: 600, color: '#d32f2f' }}>
+                        <TableCell
+                          align="center"
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, fontWeight: 600, color: '#d32f2f' }}
+                        >
                           {item.medConfirmed ?? item.orderQty ?? 0}
                         </TableCell>
 
@@ -787,7 +899,16 @@ export default function RequestMonthlyComparisonPage() {
                           {getDisplayCurrency(item.currency) || 'VND'}
                         </TableCell>
 
-                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, fontWeight: 700, color: theme.palette.primary.dark }}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            fontWeight: 700,
+                            color: theme.palette.primary.dark,
+                          }}
+                        >
                           {item.amount ? formatCurrency(item.amount, item.currency) : '0'}
                         </TableCell>
 
@@ -807,12 +928,20 @@ export default function RequestMonthlyComparisonPage() {
                           {item.remarkComparison || ''}
                         </TableCell>
 
-                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap' }}>
-                          {item.productType2Name || ''}
+                        {/* ✅ Good Type */}
+                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...wrapCellSx, minWidth: 140 }}>
+                          {item.goodType || ''}
                         </TableCell>
 
                         <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                          <IconButton size="small" color="primary" onClick={() => handleOpenEdit(item)}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={(e) => {
+                              e.stopPropagation(); // ✅ IMPORTANT
+                              handleOpenEditDialog(item);
+                            }}
+                          >
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </TableCell>

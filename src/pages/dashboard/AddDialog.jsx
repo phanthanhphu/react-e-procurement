@@ -1,3 +1,4 @@
+// src/pages/.../AddDialog.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Dialog,
@@ -41,8 +42,8 @@ const normalizeCurrencyCode = (code) => {
   const validCurrencies = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
   const currencyMap = { EURO: 'EUR' };
   if (!code) return 'VND';
-  const normalizedCode = currencyMap[String(code).toUpperCase()] || String(code).toUpperCase();
-  return validCurrencies.includes(normalizedCode) ? normalizedCode : 'VND';
+  const normalized = currencyMap[String(code).toUpperCase()] || String(code).toUpperCase();
+  return validCurrencies.includes(normalized) ? normalized : 'VND';
 };
 
 const parseJwt = (token) => {
@@ -69,7 +70,6 @@ const getAccessToken = () =>
   '';
 
 const getUserEmail = () => {
-  // ưu tiên key lưu trực tiếp
   const direct =
     localStorage.getItem('email') ||
     localStorage.getItem('userEmail') ||
@@ -77,7 +77,6 @@ const getUserEmail = () => {
 
   if (direct && direct.trim()) return direct.trim();
 
-  // fallback: lấy từ token
   const token = getAccessToken();
   const payload = token ? parseJwt(token) : null;
 
@@ -85,7 +84,7 @@ const getUserEmail = () => {
     payload?.email ||
     payload?.preferred_username ||
     payload?.upn ||
-    payload?.sub; // tùy hệ auth
+    payload?.sub;
 
   return typeof email === 'string' ? email.trim() : '';
 };
@@ -140,13 +139,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
+  // ✅ Used to fully reset SupplierSelector UI when "Change supplier" is clicked
+  const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
+
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const locked = saving;
   const mountedRef = useRef(false);
 
-  // ===== UI TOKENS (glass + gradient + compact) =====
+  // ===== UI TOKENS =====
   const paperSx = useMemo(
     () => ({
       borderRadius: fullScreen ? 0 : 4,
@@ -189,16 +191,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     () => ({
       '& .MuiInputLabel-root': { fontSize: 12.5 },
       '& .MuiFormHelperText-root': { marginLeft: 0, fontSize: 12 },
-
       '& .MuiOutlinedInput-root': {
         borderRadius: 3,
         backgroundColor: alpha(theme.palette.common.white, 0.65),
         minHeight: 36,
-
         '& input': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.25 },
         '& textarea': { padding: '8px 12px', fontSize: 13.5, lineHeight: 1.35 },
         '& .MuiSelect-select': { padding: '8px 36px 8px 12px', fontSize: 13.5, lineHeight: 1.25 },
-
         '& fieldset': { borderColor: alpha(theme.palette.divider, 0.7) },
         '&:hover fieldset': { borderColor: alpha(theme.palette.primary.main, 0.5) },
         '&.Mui-focused fieldset': { borderColor: theme.palette.primary.main, borderWidth: 2 },
@@ -258,7 +257,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     return oq > totalRequestQty ? `Order Q'ty cannot exceed total request (${totalRequestQty})` : '';
   }, [formData.orderQty, totalRequestQty]);
 
-  // ✅ validate duplicates (reliable)
   const validateDeptDuplicates = useCallback((rows) => {
     const errors = rows.map((row, idx) => {
       if (!row.department) return '';
@@ -269,7 +267,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     return errors;
   }, []);
 
-  // Auto allocate buy: ưu tiên phòng có Qty nhỏ nhất trước
+  // Auto allocate buy: smallest requests first
   const autoAllocateBuy = useCallback(
     (rows, orderQtyInput) => {
       const orderQty = parseFloat(orderQtyInput) || 0;
@@ -308,7 +306,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     [totalRequestQty]
   );
 
-  // Apply allocation when Order Q'ty changes (kept as your intention)
   useEffect(() => {
     if (!orderQtyError && formData.orderQty) {
       const newRows = autoAllocateBuy(deptRows, formData.orderQty);
@@ -317,11 +314,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.orderQty, autoAllocateBuy, orderQtyError]);
 
-  /**
-   * ✅ FIX: fetchGroupCurrency phải gọi GET group data
-   * - Không được gọi POST /summary-requisitions/create
-   * - Có thể kèm email + bearer token nếu backend cần
-   */
   const fetchGroupCurrency = useCallback(async () => {
     if (!groupId) {
       setGroupCurrency('VND');
@@ -409,8 +401,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
     setSelectedSupplier(null);
     setShowSupplierSelector(true);
-    setIsEnManuallyEdited(false);
+    setSupplierSelectorKey((k) => k + 1);
 
+    setIsEnManuallyEdited(false);
     setErrorOpen(false);
     setErrorMessage('');
     setOpenConfirmDialog(false);
@@ -459,24 +452,31 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     };
   }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
 
-  const itemNoForSupplier = (formData.itemDescriptionVN || '').trim();
-
+  /**
+   * ✅ REQUIRED BEHAVIOR:
+   * - Selecting supplier auto-fills oldSapCode + hanaSapCode
+   * - User can still edit hanaSapCode manually in the form
+   * - Do NOT overwrite itemDescriptionVN/EN/fullDescription
+   */
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
       setFormData((prev) => ({
         ...prev,
-        oldSapCode: supplierData.oldSapCode || '',
         supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
-        fullItemDescriptionVN: supplierData.fullItemDescriptionVN || prev.fullItemDescriptionVN || '',
+
+        // ✅ auto-fill from supplier
+        oldSapCode: supplierData.oldSapCode || '',
+        hanaSapCode: supplierData.hanaSapCode || '',
       }));
 
       setSelectedSupplier({
         supplierName: supplierData.supplierName || '',
         sapCode: supplierData.oldSapCode || '',
+        hanaCode: supplierData.hanaSapCode || '',
         price: parseFloat(supplierData.supplierPrice) || 0,
         unit: supplierData.unit || '',
       });
@@ -485,7 +485,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     } else {
       setFormData((prev) => ({
         ...prev,
-        oldSapCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
@@ -494,6 +493,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
+      setSupplierSelectorKey((k) => k + 1);
     }
   };
 
@@ -504,7 +504,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
-  // ✅ better dept handling + validation
   const handleDeptChange = (index, field, value) => {
     setDeptRows((prev) => {
       const updated = [...prev];
@@ -554,16 +553,17 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const handleAddClick = () => {
+    if (!formData.supplierId?.trim()) return toastError('Please select supplier first');
+    if (!formData.oldSapCode?.trim()) return toastError('Old SAP Code is required');
     if (!formData.itemDescriptionVN?.trim()) return toastError('Item Description (VN) is required');
+
     if (totalRequestQty === 0) return toastError('At least one department must have request quantity');
     if (orderQtyError) return toastError(orderQtyError);
-    if (deptErrors.some(Boolean)) return toastError('Duplicate departments not allowed');
+    if (deptErrors.some(Boolean)) return toastError('Duplicate departments are not allowed');
+
     setOpenConfirmDialog(true);
   };
 
-  /**
-   * ✅ FIX: handleAdd gắn email vào query param khi POST create
-   */
   const handleAdd = async () => {
     const departmentRequisitions = deptRows
       .filter((r) => r.department && r.qty !== '' && r.qty !== null && r.qty !== undefined)
@@ -612,7 +612,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         }
       );
 
-      // cố gắng đọc json; nếu không được thì đọc text
       let data = null;
       const ct = res.headers.get('content-type') || '';
       if (ct.includes('application/json')) {
@@ -638,7 +637,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   return (
     <>
-      {/* MAIN DIALOG */}
       <Dialog
         open={open}
         onClose={locked ? undefined : onClose}
@@ -647,7 +645,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         fullWidth
         PaperProps={{ sx: paperSx }}
       >
-        {/* Gradient Header */}
         <DialogTitle sx={headerSx}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Box>
@@ -709,7 +706,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
             {/* BASIC INFO */}
             <Box sx={subtleCardSx}>
-              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Basic info</Typography>
+              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Basic Info</Typography>
               <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
                 VN is required; EN auto-translates unless you edit it manually.
               </Typography>
@@ -724,14 +721,17 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 }}
               >
                 <TextField
-                  label="Old SAP Code"
+                  label="Old SAP Code *"
                   value={formData.oldSapCode}
                   onChange={handleChange('oldSapCode')}
                   size="small"
                   fullWidth
+                  required
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Selecting supplier will auto-fill SAP + Hana from supplier."
                 />
+
                 <TextField
                   label="Hana SAP Code"
                   value={formData.hanaSapCode}
@@ -740,6 +740,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   fullWidth
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
                 <TextField
@@ -753,6 +754,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   disabled={locked}
                   sx={fieldSx}
                 />
+
                 <TextField
                   label="Item Description (EN)"
                   value={formData.itemDescriptionEN}
@@ -785,7 +787,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Select supplier for auto-fill unit/price/type.
+                    Select supplier to auto-fill SAP + Hana and store unit/price/type.
                   </Typography>
                 </Box>
 
@@ -794,7 +796,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     variant="outlined"
                     size="small"
                     disabled={locked}
-                    onClick={() => setShowSupplierSelector(true)}
+                    onClick={() => {
+                      setShowSupplierSelector(true);
+                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters UI
+                    }}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
                     Change supplier
@@ -813,12 +818,17 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     p: 1.2,
                   }}
                 >
+                  {/* ✅ IMPORTANT:
+                      - Do NOT pass itemDescriptionVN as a prefill to SupplierSelector filters
+                      - Only pass SAP/Hana if you want
+                  */}
                   <SupplierSelector
-                    oldSapCode={formData.oldSapCode}
-                    itemNo={itemNoForSupplier}
+                    key={supplierSelectorKey}
                     onSelectSupplier={handleSelectSupplier}
                     currency={groupCurrency}
                     disabled={loadingCurrency || locked}
+                    prefillSapCode={formData.oldSapCode}
+                    prefillHanaCode={formData.hanaSapCode}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -839,12 +849,15 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     sx={{
                       mt: 0.8,
                       display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1fr' },
                       gap: 0.9,
                     }}
                   >
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       SAP: <b>{selectedSupplier.sapCode || '-'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Hana: <b>{selectedSupplier.hanaCode || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Unit: <b>{selectedSupplier.unit || '-'}</b>
@@ -867,7 +880,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
             <Box sx={subtleCardSx}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Stack direction="row" spacing={0.75} alignItems="center">
-                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department requests</Typography>
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department Requests</Typography>
                   <Tooltip title="Buy is auto-allocated based on Order Q'ty (smallest requests first)." arrow>
                     <InfoOutlinedIcon
                       sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }}
@@ -982,7 +995,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   </Box>
                 ))}
 
-                {/* Summary */}
                 <Box
                   sx={{
                     mt: 0.4,
@@ -1025,7 +1037,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
             <Box sx={subtleCardSx}>
               <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Order</Typography>
               <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Order Q'ty will drive Buy auto-allocation.
+                Order Q'ty drives Buy auto-allocation.
               </Typography>
 
               <Divider sx={{ my: 1.2 }} />
@@ -1176,7 +1188,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           </Stack>
         </DialogContent>
 
-        {/* Footer */}
         <DialogActions sx={{ px: { xs: 2, sm: 2.2 }, py: 1.8, gap: 1 }}>
           <Button onClick={onClose} disabled={locked} variant="outlined" sx={outlineBtnSx}>
             Cancel

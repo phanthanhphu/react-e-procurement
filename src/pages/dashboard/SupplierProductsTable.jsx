@@ -96,16 +96,91 @@ const formatDateISO = (s) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-const formatCurrency = (value, currency) => {
-  if (value === null || value === undefined || isNaN(value)) return '0';
-  if (currency === 'VND') return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value);
-  if (currency === 'USD') return `$${Number(value).toFixed(0)}`;
-  if (currency === 'EURO' || currency === 'EUR') return `€${Number(value).toFixed(0)}`;
-  return Number(value).toFixed(0);
+const normalizeCurrency = (c) => {
+  const s = String(c ?? '').trim();
+  if (!s) return '';
+  const up = s.toUpperCase();
+  if (up === 'EUR') return 'EURO';
+  if (up === 'EURO') return 'EURO';
+  if (up === 'USD') return 'USD';
+  if (up === 'VND') return 'VND';
+  return up;
 };
 
-const getCurrencyColor = (c) => ({ VND: '#16a34a', EURO: '#2563eb', USD: '#dc2626' }[c] || '#6b7280');
-const getGoodTypeColor = (t) => ({ Common: '#16a34a', Special: '#2563eb', Electronics: '#dc2626' }[t] || '#6b7280');
+const normalizeGoodType = (t) => {
+  const s = String(t ?? '').trim();
+  if (!s) return '';
+  const up = s.toUpperCase();
+
+  if (['COMMON', 'NORMAL', 'STANDARD', 'STD', 'C'].includes(up)) return 'Common';
+  if (['SPECIAL', 'SPEC', 'SP', 'S'].includes(up)) return 'Special';
+  if (['ELECTRONICS', 'ELECTRONIC', 'ELEC', 'EL', 'E'].includes(up)) return 'Electronics';
+
+  return s.length <= 2 ? s.toUpperCase() : s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+const getCurrencyColor = (c) => {
+  const cc = normalizeCurrency(c);
+  return { VND: '#16a34a', EURO: '#2563eb', USD: '#dc2626' }[cc] || '#6b7280';
+};
+
+const getGoodTypeColor = (t) => {
+  const gt = normalizeGoodType(t);
+  return { Common: '#16a34a', Special: '#2563eb', Electronics: '#dc2626' }[gt] || '#6b7280';
+};
+
+// ✅ format tiền KHÔNG làm tròn (không toFixed), chỉ thêm dấu phẩy, giữ nguyên thập phân nếu có
+// - VND: mặc định không hiển thị thập phân; nhưng nếu có thập phân khác 0 thì vẫn giữ để không mất dữ liệu
+const formatMoneyNoRound = (value, currency) => {
+  const cur = normalizeCurrency(currency);
+
+  if (value === null || value === undefined || value === '') return '0';
+
+  let raw = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '0') : String(value);
+  raw = raw.trim();
+  if (!raw) return '0';
+
+  // bỏ dấu phẩy ngăn cách sẵn có (nếu backend/excel gửi "10,000.00")
+  raw = raw.replace(/,/g, '');
+
+  // lấy dấu âm
+  let sign = '';
+  if (raw.startsWith('-')) {
+    sign = '-';
+    raw = raw.slice(1);
+  }
+
+  // tách phần thập phân (nếu có)
+  const parts = raw.split('.');
+  const intRaw = parts[0] ?? '0';
+  const fracRaw = parts.length > 1 ? parts.slice(1).join('') : null; // phòng trường hợp có nhiều dấu "."
+
+  // chỉ giữ digit (tránh ký tự lạ)
+  let intDigits = String(intRaw).replace(/[^\d]/g, '');
+  if (intDigits === '') intDigits = '0';
+
+  // bỏ leading zeros nhưng giữ lại 1 số 0 nếu toàn 0
+  intDigits = intDigits.replace(/^0+(?=\d)/, '') || '0';
+
+  // thêm dấu phẩy cho phần nguyên
+  const intWithComma = intDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  // không có thập phân
+  if (fracRaw == null) return sign + intWithComma;
+
+  // giữ nguyên digit của phần thập phân
+  const fracDigits = String(fracRaw).replace(/[^\d]/g, '');
+
+  // VND: mặc định bỏ thập phân nếu toàn 0
+  if (cur === 'VND') {
+    if (!fracDigits || /^0+$/.test(fracDigits)) return sign + intWithComma;
+    return sign + intWithComma + '.' + fracDigits;
+  }
+
+  // USD/EURO/...: giữ nguyên thập phân như dữ liệu (không ép 2 số)
+  if (!fracDigits) return sign + intWithComma;
+  return sign + intWithComma + '.' + fracDigits;
+};
 
 const tagPillSx = {
   padding: '2px 8px',
@@ -120,36 +195,119 @@ const tagPillSx = {
 };
 
 /* =========================
-   Headers (Supplier Products)
-   - Sticky columns: No, Product Item 1, Product Item 2, Supplier Description, SAP Code
+   ✅ Sort helpers (CLIENT fallback) — y hệt WeeklyMonthly
+   ========================= */
+const toTimestamp = (v) => {
+  if (!v) return 0;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const getComparableValue = (row, key) => {
+  if (!row) return '';
+
+  const dateKeys = new Set(['createdAt', 'updatedAt']);
+  const numberKeys = new Set(['price']);
+
+  if (dateKeys.has(key)) return toTimestamp(row?.[key]);
+  if (numberKeys.has(key)) {
+    const n = Number(row?.[key]);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  if (key === 'currency') return normalizeCurrency(row?.currency || '').toLowerCase();
+  if (key === 'goodType') return normalizeGoodType(row?.goodType || '').toLowerCase();
+
+  const s = row?.[key];
+  return (s == null ? '' : String(s)).trim().toLowerCase();
+};
+
+const sortRowsClient = (rows, sortConfig) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  if (!sortConfig?.key || !sortConfig?.direction) return rows;
+
+  const dir = sortConfig.direction === 'desc' ? -1 : 1;
+  const key = sortConfig.key;
+
+  const withIndex = rows.map((r, i) => ({ r, i }));
+  withIndex.sort((a, b) => {
+    const va = getComparableValue(a.r, key);
+    const vb = getComparableValue(b.r, key);
+
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return (va - vb) * dir;
+      return a.i - b.i;
+    }
+
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+    return a.i - b.i;
+  });
+
+  return withIndex.map((x) => x.r);
+};
+
+/* =========================
+   ✅ Sort Indicator (tri-state)
+   ========================= */
+const SortIndicator = ({ active, direction }) => {
+  if (!active) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  if (direction === 'asc') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+      <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
+      <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
+    </Box>
+  );
+};
+
+/* =========================
+   Headers
+   ✅ thêm backendKey để build sort param
    ========================= */
 const HEADERS = [
-  { label: 'No', key: 'no', sortable: false, align: 'center' },
+  { label: 'No', key: 'no', backendKey: 'no', sortable: false, align: 'center' },
 
-  { label: 'Product Item 1', key: 'productType1Name', sortable: true },
-  { label: 'Product Item 2', key: 'productType2Name', sortable: true },
-  { label: 'Supplier Description', key: 'supplierName', sortable: true },
-  { label: 'SAP Code', key: 'sapCode', sortable: true },
+  { label: 'Product Item 1', key: 'productType1Name', backendKey: 'productType1Name', sortable: true },
+  { label: 'Product Item 2', key: 'productType2Name', backendKey: 'productType2Name', sortable: true },
+  { label: 'Supplier Description', key: 'supplierName', backendKey: 'supplierName', sortable: true },
+  { label: 'SAP Code', key: 'sapCode', backendKey: 'sapCode', sortable: true },
 
-  { label: 'Hana Sap Code', key: 'hanaSapCode', sortable: true },
-  { label: 'Item Description(EN)', key: 'itemDescriptionEN', sortable: true },
-  { label: 'Item Description(VN)', key: 'itemDescriptionVN', sortable: true },
-  { label: 'Size', key: 'size', sortable: true, align: 'center' },
-  { label: 'Unit', key: 'unit', sortable: true, align: 'center' },
+  { label: 'Hana Sap Code', key: 'hanaSapCode', backendKey: 'hanaSapCode', sortable: true },
+  { label: 'Item Description(EN)', key: 'itemDescriptionEN', backendKey: 'itemDescriptionEN', sortable: true },
+  { label: 'Item Description(VN)', key: 'itemDescriptionVN', backendKey: 'itemDescriptionVN', sortable: true },
+  { label: 'Size', key: 'size', backendKey: 'size', sortable: true, align: 'center' },
+  { label: 'Unit', key: 'unit', backendKey: 'unit', sortable: true, align: 'center' },
 
-  { label: 'Price', key: 'price', sortable: true, align: 'center' },
-  { label: 'Currency', key: 'currency', sortable: true, align: 'center' },
-  { label: 'Good Type', key: 'goodType', sortable: true, align: 'center' },
+  { label: 'Price', key: 'price', backendKey: 'price', sortable: true, align: 'center' },
+  { label: 'Currency', key: 'currency', backendKey: 'currency', sortable: true, align: 'center' },
+  { label: 'Good Type', key: 'goodType', backendKey: 'goodType', sortable: true, align: 'center' },
 
-  { label: 'Images', key: 'image', sortable: false, align: 'center' },
-  { label: 'Created Date', key: 'createdAt', sortable: true, align: 'center' },
-  { label: 'Updated Date', key: 'updatedAt', sortable: true, align: 'center' },
+  { label: 'Images', key: 'image', backendKey: 'image', sortable: false, align: 'center' },
+  { label: 'Created Date', key: 'createdAt', backendKey: 'createdAt', sortable: true, align: 'center' },
+  { label: 'Updated Date', key: 'updatedAt', backendKey: 'updatedAt', sortable: true, align: 'center' },
 
-  { label: 'Action', key: 'action', sortable: false, align: 'center' },
+  { label: 'Action', key: 'action', backendKey: 'action', sortable: false, align: 'center' },
 ];
 
 /* =========================
-   PaginationBar (giữ y như bạn đang dùng)
+   PaginationBar
    ========================= */
 function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageChange, loading }) {
   const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
@@ -243,11 +401,10 @@ function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageCh
 
 /* =========================
    SupplierProductsTable
-   ✅ Dính cột kiểu RequisitionMonthlyPage (Table + sticky offsets)
-   ✅ FIX: text dài KHÔNG chà cột -> tự xuống dòng (kể cả SAP Code)
+   ✅ sort icon-only + tri-state
+   ✅ DOUBLE CLICK ROW => OPEN EDIT
    ========================= */
-function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, onDelete }) {
-  // ✅ Wrap mạnh: chuỗi không có space vẫn bẻ dòng
+function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, onSort, onEdit, onDelete }) {
   const WRAP_SX = {
     whiteSpace: 'normal',
     overflowWrap: 'anywhere',
@@ -255,7 +412,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     lineHeight: 1.35,
   };
 
-  // ---- widths (bạn có thể tăng nếu muốn “dài ra” hơn)
   const W = {
     no: 50,
     productType1Name: 140,
@@ -280,7 +436,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     action: 110,
   };
 
-  // ---- sticky keys + left offsets (GIỐNG logic mẫu)
   const stickyKeys = ['no', 'productType1Name', 'productType2Name', 'supplierName', 'sapCode'];
 
   const LEFT_NO = 0;
@@ -289,7 +444,7 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
   const LEFT_SUP = LEFT_PT2 + W.productType2Name;
   const LEFT_SAP = LEFT_SUP + W.supplierName;
 
-  const headCellSx = (key, sortable) => ({
+  const headCellSx = (key) => ({
     fontSize: '0.75rem',
     fontWeight: 600,
     color: '#111827',
@@ -299,8 +454,10 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     px: 0.7,
     position: 'sticky',
     top: 0,
-    zIndex: key === 'no' ? 22 : stickyKeys.includes(key) ? 21 : 20,
-    cursor: sortable ? 'pointer' : 'default',
+
+    zIndex: key === 'no' ? 3 : stickyKeys.includes(key) ? 2 : 1,
+
+    cursor: 'default',
     whiteSpace: 'nowrap',
     minWidth: W[key] || 120,
     width: W[key] || 120,
@@ -312,16 +469,14 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     ...(key === 'sapCode' && { left: LEFT_SAP }),
   });
 
-  const stickyBodySx = (key, bg, z = 3) => {
+  const stickyBodySx = (key, bg) => {
     const base = {
       position: 'sticky',
-      zIndex: z,
+      zIndex: 0,
       backgroundColor: bg,
       minWidth: W[key],
       width: W[key],
-      // ✅ chống chà chữ
       ...WRAP_SX,
-      // nhìn rõ mép sticky
       boxShadow: '1px 0 0 rgba(0,0,0,0.04)',
       borderRight: 'none',
     };
@@ -334,36 +489,14 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     return base;
   };
 
-  const renderSortIndicator = (key) => {
-    const active = sort.key === key && !!sort.dir;
-
-    if (!active) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    if (sort.dir === 'asc') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
-        <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
-      </Box>
+  const shouldIgnoreRowDblClick = (e) => {
+    const t = e?.target;
+    return !!t?.closest?.(
+      'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root, .MuiButtonBase-root'
     );
   };
 
-  // Images popover (giữ như bạn đang dùng)
+  // Images popover
   const cacheBust = useMemo(() => Date.now(), []);
   const API_URL = useMemo(() => API_BASE_URL.replace(/\/$/, ''), []);
   const DEFAULT_IMG = useMemo(() => `${API_BASE_URL}/uploads/default-item.png?v=${cacheBust}`, [cacheBust]);
@@ -415,7 +548,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
     );
   }
 
-  // minWidth cho scroll ngang
   const MIN_W = Object.values(W).reduce((a, b) => a + b, 0);
 
   return (
@@ -429,34 +561,66 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
           maxHeight: 650,
           overflowX: 'auto',
           backgroundColor: '#fff',
+          position: 'relative',
+          zIndex: 0,
         }}
       >
         <Table stickyHeader size="small" sx={{ minWidth: MIN_W, tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow>
-              {HEADERS.map((h) => (
-                <TableCell
-                  key={h.key}
-                  align={h.align || (['price', 'currency', 'goodType', 'image', 'createdAt', 'updatedAt', 'action', 'size', 'unit'].includes(h.key) ? 'center' : 'left')}
-                  sx={{
-                    ...headCellSx(h.key, h.sortable),
-                    ...(stickyKeys.includes(h.key) ? { borderRight: 'none' } : {}),
-                  }}
-                  onClick={() => h.sortable && onSort(h.key)}
-                >
-                  <Stack
-                    direction="row"
-                    spacing={0.6}
-                    alignItems="center"
-                    justifyContent={(h.align || 'left') === 'center' ? 'center' : 'flex-start'}
+              {HEADERS.map((h) => {
+                const active = sortConfig.key === h.key && !!sortConfig.direction;
+
+                return (
+                  <TableCell
+                    key={h.key}
+                    align={
+                      h.align ||
+                      (['price', 'currency', 'goodType', 'image', 'createdAt', 'updatedAt', 'action', 'size', 'unit'].includes(h.key)
+                        ? 'center'
+                        : 'left')
+                    }
+                    sx={{
+                      ...headCellSx(h.key),
+                      ...(stickyKeys.includes(h.key) ? { borderRight: 'none' } : {}),
+                    }}
                   >
-                    <Tooltip title={h.label} arrow>
-                      <span>{h.label}</span>
-                    </Tooltip>
-                    {h.sortable ? renderSortIndicator(h.key) : null}
-                  </Stack>
-                </TableCell>
-              ))}
+                    <Stack
+                      direction="row"
+                      spacing={0.6}
+                      alignItems="center"
+                      justifyContent={(h.align || 'left') === 'center' ? 'center' : 'flex-start'}
+                    >
+                      <Tooltip title={h.label} arrow>
+                        <span>{h.label}</span>
+                      </Tooltip>
+
+                      {h.sortable ? (
+                        <Tooltip title="Sort" arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={loading}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSort(h.key);
+                              }}
+                              sx={{
+                                p: 0.25,
+                                border: '1px solid transparent',
+                                '&:hover': { borderColor: '#e5e7eb', backgroundColor: '#eef2f7' },
+                              }}
+                              aria-label={`sort-${h.key}`}
+                            >
+                              <SortIndicator active={active} direction={sortConfig.direction} />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : null}
+                    </Stack>
+                  </TableCell>
+                );
+              })}
             </TableRow>
           </TableHead>
 
@@ -465,16 +629,23 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
               const zebra = i % 2 === 0 ? '#ffffff' : '#fafafa';
               const globalIndex = page * rowsPerPage + i + 1;
 
+              const currencyLabel = normalizeCurrency(p.currency) || 'N/A';
+              const goodTypeLabel = normalizeGoodType(p.goodType) || 'N/A';
+
               return (
                 <TableRow
                   key={p.id || `${p.sapCode || ''}_${i}`}
+                  onDoubleClick={(e) => {
+                    if (shouldIgnoreRowDblClick(e)) return;
+                    onEdit?.(p);
+                  }}
                   sx={{
                     backgroundColor: zebra,
                     '&:hover': { backgroundColor: '#f1f5f9' },
                     '& > *': { borderBottom: '1px solid #f3f4f6' },
+                    cursor: 'pointer',
                   }}
                 >
-                  {/* No (sticky) */}
                   <TableCell
                     align="center"
                     sx={{
@@ -482,89 +653,76 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
                       py: 0.4,
                       px: 0.6,
                       fontWeight: 700,
-                      ...stickyBodySx('no', zebra, 3),
+                      ...stickyBodySx('no', zebra),
                     }}
                   >
                     {globalIndex}
                   </TableCell>
 
-                  {/* Product Item 1 (sticky) */}
-                  <TableCell
-                    sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('productType1Name', zebra, 3) }}
-                  >
+                  <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('productType1Name', zebra) }}>
                     {p.productType1Name || '-'}
                   </TableCell>
 
-                  {/* Product Item 2 (sticky) */}
-                  <TableCell
-                    sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('productType2Name', zebra, 3) }}
-                  >
+                  <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('productType2Name', zebra) }}>
                     {p.productType2Name || '-'}
                   </TableCell>
 
-                  {/* Supplier (sticky) */}
-                  <TableCell
-                    sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('supplierName', zebra, 3) }}
-                  >
+                  <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('supplierName', zebra) }}>
                     {p.supplierName || '-'}
                   </TableCell>
 
-                  {/* SAP Code (sticky) */}
-                  <TableCell
-                    sx={{
-                      fontSize: '0.75rem',
-                      py: 0.4,
-                      px: 0.6,
-                      ...stickyBodySx('sapCode', zebra, 3),
-                    }}
-                  >
+                  <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx('sapCode', zebra) }}>
                     {p.sapCode || '-'}
                   </TableCell>
 
-                  {/* Hana SAP */}
                   <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...WRAP_SX, minWidth: W.hanaSapCode, width: W.hanaSapCode }}>
                     {p.hanaSapCode || '-'}
                   </TableCell>
 
-                  {/* Item EN */}
                   <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...WRAP_SX, minWidth: W.itemDescriptionEN, width: W.itemDescriptionEN }}>
                     {p.itemDescriptionEN || '-'}
                   </TableCell>
 
-                  {/* Item VN */}
                   <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...WRAP_SX, minWidth: W.itemDescriptionVN, width: W.itemDescriptionVN }}>
                     {p.itemDescriptionVN || '-'}
                   </TableCell>
 
-                  {/* Size */}
                   <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...WRAP_SX, minWidth: W.size, width: W.size }}>
                     {p.size || '-'}
                   </TableCell>
 
-                  {/* Unit */}
                   <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...WRAP_SX, minWidth: W.unit, width: W.unit }}>
                     {p.unit || '-'}
                   </TableCell>
 
-                  {/* Price */}
+                  {/* ✅ FIX: truyền currency vào để VND không bị .00 + không làm tròn */}
                   <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, minWidth: W.price, width: W.price }}>
-                    {formatCurrency(p.price, p.currency)}
+                    {formatMoneyNoRound(p.price, p.currency)}
                   </TableCell>
 
-                  {/* Currency */}
                   <TableCell align="center" sx={{ py: 0.4, px: 0.6, minWidth: W.currency, width: W.currency }}>
-                    <Box sx={{ ...tagPillSx, backgroundColor: getCurrencyColor(p.currency) }}>{p.currency || 'N/A'}</Box>
+                    <Box sx={{ ...tagPillSx, backgroundColor: getCurrencyColor(currencyLabel) }}>{currencyLabel}</Box>
                   </TableCell>
 
-                  {/* Good Type */}
                   <TableCell align="center" sx={{ py: 0.4, px: 0.6, minWidth: W.goodType, width: W.goodType }}>
-                    <Box sx={{ ...tagPillSx, backgroundColor: getGoodTypeColor(p.goodType) }}>{p.goodType || 'N/A'}</Box>
+                    <Tooltip title={String(p.goodType ?? '')} arrow>
+                      <Box sx={{ ...tagPillSx, backgroundColor: getGoodTypeColor(p.goodType) }}>
+                        {goodTypeLabel}
+                      </Box>
+                    </Tooltip>
                   </TableCell>
 
-                  {/* Images */}
                   <TableCell align="center" sx={{ py: 0.4, px: 0.6, minWidth: W.image, width: W.image }}>
                     {(p.imageUrls?.length || 0) > 0 ? (
-                      <IconButton size="small" onMouseEnter={(e) => openPopover(e, p.imageUrls)} aria-haspopup="true">
+                      <IconButton
+                        size="small"
+                        onMouseEnter={(e) => {
+                          e.stopPropagation();
+                          openPopover(e, p.imageUrls);
+                        }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        aria-haspopup="true"
+                      >
                         <ImageIcon fontSize="small" />
                       </IconButton>
                     ) : (
@@ -572,23 +730,37 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
                     )}
                   </TableCell>
 
-                  {/* Created */}
                   <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, minWidth: W.createdAt, width: W.createdAt }}>
                     {formatDateISO(p.createdAt)}
                   </TableCell>
 
-                  {/* Updated */}
                   <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, minWidth: W.updatedAt, width: W.updatedAt }}>
                     {formatDateISO(p.updatedAt)}
                   </TableCell>
 
-                  {/* Action */}
                   <TableCell align="center" sx={{ py: 0.4, px: 0.6, minWidth: W.action, width: W.action }}>
                     <Stack direction="row" spacing={0.5} justifyContent="center">
-                      <IconButton size="small" onClick={() => onEdit(p)} sx={{ p: 0.25 }}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit?.(p);
+                        }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        sx={{ p: 0.25 }}
+                      >
                         <Edit fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => onDelete(p)} sx={{ p: 0.25 }}>
+
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete?.(p);
+                        }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        sx={{ p: 0.25 }}
+                      >
                         <Delete fontSize="small" />
                       </IconButton>
                     </Stack>
@@ -600,7 +772,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
         </Table>
       </TableContainer>
 
-      {/* Popover images */}
       <Popover
         open={!!popover.anchor}
         anchorEl={popover.anchor}
@@ -641,7 +812,7 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sort, onSort, onEdit, 
    Main Page
    ========================= */
 export default function SupplierProductsPage() {
-  const theme = useTheme();
+  useTheme(); // giữ hook nếu project bạn đang dùng theme context
   const navigate = useNavigate();
 
   const [rows, setRows] = useState([]);
@@ -676,33 +847,40 @@ export default function SupplierProductsPage() {
     goodType: '',
   });
 
-  // tri-state sort: asc -> desc -> none
-  const [sort, setSort] = useState({ key: null, dir: null });
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
-  const sortParam = useMemo(() => {
-    if (sort?.key && sort?.dir) return `${sort.key},${sort.dir}`;
-    return 'createdAt,desc';
-  }, [sort]);
+  const sortLabel = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return 'createdAt,desc';
+    const backendKey = HEADERS.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    return `${backendKey},${sortConfig.direction}`;
+  }, [sortConfig]);
 
   const fetchData = useCallback(
     async (overrides = {}) => {
       const effPage = Number.isInteger(overrides.page) ? overrides.page : page;
       const effSize = Number.isInteger(overrides.size) ? overrides.size : rowsPerPage;
       const effSearch = overrides.search ?? search;
-      const effSort = overrides.sort ?? sort;
+      const effSort = overrides.sortConfig ?? sortConfig;
 
-      const effSortParam = effSort?.key && effSort?.dir ? `${effSort.key},${effSort.dir}` : 'createdAt,desc';
+      const sortParam =
+        effSort?.key && effSort?.direction
+          ? `${HEADERS.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
+          : 'createdAt,desc';
 
       setLoading(true);
       try {
-        const params = { page: effPage, size: effSize, sort: effSortParam };
+        const params = { page: effPage, size: effSize, sort: sortParam };
 
         Object.entries(effSearch).forEach(([k, v]) => {
           if (v !== '' && v !== null && v !== undefined) params[k] = v;
         });
 
         const res = await axiosInstance.get('/api/supplier-products/filter', { params });
-        setRows(res.data?.data?.content || []);
+
+        const content = res.data?.data?.content || [];
+        const finalRows = sortRowsClient(content, effSort);
+
+        setRows(finalRows);
         setTotal(res.data?.data?.totalElements || 0);
       } catch (err) {
         setRows([]);
@@ -716,7 +894,7 @@ export default function SupplierProductsPage() {
         setLoading(false);
       }
     },
-    [page, rowsPerPage, search, sort]
+    [page, rowsPerPage, search, sortConfig]
   );
 
   useEffect(() => {
@@ -725,23 +903,35 @@ export default function SupplierProductsPage() {
       navigate('/react/login');
       return;
     }
-    fetchData();
-  }, [fetchData, navigate]);
+    fetchData({ page, size: rowsPerPage });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
+
+  const firstPagingRef = useRef(true);
+  useEffect(() => {
+    if (firstPagingRef.current) {
+      firstPagingRef.current = false;
+      return;
+    }
+    fetchData({ page, size: rowsPerPage });
+  }, [page, rowsPerPage, fetchData]);
 
   const handleSort = useCallback(
     (key) => {
+      if (loading) return;
       const h = HEADERS.find((x) => x.key === key);
       if (!h?.sortable) return;
 
-      let next = { key, dir: 'asc' };
-      if (sort.key === key && sort.dir === 'asc') next = { key, dir: 'desc' };
-      else if (sort.key === key && sort.dir === 'desc') next = { key: null, dir: null };
+      let direction = 'asc';
+      if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+      else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
 
-      setSort(next);
+      const nextSort = { key: direction ? key : null, direction };
+      setSortConfig(nextSort);
       setPage(0);
-      fetchData({ page: 0, sort: next });
+      fetchData({ page: 0, sortConfig: nextSort });
     },
-    [sort.key, sort.dir, fetchData]
+    [loading, sortConfig, fetchData]
   );
 
   const handleSearch = useCallback(() => {
@@ -763,12 +953,12 @@ export default function SupplierProductsPage() {
       currency: '',
       goodType: '',
     };
-    const defaultSort = { key: null, dir: null };
+    const defaultSort = { key: null, direction: null };
 
     setSearch(cleared);
-    setSort(defaultSort);
+    setSortConfig(defaultSort);
     setPage(0);
-    fetchData({ page: 0, search: cleared, sort: defaultSort });
+    fetchData({ page: 0, search: cleared, sortConfig: defaultSort });
   }, [fetchData]);
 
   const handleFile = (e) => {
@@ -780,7 +970,6 @@ export default function SupplierProductsPage() {
     setFile(f || null);
   };
 
-  // Upload file
   useEffect(() => {
     if (!file) return;
 
@@ -818,6 +1007,7 @@ export default function SupplierProductsPage() {
             msg: errorData?.message || 'Import failed. Please check the file and try again.',
           });
         }
+        // eslint-disable-next-line no-console
         console.error('Import error:', errorData || err);
       } finally {
         setFile(null);
@@ -833,7 +1023,6 @@ export default function SupplierProductsPage() {
   return (
     <Box sx={{ bgcolor: '#f7f7f7', minHeight: '100vh', p: 1.5 }}>
       <Box sx={{ px: { xs: 0.5, sm: 1, md: 1.5 } }}>
-        {/* Header card */}
         <Paper
           elevation={0}
           sx={{
@@ -850,7 +1039,10 @@ export default function SupplierProductsPage() {
                 Supplier Products
               </Typography>
               <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
-                Sort: <span style={{ color: '#111827' }}>{sortParam}</span>
+                Sort: <span style={{ color: '#111827' }}>{sortLabel}</span>
+              </Typography>
+              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                Tip: double click row to edit
               </Typography>
             </Stack>
 
@@ -894,7 +1086,6 @@ export default function SupplierProductsPage() {
           </Stack>
         </Paper>
 
-        {/* Search */}
         <SupplierSearch
           searchSupplierCode={search.supplierCode}
           setSearchSupplierCode={(v) => {
@@ -954,7 +1145,6 @@ export default function SupplierProductsPage() {
           setPage={setPage}
           onSearch={handleSearch}
           onReset={handleReset}
-          // legacy props fallback
           supplierCode={search.supplierCode}
           supplierName={search.supplierName}
           sapCode={search.sapCode}
@@ -968,7 +1158,6 @@ export default function SupplierProductsPage() {
           goodType={search.goodType}
         />
 
-        {/* Loading */}
         {loading && (
           <Typography align="center" sx={{ mt: 1.5, fontSize: '0.85rem', color: 'text.secondary' }}>
             <CircularProgress size={18} sx={{ mr: 1 }} />
@@ -976,14 +1165,14 @@ export default function SupplierProductsPage() {
           </Typography>
         )}
 
-        {/* Table + Pagination */}
         {!loading && (
           <>
             <SupplierProductsTable
               rows={rows}
               page={page}
               rowsPerPage={rowsPerPage}
-              sort={sort}
+              sortConfig={sortConfig}
+              loading={loading}
               onSort={handleSort}
               onEdit={(p) => {
                 setProductToEdit(p);
@@ -1000,20 +1189,15 @@ export default function SupplierProductsPage() {
               page={page}
               rowsPerPage={rowsPerPage}
               loading={loading}
-              onPageChange={(p) => {
-                setPage(p);
-                fetchData({ page: p });
-              }}
+              onPageChange={(p) => setPage(p)}
               onRowsPerPageChange={(size) => {
                 setRowsPerPage(size);
                 setPage(0);
-                fetchData({ page: 0, size });
               }}
             />
           </>
         )}
 
-        {/* Dialogs */}
         <AddProductDialog
           open={openAdd}
           onClose={() => setOpenAdd(false)}
@@ -1071,7 +1255,6 @@ export default function SupplierProductsPage() {
           </DialogActions>
         </Dialog>
 
-        {/* Snackbar */}
         <Snackbar
           open={snack.open}
           autoHideDuration={6000}

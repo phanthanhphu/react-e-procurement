@@ -85,6 +85,14 @@ const normalizeCurrencyCode = (code) => {
   return valid.includes(n) ? n : 'VND';
 };
 
+/** ✅ pick hana sap code from supplier payload (robust key) */
+const pickHanaSAPCode = (supplierData) =>
+  supplierData?.hanaSapCode ||
+  supplierData?.hanaSAPCode ||
+  supplierData?.hanaCode ||
+  supplierData?.hana ||
+  '';
+
 export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupId }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -130,6 +138,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
+
+  // ✅ Used to fully reset SupplierSelector UI when "Change supplier" is clicked
+  const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
 
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
 
@@ -238,7 +249,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     setSnackbarOpen(true);
   }, []);
 
-  // ====== itemNo debounce ======
+  // ====== itemNo debounce (giữ nguyên nếu bạn đang dùng supplier search theo item no) ======
   useEffect(() => {
     const timer = setTimeout(() => {
       const v = (formData.itemDescriptionVN || '').trim();
@@ -315,7 +326,11 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return;
     }
 
-    if (formData.dailyMedInventory === '' || formData.dailyMedInventory === null || formData.dailyMedInventory === undefined) {
+    if (
+      formData.dailyMedInventory === '' ||
+      formData.dailyMedInventory === null ||
+      formData.dailyMedInventory === undefined
+    ) {
       setDeptRows((prev) => prev.map((r) => ({ ...r, buy: '' })));
       return;
     }
@@ -409,6 +424,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
     setSelectedSupplier(null);
     setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1); // ✅ reset selector UI on open
 
     setIsEnManuallyEdited(false);
     setItemNoForSearch('');
@@ -435,11 +451,18 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   }, []);
 
   /**
-   * ✅ translate kèm token (giống mẫu)
+   * ✅ translate kèm token
+   * ✅ IMPORTANT: KHÔNG dịch nếu EN đã có value
    */
   const translateText = useCallback(
-    async (text) => {
-      if (!text || isEnManuallyEdited) return;
+    async (text, existingEn) => {
+      const vn = (text || '').trim();
+      const en = (existingEn || '').trim();
+
+      if (!vn) return;
+      if (en) return;
+      if (isEnManuallyEdited) return;
+
       setTranslating(true);
 
       try {
@@ -450,13 +473,16 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text: vn }),
         });
 
         const data = await res.json().catch(() => ({}));
 
         if (mountedRef.current) {
-          setFormData((prev) => ({ ...prev, itemDescriptionEN: data.translatedText || '' }));
+          setFormData((prev) => ({
+            ...prev,
+            itemDescriptionEN: data.translatedText || '',
+          }));
         }
       } catch (e) {
         // ignore
@@ -470,15 +496,28 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
 
   useEffect(() => {
-    if (formData.itemDescriptionVN && !isEnManuallyEdited) debouncedTranslate(formData.itemDescriptionVN);
-    return () => debouncedTranslate.cancel?.();
-  }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
+    const vn = (formData.itemDescriptionVN || '').trim();
+    const en = (formData.itemDescriptionEN || '').trim();
 
+    if (vn && !isEnManuallyEdited && !en) {
+      debouncedTranslate(vn, en);
+    }
+
+    return () => debouncedTranslate.cancel?.();
+  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
+
+  /**
+   * ✅ REQUIRED BEHAVIOR (giống mẫu AddDialog):
+   * - Selecting supplier auto-fills oldSAPCode + hanaSAPCode
+   * - User can still edit hanaSAPCode manually
+   * - Do NOT overwrite itemDescriptionVN/EN/fullDescription
+   */
   const handleSelectSupplier = (supplierData) => {
     if (!supplierData) {
       setFormData((prev) => ({
         ...prev,
         oldSAPCode: '',
+        hanaSAPCode: '',
         supplierId: '',
         unit: '',
         supplierPrice: 0,
@@ -487,25 +526,30 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
+      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector UI
       return;
     }
 
     const price = parseFloat(supplierData.supplierPrice) || 0;
+    const hana = pickHanaSAPCode(supplierData);
 
     setFormData((prev) => ({
       ...prev,
-      oldSAPCode: supplierData.oldSapCode || '',
       supplierId: supplierData.supplierId || '',
       unit: supplierData.unit || '',
       supplierPrice: price,
       productType1Id: supplierData.productType1Id || '',
       productType2Id: supplierData.productType2Id || '',
-      fullDescription: supplierData.fullItemDescriptionVN || prev.fullDescription || '',
+
+      // ✅ auto-fill from supplier
+      oldSAPCode: supplierData.oldSapCode || '',
+      hanaSAPCode: hana || '',
     }));
 
     setSelectedSupplier({
       supplierName: supplierData.supplierName || 'Unknown',
       sapCode: supplierData.oldSapCode || '',
+      hanaSapCode: hana || '',
       price,
       unit: supplierData.unit || '',
       currency: supplierData.currency || groupCurrency,
@@ -531,8 +575,14 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     }
 
     setFormData((prev) => ({ ...prev, [field]: val }));
-    if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
-    if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+
+    // ✅ EN manual edit: if user clears EN => allow auto-translate again
+    if (field === 'itemDescriptionEN') {
+      setIsEnManuallyEdited((raw || '').trim().length > 0);
+    }
+    if (field === 'itemDescriptionVN') {
+      setIsEnManuallyEdited(false);
+    }
   };
 
   const handleDeptChange = (i, field, val) => {
@@ -593,8 +643,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   };
 
   const handleAddClick = () => {
-    if (!formData.itemDescriptionVN?.trim()) return toast('Item Description (VN) is required', 'error');
     if (!formData.supplierId) return toast('Supplier is required', 'error');
+    if (!formData.oldSAPCode?.trim()) return toast('Old SAP Code is required', 'error');
+    if (!formData.itemDescriptionVN?.trim()) return toast('Item Description (VN) is required', 'error');
     if (totalRequestQty === 0) return toast('At least one department must have Qty', 'error');
     if (deptErrors.some(Boolean)) return toast('Please fix duplicate department selections', 'error');
 
@@ -612,9 +663,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   };
 
   /**
-   * ✅ CREATE: đúng pattern mẫu (email query param + token + parse response)
-   * ✅ gửi đủ field hay bị thiếu (unit, supplierPrice, productType1Id/2Id)
-   * ✅ fallback endpoint chỉ khi 404/405
+   * ✅ CREATE: email query param + token + parse response
    */
   const handleConfirmAdd = async () => {
     const departmentRequisitions = deptRows
@@ -805,13 +854,15 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 }}
               >
                 <TextField
-                  label="Old SAP Code"
+                  label="Old SAP Code *"
                   value={formData.oldSAPCode}
                   onChange={handleChange('oldSAPCode')}
                   size="small"
                   fullWidth
+                  required
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Selecting supplier will auto-fill SAP + Hana from supplier."
                 />
                 <TextField
                   label="Hana SAP Code"
@@ -821,6 +872,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   fullWidth
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
                 <TextField
@@ -871,7 +923,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 }}
               >
                 <Stack direction="row" spacing={1} alignItems="flex-start">
-                  <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
+                  <InfoRoundedIcon
+                    sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }}
+                  />
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                     <b>Tip:</b> Use consistent naming so search/duplicate detection is cleaner.
                   </Typography>
@@ -879,12 +933,31 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
               </Box>
             </Box>
 
-            {/* SUPPLIER */}
+            {/* SUPPLIER (✅ giống mẫu: có Change supplier + reset SupplierSelector UI) */}
             <Box sx={{ ...subtleCardSx, p: 1.6 }}>
-              <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
-              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Select supplier to auto-fill unit, price, product type.
-              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
+                    Select supplier to auto-fill unit, price, product type, SAP codes.
+                  </Typography>
+                </Box>
+
+                {!showSupplierSelector && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={locked}
+                    onClick={() => {
+                      setShowSupplierSelector(true);
+                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters UI
+                    }}
+                    sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
+                  >
+                    Change supplier
+                  </Button>
+                )}
+              </Stack>
 
               <Divider sx={{ my: 1.2 }} />
 
@@ -898,11 +971,15 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   }}
                 >
                   <SupplierSelector
-                    oldSapCode={formData.oldSAPCode}
-                    itemNo={itemNoForSearch}
+                    key={supplierSelectorKey}
                     onSelectSupplier={handleSelectSupplier}
                     currency={groupCurrency}
                     disabled={locked || loadingCurrency}
+                    // ✅ giống mẫu AddDialog
+                    prefillSapCode={formData.oldSAPCode}
+                    prefillHanaCode={formData.hanaSAPCode}
+                    // ✅ nếu SupplierSelector của bạn đang dùng search theo itemNo thì giữ, không ảnh hưởng auto-fill
+                    itemNo={itemNoForSearch}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -919,9 +996,19 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     {selectedSupplier.supplierName}
                   </Typography>
 
-                  <Box sx={{ mt: 0.8, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 0.9 }}>
+                  <Box
+                    sx={{
+                      mt: 0.8,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1fr' },
+                      gap: 0.9,
+                    }}
+                  >
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      SAP Code: <b>{selectedSupplier.sapCode || '—'}</b>
+                      Old SAP: <b>{selectedSupplier.sapCode || '—'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Hana SAP: <b>{selectedSupplier.hanaSapCode || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Unit: <b>{selectedSupplier.unit || '—'}</b>
@@ -937,20 +1024,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                           : '—'}
                       </b>
                     </Typography>
-                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      Currency: <b>{selectedSupplier.currency || groupCurrency}</b>
-                    </Typography>
                   </Box>
-
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={locked}
-                    onClick={() => setShowSupplierSelector(true)}
-                    sx={{ mt: 1.1, borderRadius: 999, textTransform: 'none', fontWeight: 700 }}
-                  >
-                    Change Supplier
-                  </Button>
                 </Box>
               ) : null}
             </Box>

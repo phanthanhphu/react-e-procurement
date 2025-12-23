@@ -42,6 +42,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import ExportRequisitionMonthlyExcelButton from './ExportRequisitionMonthlyExcelButton';
 import ImportExcelButtonMonthly from './ImportExcelButtonMonthly';
+import ImportExcelButtonMonthlySupplement from './ImportExcelButtonMonthlySupplement'; // ✅ NEW
 import EditRequisitionMonthly from './EditRequisitionMonthly';
 import AddRequisitionMonthly from './AddRequisitionMonthly';
 import RequisitionMonthlySearch from './RequisitionMonthlySearch';
@@ -193,6 +194,61 @@ const normalizeCompletedBy = (item) => {
     '';
 
   return (v == null ? '' : String(v)).trim();
+};
+
+/* =========================
+   ✅ Sorting helpers (CLIENT fallback)
+   ========================= */
+const toTimestamp = (v) => {
+  if (!v) return 0;
+  if (Array.isArray(v)) {
+    const [y, m, d, hh = 0, mm = 0, ss = 0, ns = 0] = v;
+    const dt = new Date(y, m - 1, d, hh, mm, ss, Math.floor(ns / 1e6));
+    const t = dt.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const getComparableValue = (row, key) => {
+  const numericKeys = new Set(['totalRequestQty', 'dailyMedInventory', 'orderQty', 'price', 'amount']);
+  const dateKeys = new Set(['createdDate', 'updatedDate', 'completedDate']);
+
+  if (dateKeys.has(key)) return toTimestamp(row?.[key]);
+
+  if (numericKeys.has(key)) {
+    const n = Number(row?.[key]);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  const s = row?.[key];
+  return (s == null ? '' : String(s)).trim().toLowerCase();
+};
+
+const sortRowsClient = (rows, sortConfig) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  if (!sortConfig?.key || !sortConfig?.direction) return rows;
+
+  const dir = sortConfig.direction === 'desc' ? -1 : 1;
+  const key = sortConfig.key;
+
+  const withIndex = rows.map((r, i) => ({ r, i }));
+  withIndex.sort((a, b) => {
+    const va = getComparableValue(a.r, key);
+    const vb = getComparableValue(b.r, key);
+
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return (va - vb) * dir;
+      return a.i - b.i;
+    }
+
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+    return a.i - b.i;
+  });
+
+  return withIndex.map((x) => x.r);
 };
 
 /* =========================
@@ -389,7 +445,6 @@ const HEADERS = [
   { label: 'Updated', key: 'updatedDate', sortable: true, backendKey: 'updatedDate' },
 
   { label: 'Completed By', key: 'completedBy', sortable: false },
-
   { label: 'Completed', key: 'completedDate', sortable: false },
 
   { label: 'Images', key: 'image', sortable: false },
@@ -454,6 +509,7 @@ export default function RequisitionMonthlyPage() {
       const res = await axios.get(`${GROUP_URL}/${groupId}`, { headers: { Accept: '*/*' } });
       setGroupStatus(res.data?.status || null);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error('Fetch group status error:', e.response?.data || e.message);
       setError('Failed to fetch group status.');
     }
@@ -521,8 +577,8 @@ export default function RequisitionMonthlyPage() {
             id: item.id,
             groupId: item.groupId,
 
-            groupItem1: item.productType1Name || 'Unknown',
-            groupItem2: item.productType2Name || 'Unknown',
+            groupItem1: item.productType1Name || '',
+            groupItem2: item.productType2Name || '',
 
             itemDescriptionEN: item.itemDescriptionEN || '',
             itemDescriptionVN: item.itemDescriptionVN || '',
@@ -564,9 +620,12 @@ export default function RequisitionMonthlyPage() {
           };
         });
 
-        setData(mapped);
-        setTotalElements(res.data?.requisitions?.totalElements ?? mapped.length);
+        const finalData = sortRowsClient(mapped, effSort);
+
+        setData(finalData);
+        setTotalElements(res.data?.requisitions?.totalElements ?? finalData.length);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error('Fetch data error:', e.response?.data || e.message);
         setError(`Failed to fetch data: ${e.message}`);
       } finally {
@@ -587,14 +646,14 @@ export default function RequisitionMonthlyPage() {
     fetchData({ page: 0 });
   }, [fetchGroupStatus, fetchData, navigate]);
 
-  // ✅ NEW: chỉ reset pending khi đổi groupId/page/size/sort/search
+  // ✅ reset pending khi đổi groupId/page/size/sort/search
   const searchKey = useMemo(() => JSON.stringify(searchValues), [searchValues]);
   useEffect(() => {
     setPendingComplete(new Set());
     setPendingUncomplete(new Set());
   }, [groupId, page, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
 
-  // ✅ NEW: nếu group đã Completed thì clear pending vì read-only
+  // ✅ nếu group Completed thì clear pending vì read-only
   useEffect(() => {
     if (isGroupCompleted) {
       setPendingComplete(new Set());
@@ -691,8 +750,7 @@ export default function RequisitionMonthlyPage() {
   };
 
   /* =========================
-     API actions (✅ EXACT SummaryPage pattern)
-     ✅ FIX: Mark Completed không được xóa pending Uncompleted
+     API actions
      ========================= */
   const handleMarkCompleted = async () => {
     if (loading || isGroupCompleted || pendingCompleteIds.length === 0) return;
@@ -708,17 +766,14 @@ export default function RequisitionMonthlyPage() {
       await axios.patch(
         MARK_COMPLETED_URL,
         { requisitionIds: pendingCompleteIds },
-        {
-          params: { email },
-          headers: { Accept: '*/*' },
-        }
+        { params: { email }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
-
       setPendingComplete(new Set());
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error('Mark completed error:', e.response?.data || e.message);
       setNotification({
         open: true,
@@ -744,17 +799,14 @@ export default function RequisitionMonthlyPage() {
       await axios.patch(
         MARK_UNCOMPLETED_URL,
         { requisitionIds: pendingUncompleteIds },
-        {
-          params: { email },
-          headers: { Accept: '*/*' },
-        }
+        { params: { email }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
-
       setPendingUncomplete(new Set());
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error('Mark uncompleted error:', e.response?.data || e.message);
       setNotification({
         open: true,
@@ -808,12 +860,27 @@ export default function RequisitionMonthlyPage() {
       setNotification({ open: true, severity: 'success', message: 'Item deleted successfully' });
       await fetchData({ page });
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error('Delete error:', e.response?.data || e.message);
       setNotification({ open: true, severity: 'error', message: e.response?.data?.message || 'Could not delete item' });
     } finally {
       setLoading(false);
       cancelDelete();
     }
+  };
+
+  // ✅ NEW: click row -> open edit, nhưng ignore click trên control
+  const shouldIgnoreRowClick = (e) => {
+    const t = e?.target;
+    return !!t?.closest?.(
+      'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root'
+    );
+  };
+
+  const handleRowClick = (row) => (e) => {
+    if (isGroupCompleted) return;
+    if (shouldIgnoreRowClick(e)) return;
+    openEdit(row);
   };
 
   // Sort: asc -> desc -> none
@@ -1016,7 +1083,16 @@ export default function RequisitionMonthlyPage() {
               disabled={isGroupCompleted}
               sx={btnSx}
             />
+
             <ImportExcelButtonMonthly
+              groupId={groupId}
+              disabled={isGroupCompleted}
+              onImport={() => fetchData({ page: 0 })}
+              sx={btnSx}
+            />
+
+            {/* ✅ NEW: Upload bổ sung lần 2 */}
+            <ImportExcelButtonMonthlySupplement
               groupId={groupId}
               disabled={isGroupCompleted}
               onImport={() => fetchData({ page: 0 })}
@@ -1030,7 +1106,9 @@ export default function RequisitionMonthlyPage() {
             <Button
               variant="outlined"
               startIcon={<AddIcon fontSize="small" />}
-              onClick={openAdd}
+              onClick={() => {
+                if (!isGroupCompleted) setOpenAddDialog(true);
+              }}
               disabled={isGroupCompleted}
               sx={btnSx}
             >
@@ -1064,12 +1142,7 @@ export default function RequisitionMonthlyPage() {
             Mark as Uncompleted
           </Button>
 
-          <Button
-            variant="text"
-            onClick={discardChanges}
-            disabled={loading || isGroupCompleted || !hasPending}
-            sx={btnSx}
-          >
+          <Button variant="text" onClick={discardChanges} disabled={loading || isGroupCompleted || !hasPending} sx={btnSx}>
             Discard
           </Button>
         </Stack>
@@ -1078,9 +1151,32 @@ export default function RequisitionMonthlyPage() {
       {/* Search */}
       <RequisitionMonthlySearch
         searchValues={searchValues}
-        onSearchChange={handleSearchChange}
-        onSearch={handleSearch}
-        onReset={handleReset}
+        onSearchChange={(v) => {
+          setSearchValues(v);
+          setPage(0);
+        }}
+        onSearch={() => {
+          setPage(0);
+          fetchData({ page: 0 });
+        }}
+        onReset={() => {
+          const cleared = {
+            productType1Name: '',
+            productType2Name: '',
+            englishName: '',
+            vietnameseName: '',
+            oldSapCode: '',
+            hanaSapCode: '',
+            supplierName: '',
+            departmentName: '',
+          };
+          const nextSort = { key: null, direction: null };
+
+          setSearchValues(cleared);
+          setSortConfig(nextSort);
+          setPage(0);
+          fetchData({ page: 0, searchValues: cleared, sortConfig: nextSort });
+        }}
       />
 
       {loading && (
@@ -1147,6 +1243,7 @@ export default function RequisitionMonthlyPage() {
                               checked={headerChecked}
                               indeterminate={headerIndeterminate}
                               onChange={(e) => setDesiredForAll(e.target.checked)}
+                              onClick={(e) => e.stopPropagation()}
                               sx={{ p: 0.2 }}
                             />
                           </span>
@@ -1174,10 +1271,12 @@ export default function RequisitionMonthlyPage() {
                     return (
                       <TableRow
                         key={rowId || idx}
+                        onClick={handleRowClick(row)}
                         sx={{
                           backgroundColor: zebra,
                           '&:hover': { backgroundColor: '#f1f5f9' },
                           '& > *': { borderBottom: '1px solid #f3f4f6' },
+                          cursor: isGroupCompleted ? 'default' : 'pointer',
                         }}
                       >
                         <TableCell
@@ -1189,6 +1288,7 @@ export default function RequisitionMonthlyPage() {
                             disabled={isGroupCompleted || !rowId}
                             checked={desiredCompleted}
                             onChange={(e) => setDesiredForOne(rowId, currentCompleted, e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
                             sx={{ p: 0.2 }}
                           />
                         </TableCell>
@@ -1201,57 +1301,32 @@ export default function RequisitionMonthlyPage() {
                         </TableCell>
 
                         <TableCell
-                          sx={{
-                            fontSize: '0.75rem',
-                            py: 0.4,
-                            px: 0.6,
-                            ...stickyBodySx(LEFT_PT1, PT1_W, zebra, 3),
-                          }}
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT1, PT1_W, zebra, 3) }}
                         >
                           {row.groupItem1 || ''}
                         </TableCell>
 
                         <TableCell
-                          sx={{
-                            fontSize: '0.75rem',
-                            py: 0.4,
-                            px: 0.6,
-                            ...stickyBodySx(LEFT_PT2, PT2_W, zebra, 3),
-                          }}
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT2, PT2_W, zebra, 3) }}
                         >
                           {row.groupItem2 || ''}
                         </TableCell>
 
                         <TableCell
-                          sx={{
-                            fontSize: '0.75rem',
-                            py: 0.4,
-                            px: 0.6,
-                            ...stickyBodySx(LEFT_EN, EN_W, zebra, 3),
-                          }}
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_EN, EN_W, zebra, 3) }}
                         >
                           {row.itemDescriptionEN || ''}
                         </TableCell>
 
                         <TableCell
-                          sx={{
-                            fontSize: '0.75rem',
-                            py: 0.4,
-                            px: 0.6,
-                            ...stickyBodySx(LEFT_VN, VN_W, zebra, 3),
-                          }}
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_VN, VN_W, zebra, 3) }}
                         >
                           {row.itemDescriptionVN || ''}
                         </TableCell>
 
                         <TableCell
                           align="center"
-                          sx={{
-                            fontSize: '0.75rem',
-                            py: 0.4,
-                            px: 0.6,
-                            ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3),
-                          }}
+                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}
                         >
                           {row.oldSapCode || ''}
                         </TableCell>
@@ -1328,8 +1403,6 @@ export default function RequisitionMonthlyPage() {
                           {row.completedBy || '—'}
                         </TableCell>
 
-                        {/* ✅ SAP Completed column removed */}
-
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
                           {formatDate(row.completedDate)}
                         </TableCell>
@@ -1339,6 +1412,7 @@ export default function RequisitionMonthlyPage() {
                             <IconButton
                               size="small"
                               onMouseEnter={(e) => openPopover(e, row.imageUrls)}
+                              onClick={(e) => e.stopPropagation()}
                               aria-owns={isPopoverOpen ? 'mouse-over-popover' : undefined}
                               aria-haspopup="true"
                             >
@@ -1356,7 +1430,10 @@ export default function RequisitionMonthlyPage() {
                                 <IconButton
                                   color="primary"
                                   size="small"
-                                  onClick={() => openEdit(row)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEdit(row);
+                                  }}
                                   disabled={isGroupCompleted}
                                 >
                                   <EditIcon fontSize="small" />
@@ -1369,7 +1446,10 @@ export default function RequisitionMonthlyPage() {
                                 <IconButton
                                   color="error"
                                   size="small"
-                                  onClick={() => askDelete(row)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    askDelete(row);
+                                  }}
                                   disabled={isGroupCompleted}
                                 >
                                   <DeleteIcon fontSize="small" />
@@ -1476,7 +1556,7 @@ export default function RequisitionMonthlyPage() {
           />
           <AddRequisitionMonthly
             open={openAddDialog}
-            onClose={closeAdd}
+            onClose={() => setOpenAddDialog(false)}
             onRefresh={() => fetchData({ page: 0 })}
             groupId={groupId}
           />

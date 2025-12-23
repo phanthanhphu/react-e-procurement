@@ -1,3 +1,4 @@
+// src/pages/ComparisonPage/ComparisonPage.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -74,7 +75,7 @@ const getHeaders = (currency = 'VND') => [
   { label: 'Old SAP', key: 'oldSapCode', sortable: true },
   { label: 'Hana SAP', key: 'hanaSapCode', sortable: true },
   { label: 'Supplier', key: 'supplierName', sortable: true },
-  { label: 'Supplier List', key: 'suppliers', sortable: false }, // ✅ wider
+  { label: 'Supplier List', key: 'suppliers', sortable: false },
   { label: 'Best Price', key: 'bestPrice', sortable: false },
   { label: 'Unit', key: 'unit', sortable: true },
   { label: 'Department', key: 'departmentRequests', sortable: false },
@@ -229,7 +230,10 @@ function DeptRequestTable({ departmentRequests }) {
       {departmentRequests.length > 3 && (
         <Button
           size="small"
-          onClick={() => setShowAllDepts(!showAllDepts)}
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ IMPORTANT (để không trigger row click)
+            setShowAllDepts(!showAllDepts);
+          }}
           sx={{ mt: 0.5, fontSize: '0.75rem', textTransform: 'none', fontWeight: 400 }}
         >
           {showAllDepts ? 'Show less' : 'Show more'}
@@ -240,8 +244,6 @@ function DeptRequestTable({ departmentRequests }) {
 }
 
 /* ========= SupplierTable (admin style) ========= */
-/* ✅ default show 2 suppliers; show more -> show all */
-/* ✅ wider mini table */
 function SupplierTable({ suppliers, currency }) {
   const [showAllSuppliers, setShowAllSuppliers] = useState(false);
   const displaySuppliers = showAllSuppliers ? suppliers : suppliers?.slice(0, 2);
@@ -258,7 +260,7 @@ function SupplierTable({ suppliers, currency }) {
       <Table
         size="small"
         sx={{
-          minWidth: 320, // ✅ wider
+          minWidth: 320,
           border: '1px solid #e5e7eb',
           borderRadius: 1,
           overflow: 'hidden',
@@ -312,7 +314,10 @@ function SupplierTable({ suppliers, currency }) {
       {suppliers.length > 2 && (
         <Button
           size="small"
-          onClick={() => setShowAllSuppliers(!showAllSuppliers)}
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ IMPORTANT (để không trigger row click)
+            setShowAllSuppliers(!showAllSuppliers);
+          }}
           sx={{ mt: 0.5, fontSize: '0.75rem', textTransform: 'none', fontWeight: 400 }}
         >
           {showAllSuppliers ? 'Show less' : 'Show more'}
@@ -482,7 +487,25 @@ export default function ComparisonPage() {
     setOpenEdit(false);
     setSelectedItem(null);
     await fetchUnfilteredTotals();
-    await fetchData(searchValues, page, rowsPerPage, sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string');
+    await fetchData(
+      searchValues,
+      page,
+      rowsPerPage,
+      sortConfig.key ? `${sortConfig.key},${sortConfig.direction}` : 'string'
+    );
+  };
+
+  // ✅ NEW: click row -> open edit (trừ khi click vào control)
+  const shouldIgnoreRowClick = (e) => {
+    const t = e?.target;
+    return !!t?.closest?.(
+      'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root, .MuiButtonBase-root'
+    );
+  };
+
+  const handleRowClick = (item) => (e) => {
+    if (shouldIgnoreRowClick(e)) return;
+    handleOpenEditDialog(item);
   };
 
   const mappedDataForExport = useMemo(
@@ -543,7 +566,7 @@ export default function ComparisonPage() {
     ...(key === 'vietnameseName' && { left: LEFT_VN, minWidth: VN_W }),
     ...(key === 'englishName' && { left: LEFT_EN, minWidth: EN_W }),
     ...(key === 'oldSapCode' && { left: LEFT_OLD, minWidth: OLD_W }),
-    ...(key === 'suppliers' && { minWidth: 380 }), // ✅ Supplier List wider
+    ...(key === 'suppliers' && { minWidth: 380 }),
   });
 
   const stickyBodySx = (left, minWidth, bg) => ({
@@ -737,10 +760,12 @@ export default function ComparisonPage() {
                     return (
                       <TableRow
                         key={(item.oldSapCode || item.id || idx) + idx}
+                        onClick={handleRowClick(item)} // ✅ CLICK ROW OPEN EDIT
                         sx={{
                           backgroundColor: bg,
                           '&:hover': { backgroundColor: '#f1f5f9' },
                           '& > *': { borderBottom: '1px solid #f3f4f6' },
+                          cursor: 'pointer',
                         }}
                       >
                         {/* Sticky cells */}
@@ -816,7 +841,6 @@ export default function ComparisonPage() {
                           {item.suppliers?.find((s) => s.isSelected === 1)?.supplierName || ''}
                         </TableCell>
 
-                        {/* ✅ Supplier List wider + show 2 by default */}
                         <TableCell sx={{ py: 0.4, px: 0.6, minWidth: 380 }}>
                           <SupplierTable suppliers={item.suppliers} currency={item.currency || currency} />
                         </TableCell>
@@ -852,13 +876,22 @@ export default function ComparisonPage() {
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
                           {item.selectedPrice
-                            ? Number(item.selectedPrice).toLocaleString(itemLocale, { style: 'currency', currency: itemCurrency })
+                            ? Number(item.selectedPrice).toLocaleString(itemLocale, {
+                                style: 'currency',
+                                currency: itemCurrency,
+                              })
                             : '0'}
                         </TableCell>
 
                         <TableCell
                           align="center"
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, fontWeight: 700, color: theme.palette.primary.dark }}
+                          sx={{
+                            fontSize: '0.75rem',
+                            py: 0.4,
+                            px: 0.6,
+                            fontWeight: 700,
+                            color: theme.palette.primary.dark,
+                          }}
                         >
                           {item.amtVnd
                             ? Number(item.amtVnd).toLocaleString(itemLocale, { style: 'currency', currency: itemCurrency })
@@ -867,13 +900,19 @@ export default function ComparisonPage() {
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
                           {item.highestPrice
-                            ? Number(item.highestPrice).toLocaleString(itemLocale, { style: 'currency', currency: itemCurrency })
+                            ? Number(item.highestPrice).toLocaleString(itemLocale, {
+                                style: 'currency',
+                                currency: itemCurrency,
+                              })
                             : '0'}
                         </TableCell>
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
                           {item.amtDifference
-                            ? Number(item.amtDifference).toLocaleString(itemLocale, { style: 'currency', currency: itemCurrency })
+                            ? Number(item.amtDifference).toLocaleString(itemLocale, {
+                                style: 'currency',
+                                currency: itemCurrency,
+                              })
                             : '0'}
                         </TableCell>
 
@@ -886,7 +925,14 @@ export default function ComparisonPage() {
                         </TableCell>
 
                         <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                          <IconButton size="small" color="primary" onClick={() => handleOpenEditDialog(item)}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={(e) => {
+                              e.stopPropagation(); // ✅ IMPORTANT
+                              handleOpenEditDialog(item);
+                            }}
+                          >
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </TableCell>
@@ -907,7 +953,6 @@ export default function ComparisonPage() {
             </Table>
           </TableContainer>
 
-          {/* Admin pagination */}
           <PaginationBar
             count={totalElements}
             page={page}

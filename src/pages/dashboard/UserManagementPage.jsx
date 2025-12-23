@@ -27,6 +27,7 @@ import {
   Select,
   MenuItem,
   Popover,
+  CircularProgress,
 } from '@mui/material';
 
 import EditIcon from '@mui/icons-material/Edit';
@@ -38,6 +39,7 @@ import LockResetIcon from '@mui/icons-material/LockReset';
 import InboxIcon from '@mui/icons-material/Inbox';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import Close from '@mui/icons-material/Close';
 
 import AddUserDialog from './AddUserDialog';
 import EditUserDialog from './EditUserDialog';
@@ -45,20 +47,104 @@ import ResetPasswordDialog from './ResetPasswordDialog';
 import UserSearch from './UserSearch';
 import { API_BASE_URL } from '../../config';
 
+/* =========================
+   Headers (giống Group: có backendKey)
+   ========================= */
 const headers = [
-  { label: 'No', key: 'no', sortable: false },
-  { label: 'Username', key: 'username', sortable: true },
-  { label: 'Email', key: 'email', sortable: true },
-  { label: 'Address', key: 'address', sortable: true },
-  { label: 'Phone', key: 'phone', sortable: true },
-  { label: 'Role', key: 'role', sortable: true },
-  { label: 'Status', key: 'isEnabled', sortable: true },
-  { label: 'Profile Image', key: 'profileImage', sortable: false },
-  { label: 'Actions', key: 'actions', sortable: false },
+  { label: 'No', key: 'no', sortable: false, backendKey: 'no' },
+  { label: 'Username', key: 'username', sortable: true, backendKey: 'username' },
+  { label: 'Email', key: 'email', sortable: true, backendKey: 'email' },
+  { label: 'Address', key: 'address', sortable: true, backendKey: 'address' },
+  { label: 'Phone', key: 'phone', sortable: true, backendKey: 'phone' },
+  { label: 'Role', key: 'role', sortable: true, backendKey: 'role' },
+  // ✅ backend thường là enabled, không phải isEnabled
+  { label: 'Status', key: 'isEnabled', sortable: true, backendKey: 'enabled' },
+  { label: 'Profile Image', key: 'profileImage', sortable: false, backendKey: 'profileImage' },
+  { label: 'Actions', key: 'actions', sortable: false, backendKey: 'actions' },
 ];
 
 /* =========================
-   PaginationBar
+   ✅ Sorting helpers (CLIENT fallback) — giống Group
+   ========================= */
+const toTimestamp = (v) => {
+  if (!v) return 0;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const getComparableValue = (row, key) => {
+  // date keys nếu bạn có (ví dụ createdDate) thì add vào đây
+  const dateKeys = new Set(['createdDate', 'updatedDate']);
+  if (dateKeys.has(key)) return toTimestamp(row?.[key]);
+
+  // boolean keys
+  if (key === 'isEnabled') {
+    const b = row?.enabled ?? row?.isEnabled ?? row?.is_enabled;
+    return b ? 1 : 0;
+  }
+
+  // mặc định string
+  const s = row?.[key];
+  return (s == null ? '' : String(s)).trim().toLowerCase();
+};
+
+const sortRowsClient = (rows, sortConfig) => {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  if (!sortConfig?.key || !sortConfig?.direction) return rows;
+
+  const dir = sortConfig.direction === 'desc' ? -1 : 1;
+  const key = sortConfig.key;
+
+  const withIndex = rows.map((r, i) => ({ r, i }));
+  withIndex.sort((a, b) => {
+    const va = getComparableValue(a.r, key);
+    const vb = getComparableValue(b.r, key);
+
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va !== vb) return (va - vb) * dir;
+      return a.i - b.i;
+    }
+
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp * dir;
+    return a.i - b.i;
+  });
+
+  return withIndex.map((x) => x.r);
+};
+
+/* =========================
+   Sort indicator (tri-state like Group)
+   ========================= */
+const SortIndicator = ({ active, direction }) => {
+  if (!active) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  if (direction === 'asc') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+        <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
+        <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.2, lineHeight: 0 }}>
+      <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
+      <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
+    </Box>
+  );
+};
+
+/* =========================
+   PaginationBar (giữ nguyên style)
    ========================= */
 function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageChange, loading }) {
   const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
@@ -226,27 +312,49 @@ export default function UserManagementPage() {
     });
   }, [users, normalizeImageUrl, DEFAULT_IMAGE_URL]);
 
-  const fetchUsers = useCallback(
-    async (pageNumber = 0, sortKey = null, sortDirection = null) => {
+  /* =========================
+     ✅ Fetch data (support overrides like Group)
+     ========================= */
+  const fetchData = useCallback(
+    async (overrides = {}) => {
       setLoading(true);
       try {
+        const effPage = Number.isInteger(overrides.page) ? overrides.page : page;
+        const effSize = Number.isInteger(overrides.size) ? overrides.size : rowsPerPage;
+        const effSort = overrides.sortConfig ?? sortConfig;
+
+        const effUsername = overrides.searchUsername ?? searchUsername;
+        const effAddress = overrides.searchAddress ?? searchAddress;
+        const effPhone = overrides.searchPhone ?? searchPhone;
+        const effEmail = overrides.searchEmail ?? searchEmail;
+        const effRole = overrides.searchRole ?? searchRole;
+
         const url = new URL(`${API_BASE_URL}/users`);
-        url.searchParams.append('page', String(pageNumber));
-        url.searchParams.append('size', String(rowsPerPage));
+        url.searchParams.append('page', String(effPage));
+        url.searchParams.append('size', String(effSize));
 
-        if (searchUsername) url.searchParams.append('username', searchUsername);
-        if (searchAddress) url.searchParams.append('address', searchAddress);
-        if (searchPhone) url.searchParams.append('phone', searchPhone);
-        if (searchEmail) url.searchParams.append('email', searchEmail);
-        if (searchRole) url.searchParams.append('role', searchRole);
+        if (effUsername) url.searchParams.append('username', effUsername);
+        if (effAddress) url.searchParams.append('address', effAddress);
+        if (effPhone) url.searchParams.append('phone', effPhone);
+        if (effEmail) url.searchParams.append('email', effEmail);
+        if (effRole) url.searchParams.append('role', effRole);
 
-        if (sortKey && sortDirection) url.searchParams.append('sort', `${sortKey},${sortDirection}`);
+        // ✅ sort param
+        if (effSort?.key && effSort?.direction) {
+          const backendKey = headers.find((h) => h.key === effSort.key)?.backendKey || effSort.key;
+          url.searchParams.append('sort', `${backendKey},${effSort.direction}`);
+        }
 
         const res = await fetch(url, { headers: { accept: '*/*' }, credentials: 'include' });
         if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
 
         const data = await res.json();
-        setUsers(data.users || []);
+        const content = data.users || [];
+
+        // ✅ client fallback sort: đảm bảo UI đổi thứ tự ngay trong page
+        const finalContent = sortRowsClient(content, effSort);
+
+        setUsers(finalContent);
         setTotalRows(data.totalItems || 0);
       } catch (error) {
         console.error('Fetch users error:', error);
@@ -259,12 +367,29 @@ export default function UserManagementPage() {
         setLoading(false);
       }
     },
-    [rowsPerPage, searchUsername, searchAddress, searchPhone, searchEmail, searchRole]
+    [
+      page,
+      rowsPerPage,
+      sortConfig,
+      searchUsername,
+      searchAddress,
+      searchPhone,
+      searchEmail,
+      searchRole,
+    ]
   );
 
+  // mount
   useEffect(() => {
-    fetchUsers(page, sortConfig.key, sortConfig.direction);
-  }, [page, rowsPerPage, sortConfig, fetchUsers]);
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // page/rowsPerPage đổi -> fetch
+  useEffect(() => {
+    fetchData({ page, size: rowsPerPage });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, rowsPerPage]);
 
   const handleImageError = (userId) => {
     if (imageErrors[userId]) return;
@@ -281,8 +406,20 @@ export default function UserManagementPage() {
     setPopoverImgSrc('');
   };
 
-  const handleSearch = useCallback(() => setPage(0), []);
+  const handleSearch = useCallback(() => {
+    setPage(0);
+    fetchData({ page: 0 });
+  }, [fetchData]);
+
   const handleReset = useCallback(() => {
+    const cleared = {
+      searchUsername: '',
+      searchAddress: '',
+      searchPhone: '',
+      searchEmail: '',
+      searchRole: '',
+    };
+
     setSearchUsername('');
     setSearchAddress('');
     setSearchPhone('');
@@ -290,32 +427,39 @@ export default function UserManagementPage() {
     setSearchRole('');
     setSortConfig({ key: null, direction: null });
     setPage(0);
-  }, []);
+
+    fetchData({
+      page: 0,
+      sortConfig: { key: null, direction: null },
+      ...cleared,
+    });
+  }, [fetchData]);
 
   const handleAdd = useCallback(
     async (data) => {
       setAddDialogOpen(false);
-      await fetchUsers(page, sortConfig.key, sortConfig.direction);
+      await fetchData({ page, size: rowsPerPage });
       setSnackbarMessage(data?.message || 'User added successfully');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
     },
-    [fetchUsers, page, sortConfig]
+    [fetchData, page, rowsPerPage]
   );
 
   const handleUpdate = useCallback(
     async (data) => {
       setEditDialogOpen(false);
-      await fetchUsers(page, sortConfig.key, sortConfig.direction);
+      await fetchData({ page, size: rowsPerPage });
       setSnackbarMessage(data?.message || 'User updated successfully');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
     },
-    [fetchUsers, page, sortConfig]
+    [fetchData, page, rowsPerPage]
   );
 
   const handleConfirmDelete = useCallback(async () => {
     if (!selectedUser) return;
+    setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/users/${selectedUser.id}`, {
         method: 'DELETE',
@@ -337,13 +481,19 @@ export default function UserManagementPage() {
       setDeleteDialogOpen(false);
       setSelectedUser(null);
 
-      await fetchUsers(page, sortConfig.key, sortConfig.direction);
+      // giữ đúng trang nếu còn hợp lệ
+      const maxPage = Math.max(0, Math.ceil((totalRows - 1) / rowsPerPage) - 1);
+      const nextPage = page > maxPage ? maxPage : page;
+      if (nextPage !== page) setPage(nextPage);
+      await fetchData({ page: nextPage, size: rowsPerPage });
     } catch (error) {
       setSnackbarMessage('Failed to delete user: ' + error.message);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
     }
-  }, [selectedUser, fetchUsers, page, sortConfig]);
+  }, [selectedUser, fetchData, page, rowsPerPage, totalRows]);
 
   const handleEdit = useCallback((user) => {
     setSelectedUser(user);
@@ -364,12 +514,12 @@ export default function UserManagementPage() {
     (datadir) => {
       setResetPasswordDialogOpen(false);
       setSelectedUser(null);
-      fetchUsers(page, sortConfig.key, sortConfig.direction);
+      fetchData({ page, size: rowsPerPage });
       setSnackbarMessage(datadir?.message || 'Password reset successfully');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
     },
-    [fetchUsers, page, sortConfig]
+    [fetchData, page, rowsPerPage]
   );
 
   const hasActiveSearch = useMemo(
@@ -377,47 +527,34 @@ export default function UserManagementPage() {
     [searchUsername, searchAddress, searchPhone, searchEmail, searchRole]
   );
 
-  // sort tri-state: asc -> desc -> off
+  /* =========================
+     ✅ Sort: bấm icon (asc -> desc -> none) + fetch ngay
+     ========================= */
   const handleSort = useCallback(
     (key) => {
+      if (loading) return;
+      const meta = headers.find((h) => h.key === key);
+      if (!meta?.sortable) return;
+
       let direction = 'asc';
       if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
       else if (sortConfig.key === key && sortConfig.direction === 'desc') direction = null;
 
-      setSortConfig({ key: direction ? key : null, direction });
+      const nextSort = { key: direction ? key : null, direction };
+      setSortConfig(nextSort);
       setPage(0);
+
+      // ✅ fetch ngay (không chờ render)
+      fetchData({ page: 0, sortConfig: nextSort });
     },
-    [sortConfig]
+    [loading, sortConfig, fetchData]
   );
 
-  const renderSortIndicator = (key) => {
-    const active = sortConfig.key === key && !!sortConfig.direction;
-
-    if (!active) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.7rem', color: '#9ca3af' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#9ca3af', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    if (sortConfig.direction === 'asc') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-          <ArrowUpward sx={{ fontSize: '0.85rem', color: '#6b7280' }} />
-          <ArrowDownward sx={{ fontSize: '0.7rem', color: '#d1d5db', mt: '-4px' }} />
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5, lineHeight: 0 }}>
-        <ArrowUpward sx={{ fontSize: '0.7rem', color: '#d1d5db' }} />
-        <ArrowDownward sx={{ fontSize: '0.85rem', color: '#6b7280', mt: '-4px' }} />
-      </Box>
-    );
-  };
+  const sortLabel = useMemo(() => {
+    if (!sortConfig.key || !sortConfig.direction) return 'none';
+    const backendKey = headers.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    return `${backendKey},${sortConfig.direction}`;
+  }, [sortConfig]);
 
   const cellEllipsisSx = {
     fontSize: '0.75rem',
@@ -498,7 +635,7 @@ export default function UserManagementPage() {
     );
   };
 
-  // ✅ BỎ ICON IMAGE — chỉ còn thumbnail, hover để preview
+  // thumbnail hover preview
   const UserImageCell = ({ u }) => {
     const hasError = imageErrors[u.id];
 
@@ -564,7 +701,7 @@ export default function UserManagementPage() {
               </Typography>
               <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
                 Total: {totalRows} • {hasActiveSearch ? 'Filter: active' : 'Filter: none'} • Sort:{' '}
-                {sortConfig.key ? `${sortConfig.key} (${sortConfig.direction})` : 'none'}
+                <span style={{ color: '#111827' }}>{sortLabel}</span>
               </Typography>
             </Stack>
 
@@ -597,186 +734,210 @@ export default function UserManagementPage() {
           onReset={handleReset}
         />
 
-        {loading && (
-          <Typography align="center" sx={{ mt: 1.5, fontSize: '0.85rem', color: 'text.secondary' }}>
-            Loading...
-          </Typography>
-        )}
+        {/* Table */}
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{
+            borderRadius: 1.5,
+            border: '1px solid #e5e7eb',
+            maxHeight: 560,
+            overflowX: 'hidden',
+            backgroundColor: '#fff',
+          }}
+        >
+          <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '8%' }} />
+            </colgroup>
 
-        {!loading && (
-          <>
-            <TableContainer
-              component={Paper}
-              elevation={0}
-              sx={{
-                borderRadius: 1.5,
-                border: '1px solid #e5e7eb',
-                maxHeight: 560,
-                overflowX: 'hidden',
-                backgroundColor: '#fff',
-              }}
-            >
-              <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '5%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '18%' }} />
-                  <col style={{ width: '20%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '7%' }} />
-                  <col style={{ width: '8%' }} />
-                </colgroup>
+            <TableHead>
+              <TableRow>
+                {headers.map(({ label, key, sortable }) => {
+                  const align = ['no', 'profileImage', 'actions', 'isEnabled', 'role'].includes(key) ? 'center' : 'left';
+                  const active = sortConfig.key === key && !!sortConfig.direction;
 
-                <TableHead>
-                  <TableRow>
-                    {headers.map(({ label, key, sortable }) => (
-                      <TableCell
-                        key={key}
-                        align={['no', 'profileImage', 'actions', 'isEnabled', 'role'].includes(key) ? 'center' : 'left'}
-                        onClick={() => sortable && handleSort(key)}
-                        sx={{
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          color: '#111827',
-                          backgroundColor: '#f3f4f6',
-                          borderBottom: '1px solid #e5e7eb',
-                          py: 0.6,
-                          px: 0.7,
-                          whiteSpace: 'nowrap',
-                          cursor: sortable ? 'pointer' : 'default',
-                          userSelect: 'none',
-                        }}
+                  return (
+                    <TableCell
+                      key={key}
+                      align={align}
+                      sx={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#111827',
+                        backgroundColor: '#f3f4f6',
+                        borderBottom: '1px solid #e5e7eb',
+                        py: 0.6,
+                        px: 0.7,
+                        whiteSpace: 'nowrap',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <Stack
+                        direction="row"
+                        spacing={0.6}
+                        alignItems="center"
+                        justifyContent={align === 'center' ? 'center' : 'flex-start'}
                       >
-                        <Stack
-                          direction="row"
-                          spacing={0.6}
-                          alignItems="center"
-                          justifyContent={
-                            ['no', 'profileImage', 'actions', 'isEnabled', 'role'].includes(key)
-                              ? 'center'
-                              : 'flex-start'
-                          }
-                        >
+                        <Tooltip title={label} arrow>
                           <span>{label}</span>
-                          {sortable ? renderSortIndicator(key) : null}
-                        </Stack>
+                        </Tooltip>
+
+                        {/* ✅ Chỉ bấm icon sort mới đổi sort */}
+                        {sortable ? (
+                          <Tooltip title="Sort" arrow>
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={loading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSort(key);
+                                }}
+                                sx={{
+                                  p: 0.25,
+                                  border: '1px solid transparent',
+                                  '&:hover': { borderColor: '#e5e7eb', backgroundColor: '#eef2f7' },
+                                }}
+                                aria-label={`sort-${key}`}
+                              >
+                                <SortIndicator active={active} direction={sortConfig.direction} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        ) : null}
+                      </Stack>
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            </TableHead>
+
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={9} sx={{ py: 3 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="center">
+                      <CircularProgress size={18} />
+                      <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>Loading data...</Typography>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ) : processedUsers.length > 0 ? (
+                processedUsers.map((u, idx) => {
+                  const zebra = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+
+                  return (
+                    <TableRow
+                      key={u.id}
+                      sx={{
+                        backgroundColor: zebra,
+                        '&:hover': { backgroundColor: '#f1f5f9' },
+                        '& > *': { borderBottom: '1px solid #f3f4f6' },
+                      }}
+                    >
+                      <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
+                        {idx + 1 + page * rowsPerPage}
                       </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
 
-                <TableBody>
-                  {processedUsers.length > 0 ? (
-                    processedUsers.map((u, idx) => {
-                      const zebra = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+                      <TableCell sx={cellEllipsisSx} title={u.username || ''}>
+                        {u.username || ''}
+                      </TableCell>
 
-                      return (
-                        <TableRow
-                          key={u.id}
-                          sx={{
-                            backgroundColor: zebra,
-                            '&:hover': { backgroundColor: '#f1f5f9' },
-                            '& > *': { borderBottom: '1px solid #f3f4f6' },
-                          }}
-                        >
-                          <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
-                            {idx + 1 + page * rowsPerPage}
-                          </TableCell>
+                      <TableCell sx={cellEllipsisSx} title={u.email || ''}>
+                        {u.email || ''}
+                      </TableCell>
 
-                          <TableCell sx={cellEllipsisSx} title={u.username || ''}>
-                            {u.username || ''}
-                          </TableCell>
+                      <TableCell sx={cellEllipsisSx} title={u.address || ''}>
+                        {u.address || ''}
+                      </TableCell>
 
-                          <TableCell sx={cellEllipsisSx} title={u.email || ''}>
-                            {u.email || ''}
-                          </TableCell>
+                      <TableCell sx={cellEllipsisSx} title={u.phone || ''}>
+                        {u.phone || ''}
+                      </TableCell>
 
-                          <TableCell sx={cellEllipsisSx} title={u.address || ''}>
-                            {u.address || ''}
-                          </TableCell>
+                      <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
+                        {roleBadge(u.role)}
+                      </TableCell>
 
-                          <TableCell sx={cellEllipsisSx} title={u.phone || ''}>
-                            {u.phone || ''}
-                          </TableCell>
+                      <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
+                        {enabledBadge(Boolean(u.isEnabled))}
+                      </TableCell>
 
-                          <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                            {roleBadge(u.role)}
-                          </TableCell>
+                      <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
+                        <UserImageCell u={u} />
+                      </TableCell>
 
-                          <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                            {enabledBadge(Boolean(u.isEnabled))}
-                          </TableCell>
+                      <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
+                        <Stack direction="row" spacing={0.3} justifyContent="center">
+                          <Tooltip title="Edit">
+                            <span>
+                              <IconButton color="primary" size="small" onClick={() => handleEdit(u)} sx={{ p: 0.25 }}>
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
 
-                          <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                            <UserImageCell u={u} />
-                          </TableCell>
+                          <Tooltip title="Delete">
+                            <span>
+                              <IconButton color="error" size="small" onClick={() => handleDelete(u)} sx={{ p: 0.25 }}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
 
-                          <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                            <Stack direction="row" spacing={0.3} justifyContent="center">
-                              <Tooltip title="Edit">
-                                <span>
-                                  <IconButton color="primary" size="small" onClick={() => handleEdit(u)} sx={{ p: 0.25 }}>
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-
-                              <Tooltip title="Delete">
-                                <span>
-                                  <IconButton color="error" size="small" onClick={() => handleDelete(u)} sx={{ p: 0.25 }}>
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-
-                              <Tooltip title="Reset password">
-                                <span>
-                                  <IconButton
-                                    color="warning"
-                                    size="small"
-                                    onClick={() => handleResetPassword(u)}
-                                    sx={{ p: 0.25 }}
-                                  >
-                                    <LockResetIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
-                        <Stack direction="column" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
-                          <InboxIcon fontSize="small" />
-                          <Typography sx={{ fontSize: '0.85rem' }}>
-                            {hasActiveSearch ? 'No users found matching your search criteria.' : 'No users found.'}
-                          </Typography>
+                          <Tooltip title="Reset password">
+                            <span>
+                              <IconButton
+                                color="warning"
+                                size="small"
+                                onClick={() => handleResetPassword(u)}
+                                sx={{ p: 0.25 }}
+                              >
+                                <LockResetIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                         </Stack>
                       </TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                    <Stack direction="column" alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
+                      <InboxIcon fontSize="small" />
+                      <Typography sx={{ fontSize: '0.85rem' }}>
+                        {hasActiveSearch ? 'No users found matching your search criteria.' : 'No users found.'}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-            <PaginationBar
-              count={totalRows}
-              page={page}
-              rowsPerPage={rowsPerPage}
-              loading={loading}
-              onPageChange={(p) => setPage(p)}
-              onRowsPerPageChange={(size) => {
-                setRowsPerPage(size);
-                setPage(0);
-              }}
-            />
-          </>
-        )}
+        <PaginationBar
+          count={totalRows}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          loading={loading}
+          onPageChange={(p) => setPage(p)}
+          onRowsPerPageChange={(size) => {
+            setRowsPerPage(size);
+            setPage(0);
+          }}
+        />
 
         {/* dialogs */}
         <EditUserDialog
@@ -788,19 +949,43 @@ export default function UserManagementPage() {
 
         <AddUserDialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} onAdd={handleAdd} />
 
-        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle sx={{ fontSize: '0.95rem' }}>Delete User</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ fontSize: '0.85rem', color: '#111827' }}>
-              Are you sure you want to delete “{selectedUser?.username || 'Unknown'}” ?
+        {/* Delete dialog giống style Group (đỡ thô) */}
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={loading ? undefined : () => setDeleteDialogOpen(false)}
+          PaperProps={{ sx: { borderRadius: 1.5, border: '1px solid #e5e7eb' } }}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle sx={{ px: 1.5, py: 1.1, borderBottom: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography sx={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>Delete User</Typography>
+              <IconButton
+                size="small"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={loading}
+                sx={{ border: '1px solid #e5e7eb' }}
+              >
+                <Close fontSize="small" />
+              </IconButton>
+            </Stack>
+          </DialogTitle>
+
+          <DialogContent sx={{ p: 1.5, backgroundColor: '#fff' }}>
+            <Typography sx={{ fontSize: '0.9rem', color: '#111827' }}>
+              Are you sure you want to delete <strong>{selectedUser?.username || 'Unknown'}</strong>?
+            </Typography>
+            <Typography sx={{ mt: 0.5, fontSize: '0.78rem', color: 'text.secondary' }}>
+              This action cannot be undone.
             </Typography>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)} sx={btnSx}>
+
+          <DialogActions sx={{ px: 1.5, py: 1.1, borderTop: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+            <Button onClick={() => setDeleteDialogOpen(false)} disabled={loading} sx={btnSx}>
               Cancel
             </Button>
             <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={loading} sx={btnSx}>
-              Delete
+              {loading ? <CircularProgress size={18} /> : 'Delete'}
             </Button>
           </DialogActions>
         </Dialog>
@@ -812,7 +997,7 @@ export default function UserManagementPage() {
           user={selectedUser}
         />
 
-        {/* popover ảnh (preview-only, không “bắt chuột”) */}
+        {/* popover ảnh (preview-only) */}
         <Popover
           id="user-image-popover"
           sx={{ pointerEvents: 'none' }}
@@ -832,7 +1017,6 @@ export default function UserManagementPage() {
                   style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 8, objectFit: 'contain' }}
                   loading="lazy"
                   onError={(e) => {
-                    e.target.src = '/images/fallback.jpg';
                     e.target.alt = 'Failed to load';
                   }}
                 />

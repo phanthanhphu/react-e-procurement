@@ -1,3 +1,4 @@
+// src/pages/.../EditDialog.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Dialog,
@@ -140,12 +141,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
+  // ✅ same as AddDialog: force reset SupplierSelector UI filters when change supplier
+  const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
+
+  // ✅ NEW: user đã bấm Change supplier (để cho phép "clear supplier" khi save)
+  const [supplierChangeMode, setSupplierChangeMode] = useState(false);
+
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const locked = saving;
 
-  // ===== UI TOKENS (glass + gradient + compact) =====
+  // ===== UI TOKENS =====
   const paperSx = useMemo(
     () => ({
       borderRadius: fullScreen ? 0 : 4,
@@ -290,7 +297,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         }
       }
 
-      return rows.map((row) => ({ ...row, buy: row.department ? (allocated[row.department] ?? '') : '' }));
+      return rows.map((row) => ({
+        ...row,
+        buy: row.department ? (allocated[row.department] ?? '') : '',
+      }));
     },
     [totalRequestQty]
   );
@@ -382,7 +392,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
 
       const data = await res.json();
-
       if (!mountedRef.current) return;
 
       setFormData({
@@ -427,6 +436,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         setSelectedSupplier({
           supplierName: data.supplierName || '',
           sapCode: data.oldSAPCode || '',
+          hanaCode: data.hanaSAPCode || '',
           price: data.price || 0,
           unit: data.unit || '',
         });
@@ -437,6 +447,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
 
       setIsEnManuallyEdited(false);
+
+      // ✅ NEW: default là chưa đổi supplier
+      setSupplierChangeMode(false);
+
+      // ✅ make sure selector UI is reset when data loads
+      setSupplierSelectorKey((k) => k + 1);
     } catch (e) {
       console.error(e);
       toastError(e?.message || 'Failed to load data');
@@ -492,11 +508,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
     setSelectedSupplier(null);
     setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1);
+
+    // ✅ NEW
+    setSupplierChangeMode(false);
+
     setIsEnManuallyEdited(false);
     setOpenConfirmDialog(false);
   }, [open, item, fetchData, fetchGroupCurrency, fetchDepartmentList]);
 
-  // ===== Auto translate VN -> EN (with auth) =====
+  // ===== Auto translate VN -> EN =====
   const translateText = useCallback(
     async (text) => {
       if (!text || isEnManuallyEdited) return;
@@ -529,48 +550,67 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
 
   useEffect(() => {
-    if (formData.itemDescriptionVN && !isEnManuallyEdited) {
-      debouncedTranslate(formData.itemDescriptionVN);
+    const vn = (formData.itemDescriptionVN || '').trim();
+    const en = (formData.itemDescriptionEN || '').trim();
+
+    // ✅ nếu EN đã có value thì KHÔNG dịch nữa
+    if (vn && !isEnManuallyEdited && !en) {
+      debouncedTranslate(vn);
     }
+
     return () => debouncedTranslate.cancel?.();
-  }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
+  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
 
-  const itemNoForSupplier = (formData.itemDescriptionVN || '').trim();
-
+  /**
+   * ✅ APPLY SAME RULE AS ADD:
+   * - selecting supplier auto-fills oldSapCode + hanaSapCode
+   * - user can still edit hanaSapCode in the form at any time
+   */
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
+      // ✅ NEW: đã chọn supplier mới => không còn ở mode "clear"
+      setSupplierChangeMode(false);
+
       setFormData((prev) => ({
         ...prev,
-        fullItemDescriptionVN: supplierData.fullItemDescriptionVN || '',
-        oldSapCode: supplierData.oldSapCode || '',
         supplierId: supplierData.supplierId || '',
         unit: supplierData.unit || '',
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
+
+        // ✅ auto-fill from supplier
+        oldSapCode: supplierData.oldSapCode || '',
+        hanaSapCode: supplierData.hanaSapCode || '',
       }));
 
       setSelectedSupplier({
         supplierName: supplierData.supplierName || '',
         sapCode: supplierData.oldSapCode || '',
+        hanaCode: supplierData.hanaSapCode || '',
         price: parseFloat(supplierData.supplierPrice) || 0,
         unit: supplierData.unit || '',
       });
 
       setShowSupplierSelector(false);
     } else {
+      // ✅ user clear supplier from selector
+      setSupplierChangeMode(true);
+
       setFormData((prev) => ({
         ...prev,
         oldSapCode: '',
-        supplierId: '',
+        hanaSapCode: '',
+        supplierId: '', // ✅ must be empty string so BE can clear supplier fields
         unit: '',
         supplierPrice: 0,
         productType1Id: '',
         productType2Id: '',
-        fullItemDescriptionVN: '',
       }));
+
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
+      setSupplierSelectorKey((k) => k + 1);
     }
   };
 
@@ -611,7 +651,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const calcTotalRequestQty = () => deptRows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
   const calcTotalBuy = () => deptRows.reduce((s, r) => s + (parseFloat(r.buy) || 0), 0);
 
-  // ✅ FIX: count images đúng (đừng trừ imagesToDelete nữa vì bạn đã remove khỏi imageUrls rồi)
+  // ✅ count images đúng
   const currentImagesCount = Math.max(0, files.length + imageUrls.length);
 
   const handleFileChange = (e) => {
@@ -674,12 +714,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     fd.append('reason', formData.reason || '');
     fd.append('remark', formData.remark || '');
     fd.append('remarkComparison', formData.remarkComparison || '');
-    fd.append('supplierId', formData.supplierId || '');
+
+    // ✅ IMPORTANT: always send supplierId (even empty string) so BE can clear supplier fields
+    fd.append('supplierId', formData.supplierId ?? '');
     fd.append('groupId', formData.groupId || '');
     fd.append('productType1Id', formData.productType1Id || '');
     fd.append('productType2Id', formData.productType2Id || '');
     fd.append('unit', formData.unit || '');
     fd.append('supplierPrice', formData.supplierPrice || 0);
+
     files.forEach((f) => fd.append('files', f));
     fd.append('imagesToDelete', JSON.stringify(imagesToDelete));
 
@@ -727,7 +770,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         fullWidth
         PaperProps={{ sx: paperSx }}
       >
-        {/* Gradient Header */}
+        {/* Header */}
         <DialogTitle sx={headerSx}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Box>
@@ -799,6 +842,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   fullWidth
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Selecting supplier will auto-fill SAP + Hana."
                 />
                 <TextField
                   label="Hana SAP Code"
@@ -808,6 +852,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   fullWidth
                   disabled={locked}
                   sx={fieldSx}
+                  helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
                 <TextField
@@ -853,7 +898,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Keep supplier updated for correct unit/price.
+                    Selecting supplier will auto-fill SAP + Hana and unit/price.
                   </Typography>
                 </Box>
 
@@ -861,7 +906,26 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => setShowSupplierSelector(true)}
+                    onClick={() => {
+                      // ✅ NEW: bật mode đổi supplier và CLEAR supplier ngay lập tức
+                      setSupplierChangeMode(true);
+
+                      setFormData((prev) => ({
+                        ...prev,
+                        supplierId: '', // ✅ để BE hiểu "clear supplier"
+                        unit: '',
+                        supplierPrice: 0,
+                        productType1Id: '',
+                        productType2Id: '',
+                        // nếu muốn clear luôn code:
+                        // oldSapCode: '',
+                        // hanaSapCode: '',
+                      }));
+
+                      setSelectedSupplier(null);
+                      setShowSupplierSelector(true);
+                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters
+                    }}
                     disabled={locked}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
@@ -871,6 +935,22 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
               </Stack>
 
               <Divider sx={{ my: 1.2 }} />
+
+              {/* ✅ NEW: info when supplier will be cleared */}
+              {supplierChangeMode && !formData.supplierId && (
+                <Alert
+                  severity="info"
+                  sx={{
+                    mb: 1.2,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.info.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.info.main, 0.18)}`,
+                  }}
+                >
+                  Supplier is currently <b>empty</b>. If you Save now, the supplier (supplierId/supplierName/price/amount)
+                  will be cleared on the server.
+                </Alert>
+              )}
 
               {showSupplierSelector ? (
                 <Box
@@ -882,11 +962,13 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   }}
                 >
                   <SupplierSelector
-                    oldSapCode={formData.oldSapCode}
-                    itemNo={itemNoForSupplier}
+                    key={supplierSelectorKey}
                     onSelectSupplier={handleSelectSupplier}
                     currency={groupCurrency}
                     disabled={loadingCurrency || locked}
+                    // ✅ IMPORTANT: do NOT pass itemNo/itemDescriptionVN to selector
+                    prefillSapCode={formData.oldSapCode}
+                    prefillHanaCode={formData.hanaSapCode}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -907,12 +989,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     sx={{
                       mt: 0.8,
                       display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+                      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1fr' },
                       gap: 0.9,
                     }}
                   >
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       SAP: <b>{selectedSupplier.sapCode || '-'}</b>
+                    </Typography>
+                    <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                      Hana: <b>{selectedSupplier.hanaCode || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Unit: <b>{selectedSupplier.unit || '-'}</b>
@@ -1050,7 +1135,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   </Box>
                 ))}
 
-                {/* Summary */}
                 <Box
                   sx={{
                     mt: 0.4,
