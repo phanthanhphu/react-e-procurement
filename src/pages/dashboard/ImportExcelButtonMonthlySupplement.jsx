@@ -1,3 +1,6 @@
+// ✅ Updated FE to call new API:
+// POST /requisition-monthly/import?email=...&groupId=...  (multipart/form-data, field name: file)
+
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
@@ -26,6 +29,44 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import ExcelIcon from '../../assets/images/Microsoft_Office_Excel.png';
 import { API_BASE_URL } from '../../config';
 
+// ✅ helper: get email from localStorage/jwt like other screens (optional)
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+const getAccessToken = () =>
+  localStorage.getItem('accessToken') ||
+  localStorage.getItem('token') ||
+  localStorage.getItem('jwt') ||
+  '';
+const getUserEmail = () => {
+  const direct =
+    localStorage.getItem('email') ||
+    localStorage.getItem('userEmail') ||
+    localStorage.getItem('username');
+  if (direct && direct.trim()) return direct.trim();
+  const token = getAccessToken();
+  const payload = token ? parseJwt(token) : null;
+  const email =
+    payload?.email ||
+    payload?.preferred_username ||
+    payload?.upn ||
+    payload?.sub;
+  return typeof email === 'string' ? email.trim() : '';
+};
+
 export default function ImportExcelButtonMonthlySupplement({ onImport, groupId, disabled }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -37,7 +78,6 @@ export default function ImportExcelButtonMonthlySupplement({ onImport, groupId, 
 
   const locked = loading || !!disabled;
 
-  // Reset dialog state when opened
   useEffect(() => {
     if (open) {
       setFile(null);
@@ -69,32 +109,50 @@ export default function ImportExcelButtonMonthlySupplement({ onImport, groupId, 
     setLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      // ✅ MATCH CURL:
-      // POST /requisition-monthly/upload-requisition?groupId=...
-      const url = `${API_BASE_URL}/requisition-monthly/upload-requisition?groupId=${encodeURIComponent(
-        groupId || ''
-      )}`;
+      const email = getUserEmail();
+      if (!email) throw new Error('Missing email. Please login again.');
+      if (!groupId) throw new Error('Missing groupId.');
+
+      const formData = new FormData();
+      // ✅ API expects field name = "file"
+      formData.append('file', file);
+
+      // ✅ NEW API (match your curl)
+      // POST /requisition-monthly/import?email=...&groupId=...
+      const url =
+        `${API_BASE_URL}/requisition-monthly/import` +
+        `?email=${encodeURIComponent(email)}` +
+        `&groupId=${encodeURIComponent(groupId)}`;
+
+      const token = getAccessToken();
 
       const response = await axios.post(url, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       handleClose();
-      if (onImport) onImport(response.data);
+      onImport?.(response.data);
     } catch (err) {
-      if (err.response && err.response.status === 400) {
-        const remark =
-          err.response.data?.[0]?.remark ||
-          err.response.data?.message ||
-          'Upload failed due to invalid/duplicate rows.';
-        setError(remark);
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+
+      // ✅ show server message if available
+      if (status && data) {
+        const msg =
+          data?.message ||
+          data?.summary?.warnings?.[0] ||
+          (Array.isArray(data) ? data?.[0]?.remark : null) ||
+          'Upload failed.';
+        setError(msg);
       } else {
-        setError('Upload failed. Please try again.');
+        setError(err?.message || 'Upload failed. Please try again.');
       }
+
       console.error('Upload error:', err);
     } finally {
       setLoading(false);
@@ -174,7 +232,6 @@ export default function ImportExcelButtonMonthlySupplement({ onImport, groupId, 
         maxWidth="sm"
         PaperProps={{ sx: paperSx }}
       >
-        {/* Header (glass + gradient) */}
         <DialogTitle sx={headerSx}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Box>

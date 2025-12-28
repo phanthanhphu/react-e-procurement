@@ -997,52 +997,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 />
 
                 <TextField
-                  label="Group ID *"
-                  value={formData.groupId}
-                  onChange={handleChange('groupId')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                />
-
-                <TextField
-                  label="Safe Stock"
-                  type="number"
-                  value={formData.safeStock}
-                  onChange={handleChange('safeStock')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                  inputProps={{ min: 0 }}
-                />
-
-                <TextField
-                  label="Product Type 1 ID"
-                  type="number"
-                  value={formData.productType1Id}
-                  onChange={handleChange('productType1Id')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                  inputProps={{ min: 0 }}
-                />
-
-                <TextField
-                  label="Product Type 2 ID"
-                  type="number"
-                  value={formData.productType2Id}
-                  onChange={handleChange('productType2Id')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                  inputProps={{ min: 0 }}
-                />
-
-                <TextField
                   label="Full Description"
                   value={formData.fullDescription}
                   onChange={handleChange('fullDescription')}

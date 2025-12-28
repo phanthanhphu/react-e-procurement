@@ -335,7 +335,7 @@ export default function ExportRequisitionMonthlyExcelButton({ groupId }) {
           (subgroup.requisitions || []).forEach((req) => {
             const deptMap = {};
             (req.departmentRequests || []).forEach((dr) => {
-              const qty = safeNum(dr.buy ?? dr.qty ?? 0);
+              const qty = safeNum(dr.qty ?? 0);
               const deptName = dr.departmentName;
               if (!deptName) return;
 
