@@ -105,6 +105,18 @@ const normalizeCurrencyCode = (code) => {
   return valid.includes(n) ? n : 'VND';
 };
 
+// ✅ robust hana sap key
+const pickHanaSAPCode = (supplierData) =>
+  supplierData?.hanaSapCode ||
+  supplierData?.hanaSAPCode ||
+  supplierData?.hanaCode ||
+  supplierData?.hana ||
+  '';
+
+// ✅ PATCH: helper pick first non-empty string
+const pickFirst = (...vals) =>
+  vals.find((v) => typeof v === 'string' && v.trim() !== '') || '';
+
 export default function EditRequisitionMonthly({ open, item, onClose, onRefresh }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -120,7 +132,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     safeStock: '',
     reason: '',
     remark: '',
-    remarkComparison: '',
     supplierId: '',
     groupId: '',
     productType1Id: '',
@@ -128,6 +139,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     unit: '',
     supplierPrice: 0,
   });
+
+  // ✅ NEW: Request Unit (editable, stable when supplier changes)
+  const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
@@ -148,7 +162,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
-  // ✅ same as EditDialog: force reset SupplierSelector UI filters
+  // ✅ force reset SupplierSelector UI filters
   const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
 
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
@@ -176,6 +190,16 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       backdropFilter: 'blur(14px)',
     }),
     [fullScreen, theme]
+  );
+
+  const paperSxEnhanced = useMemo(
+    () => ({
+      ...paperSx,
+      width: 'min(1680px, 98vw)',
+      maxWidth: '98vw',
+      maxHeight: fullScreen ? '100vh' : '92vh',
+    }),
+    [paperSx, fullScreen]
   );
 
   const headerSx = useMemo(
@@ -266,9 +290,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     [deptRows]
   );
 
+  const totalBuyQty = useMemo(
+    () => deptRows.reduce((sum, r) => sum + (parseFloat(r.buy) || 0), 0),
+    [deptRows]
+  );
+
   const orderQtyError = useMemo(() => {
     if (formData.dailyMedInventory === '' || totalRequestQty <= 0) return '';
-    const confirmed = parseFloat(formData.dailyMedInventory);
+    const confirmed = parseFloat(String(formData.dailyMedInventory));
     if (!Number.isFinite(confirmed)) return '';
     return confirmed > totalRequestQty
       ? `Confirmed MED Quantity cannot exceed total request (${totalRequestQty})`
@@ -285,18 +314,20 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     return errors;
   }, []);
 
-  // ✅ NEW: clear supplier selection but KEEP SAP/Hana codes (to avoid breaking required oldSAPCode)
-  const clearSupplierSelection = useCallback(() => {
+  // ✅ Change supplier: keep requestUnit stable (DO NOT reset unit)
+  const changeSupplier = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
       supplierId: '',
-      unit: '',
+      unit: requestUnit || prev.unit || '', // ✅ keep requestUnit
       supplierPrice: 0,
+      productType1Id: '',
+      productType2Id: '',
     }));
     setSelectedSupplier(null);
     setShowSupplierSelector(true);
     setSupplierSelectorKey((k) => k + 1);
-  }, []);
+  }, [requestUnit]);
 
   // AUTO ALLOCATE BUY (only when confirmed changes)
   useEffect(() => {
@@ -355,7 +386,55 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   }, []);
 
   /* =========================
-     ✅ LOAD DATA: GET (token + unwrap)
+     ✅ TRANSLATE
+  ========================= */
+  const translateText = useCallback(
+    async (text) => {
+      if (!text || isEnManuallyEdited) return;
+
+      setTranslating(true);
+      try {
+        const token = getAccessToken();
+        const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ text }),
+        });
+
+        if (res.ok) {
+          const json = await res.json().catch(() => ({}));
+          const translatedText = json?.translatedText || '';
+          if (mountedRef.current) {
+            setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (mountedRef.current) setTranslating(false);
+      }
+    },
+    [isEnManuallyEdited]
+  );
+
+  const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
+
+  useEffect(() => {
+    const vn = (formData.itemDescriptionVN || '').trim();
+    const en = (formData.itemDescriptionEN || '').trim();
+
+    if (vn && !isEnManuallyEdited && !en) {
+      debouncedTranslate(vn);
+    }
+
+    return () => debouncedTranslate.cancel?.();
+  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
+
+  /* =========================
+     ✅ LOAD DATA
   ========================= */
   useEffect(() => {
     if (!open || !item?.id) {
@@ -392,7 +471,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         safeStock: '',
         reason: '',
         remark: '',
-        remarkComparison: '',
         supplierId: '',
         groupId: '',
         productType1Id: '',
@@ -400,6 +478,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         unit: '',
         supplierPrice: 0,
       });
+
+      setRequestUnit('');
       return;
     }
 
@@ -453,7 +533,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
         if (!mountedRef.current) return;
 
-        // ✅ set main form
         setFormData({
           itemDescriptionEN: data.itemDescriptionEN || '',
           itemDescriptionVN: data.itemDescriptionVN || '',
@@ -467,7 +546,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           safeStock: data.safeStock !== undefined && data.safeStock !== null ? String(data.safeStock) : '',
           reason: data.reason || '',
           remark: data.remark || '',
-          remarkComparison: data.remarkComparison || '',
           supplierId: data.supplierId || '',
           groupId: data.groupId || item.groupId || '',
           productType1Id:
@@ -478,12 +556,14 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           supplierPrice: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
         });
 
+        // ✅ NEW: stable requestUnit loaded from saved unit
+        setRequestUnit(data.unit || '');
+
         prevConfirmedRef.current =
           data.dailyMedInventory !== undefined && data.dailyMedInventory !== null
             ? String(data.dailyMedInventory)
             : '';
 
-        // ✅ depts
         const depts = (data.departmentRequisitions || []).map((d) => ({
           id: d.id || '',
           name: d.name || '',
@@ -496,25 +576,23 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         setDeptErrors(new Array(nextRows.length).fill(''));
         validateDeptDuplicates(nextRows);
 
-        // ✅ images (keep exact string from server for delete matching)
         setImageUrls(Array.isArray(data.imageUrls) ? data.imageUrls : []);
         setImagesToDelete([]);
 
-        // reset uploads
         setFiles([]);
         setPreviews((p) => {
           p.forEach(URL.revokeObjectURL);
           return [];
         });
 
-        // supplier view (include Hana)
         if (data.supplierId) {
           setSelectedSupplier({
             supplierName: data.supplierName || 'Unknown',
             sapCode: data.oldSAPCode || '',
-            hanaCode: data.hanaSAPCode || '',
+            hanaSapCode: data.hanaSAPCode || '',
             price: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
             unit: data.unit || '',
+            currency: data.currency || undefined,
           });
           setShowSupplierSelector(false);
         } else {
@@ -523,7 +601,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           setSupplierSelectorKey((k) => k + 1);
         }
 
-        // departments list
         if (deptRes.ok) {
           const deps = await deptRes.json().catch(() => []);
           setDepartmentList(Array.isArray(deps) ? deps : []);
@@ -531,7 +608,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           setDepartmentList([]);
         }
 
-        // group currency
         if (groupRes?.ok) {
           const rawG = await readBodyByContentType(groupRes);
           const g = unwrapData(rawG) || {};
@@ -540,10 +616,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           setGroupCurrency('VND');
         }
 
-        // ✅ reset manual edit flag when open/load
         setIsEnManuallyEdited(false);
 
-        // ✅ make sure selector UI is reset when data loads
+        // ✅ IMPORTANT: reset supplier selector filters with prefill values
         setSupplierSelectorKey((k) => k + 1);
       } catch (err) {
         console.error(err);
@@ -557,87 +632,82 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   }, [open, item?.id, item?.groupId, toast, validateDeptDuplicates]);
 
   /* =========================
-     ✅ TRANSLATE
-     - Translate only when EN is empty
-     - Stop if user manually edits EN
-  ========================= */
-  const translateText = useCallback(
-    async (text) => {
-      if (!text || isEnManuallyEdited) return;
-
-      setTranslating(true);
-      try {
-        const token = getAccessToken();
-        const res = await fetch(`${API_BASE_URL}/api/translate/vi-to-en`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ text }),
-        });
-
-        if (res.ok) {
-          const json = await res.json().catch(() => ({}));
-          const translatedText = json?.translatedText || '';
-          if (mountedRef.current) {
-            setFormData((prev) => ({ ...prev, itemDescriptionEN: translatedText }));
-          }
-        }
-      } catch {
-        // ignore
-      } finally {
-        if (mountedRef.current) setTranslating(false);
-      }
-    },
-    [isEnManuallyEdited]
-  );
-
-  const debouncedTranslate = useMemo(() => debounce(translateText, 600), [translateText]);
-
-  useEffect(() => {
-    const vn = (formData.itemDescriptionVN || '').trim();
-    const en = (formData.itemDescriptionEN || '').trim();
-
-    if (vn && !isEnManuallyEdited && !en) {
-      debouncedTranslate(vn);
-    }
-
-    return () => debouncedTranslate.cancel?.();
-  }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
-
-  /* =========================
      ✅ UI handlers
   ========================= */
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
       const price = parseFloat(supplierData.supplierPrice) || 0;
+      const hana = pickHanaSAPCode(supplierData);
+
+      // ✅ PATCH: lấy VN/EN từ supplierData (đa key cho chắc)
+      const vn = pickFirst(
+        supplierData.itemDescriptionVN,
+        supplierData.vietnameseName,
+        supplierData.descriptionVN,
+        supplierData.descriptionVn,
+        supplierData.vnDescription,
+        supplierData.nameVN,
+        supplierData.itemDescription
+      );
+
+      const en = pickFirst(
+        supplierData.itemDescriptionEN,
+        supplierData.englishName,
+        supplierData.descriptionEN,
+        supplierData.descriptionEn,
+        supplierData.enDescription,
+        supplierData.nameEN
+      );
 
       setFormData((prev) => ({
         ...prev,
         supplierId: supplierData.supplierId || '',
-        unit: supplierData.unit || '',
+        // ✅ IMPORTANT: unit NEVER overwritten by supplier -> keep requestUnit
+        unit: requestUnit || prev.unit || '',
         supplierPrice: price,
-        productType1Id: supplierData.productType1Id != null ? String(supplierData.productType1Id) : prev.productType1Id,
-        productType2Id: supplierData.productType2Id != null ? String(supplierData.productType2Id) : prev.productType2Id,
+        productType1Id:
+          supplierData.productType1Id != null ? String(supplierData.productType1Id) : prev.productType1Id,
+        productType2Id:
+          supplierData.productType2Id != null ? String(supplierData.productType2Id) : prev.productType2Id,
 
-        // ✅ auto-fill from supplier
-        oldSAPCode: supplierData.oldSapCode || '',
-        hanaSAPCode: supplierData.hanaSapCode || '',
+        // ✅ PATCH: overwrite 4 fields giống CREATE
+        oldSAPCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
+        hanaSAPCode: hana || '',
+        itemDescriptionVN: vn || '',
+        itemDescriptionEN: en || '',
       }));
 
       setSelectedSupplier({
         supplierName: supplierData.supplierName || 'Unknown',
-        sapCode: supplierData.oldSapCode || '',
-        hanaCode: supplierData.hanaSapCode || '',
+        sapCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
+        hanaSapCode: hana || '',
         price,
-        unit: supplierData.unit || '',
+        unit: requestUnit || '',
+        currency: supplierData.currency || groupCurrency,
       });
+
+      // ✅ Supplier overwrite EN => reset manual flag
+      setIsEnManuallyEdited(false);
+
+      // ✅ Nếu supplier có VN nhưng không có EN thì auto translate
+      if (!en && vn) {
+        debouncedTranslate(vn);
+      }
 
       setShowSupplierSelector(false);
     } else {
-      // ✅ user cleared supplier selection
-      clearSupplierSelection();
+      // user cleared supplier inside selector
+      setFormData((prev) => ({
+        ...prev,
+        supplierId: '',
+        unit: requestUnit || prev.unit || '',
+        supplierPrice: 0,
+        productType1Id: '',
+        productType2Id: '',
+      }));
+      setSelectedSupplier(null);
+      setShowSupplierSelector(true);
+      setSupplierSelectorKey((k) => k + 1);
     }
   };
 
@@ -657,13 +727,17 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         setFormData((prev) => ({ ...prev, [field]: Number.isFinite(n) ? String(n) : '' }));
       }
     } else if (field === 'supplierPrice') {
-      const n = parseFloat(raw);
-      setFormData((prev) => ({ ...prev, supplierPrice: Number.isFinite(n) ? n : 0 }));
+      if (raw === '' || raw === null || raw === undefined) {
+        setFormData((prev) => ({ ...prev, supplierPrice: 0 }));
+      } else {
+        const n = parseFloat(raw);
+        setFormData((prev) => ({ ...prev, supplierPrice: Number.isFinite(n) ? n : 0 }));
+      }
     } else {
       setFormData((prev) => ({ ...prev, [field]: raw }));
     }
 
-    if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
+    if (field === 'itemDescriptionEN') setIsEnManuallyEdited((raw || '').trim().length > 0);
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
@@ -762,8 +836,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
   /* =========================
      ✅ UPDATE: PUT multipart + ?email=...
-     ✅ NEW behavior:
-        - If user clicked "Change supplier" and didn't re-select, send supplierName empty + price=0
   ========================= */
   const handleConfirmSave = async () => {
     if (!item?.id) return;
@@ -800,16 +872,15 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     fd.append('supplierId', formData.supplierId || '');
     fd.append('oldSAPCode', formData.oldSAPCode || '');
     fd.append('dailyMedInventory', formData.dailyMedInventory || '0');
-    fd.append('remarkComparison', formData.remarkComparison || '');
     fd.append('fullDescription', formData.fullDescription || '');
     fd.append('itemDescriptionEN', formData.itemDescriptionEN || '');
     fd.append('groupId', formData.groupId || '');
 
-    // ✅ NEW: If supplier is cleared and user submits, force reset supplierName + price
+    // ✅ IMPORTANT: Always send requestUnit as unit
+    fd.append('unit', requestUnit || '');
+
     if (!formData.supplierId) {
-      // Send empty supplierName (backend should treat as null)
       fd.append('supplierName', '');
-      // Reset price to 0 (backend field seems to be "price" because server returns data.price)
       fd.append('price', '0');
     }
 
@@ -877,9 +948,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         open={open}
         onClose={locked ? undefined : handleClose}
         fullScreen={fullScreen}
-        maxWidth="md"
+        maxWidth="xl"
         fullWidth
-        PaperProps={{ sx: paperSx }}
+        PaperProps={{ sx: paperSxEnhanced }}
       >
         {/* Header */}
         <DialogTitle sx={headerSx}>
@@ -944,10 +1015,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
               <Divider sx={{ my: 1.2 }} />
 
+              {/* ✅ 3 columns: Old SAP | Hana | Request Unit */}
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
                   gap: 1.2,
                 }}
               >
@@ -961,6 +1033,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   sx={fieldSx}
                   helperText="Selecting supplier will auto-fill SAP + Hana."
                 />
+
                 <TextField
                   label="Hana SAP Code"
                   value={formData.hanaSAPCode}
@@ -972,6 +1045,22 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
+                {/* ✅ NEW: Request Unit editable */}
+                <TextField
+                  label="Request Unit"
+                  value={requestUnit}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRequestUnit(v);
+                    setFormData((prev) => ({ ...prev, unit: v }));
+                  }}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  helperText="Supplier list will filter by Request Unit"
+                />
+
                 <TextField
                   label="Item Description (VN) *"
                   value={formData.itemDescriptionVN}
@@ -981,6 +1070,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   required
                   disabled={locked}
                   sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
                 />
 
                 <TextField
@@ -1006,7 +1096,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   sx={fieldSx}
                   multiline
                   rows={2}
-                  style={{ gridColumn: '1 / span 2' }}
+                  style={{ gridColumn: '1 / span 3' }}
                 />
               </Box>
 
@@ -1022,7 +1112,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 <Stack direction="row" spacing={1} alignItems="flex-start">
                   <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    <b>Tip:</b> If you override EN manually, auto-translate will stop.
+                    <b>Tip:</b> If you override EN manually, auto-translate will stop. If you clear EN, it can translate again.
                   </Typography>
                 </Stack>
               </Box>
@@ -1034,7 +1124,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Selecting supplier will auto-fill SAP + Hana and unit/price.
+                    Selecting supplier will auto-fill SAP + Hana. Unit stays as Request Unit.
                   </Typography>
                 </Box>
 
@@ -1042,10 +1132,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => {
-                      // ✅ IMPORTANT: "Change supplier" means "deselect current supplier now"
-                      clearSupplierSelection();
-                    }}
+                    onClick={changeSupplier}
                     disabled={locked}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
@@ -1063,6 +1150,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                     border: `1px dashed ${alpha(theme.palette.divider, 0.9)}`,
                     background: alpha('#fff', 0.65),
                     p: 1.2,
+                    overflowX: 'auto',
+                    '& > .MuiPaper-root': { minWidth: 1400 },
                   }}
                 >
                   <SupplierSelector
@@ -1072,6 +1161,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                     disabled={locked || loadingCurrency}
                     prefillSapCode={formData.oldSAPCode}
                     prefillHanaCode={formData.hanaSAPCode}
+                    prefillItemDescriptionVN={formData.itemDescriptionVN}
+                    prefillItemDescriptionEN={formData.itemDescriptionEN}
+                    prefillUnit={(requestUnit || '').trim()} // ✅ NEW
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -1100,17 +1192,17 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                       SAP: <b>{selectedSupplier.sapCode || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      Hana: <b>{selectedSupplier.hanaCode || '—'}</b>
+                      Hana: <b>{selectedSupplier.hanaSapCode || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      Unit: <b>{selectedSupplier.unit || '—'}</b>
+                      Unit: <b>{requestUnit || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Price:{' '}
                       <b>
                         {(selectedSupplier.price || 0).toLocaleString('vi-VN', {
                           style: 'currency',
-                          currency: groupCurrency,
+                          currency: selectedSupplier.currency || groupCurrency,
                         })}
                       </b>
                     </Typography>
@@ -1232,11 +1324,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                       <b>Total Request:</b> <span style={{ color: theme.palette.primary.main }}>{totalRequestQty}</span>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      <b>Total Buy:</b>{' '}
-                      <span style={{ color: theme.palette.primary.main }}>{formData.dailyMedInventory || 0}</span>
+                      <b>Total Buy:</b> <span style={{ color: theme.palette.primary.main }}>{totalBuyQty}</span>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      <b>Unit:</b> {formData.unit || '-'}
+                      <b>Unit:</b> {requestUnit || '-'}
                     </Typography>
                   </Stack>
                 </Box>
@@ -1261,7 +1352,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
             <Box sx={{ ...subtleCardSx, p: 1.6 }}>
               <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
               <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Reason, remark, and comparison notes.
+                Reason and remark.
               </Typography>
 
               <Divider sx={{ my: 1.2 }} />
@@ -1288,18 +1379,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   sx={fieldSx}
                   multiline
                   rows={2}
-                />
-                <TextField
-                  label="Remark Comparison"
-                  value={formData.remarkComparison || ''}
-                  onChange={handleChange('remarkComparison')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                  multiline
-                  rows={2}
-                  style={{ gridColumn: '1 / span 2' }}
                 />
               </Box>
             </Box>
@@ -1479,10 +1558,16 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                 • Total Request: <b>{totalRequestQty}</b>
               </Typography>
               <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Total Buy: <b>{totalBuyQty}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
                 • Confirmed MED: <b>{formData.dailyMedInventory || 0}</b>
               </Typography>
               <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
                 • Supplier: <b>{selectedSupplier?.supplierName || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Unit: <b>{requestUnit || '—'}</b>
               </Typography>
               <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
                 • Images: <b>{totalImagesCount}</b>

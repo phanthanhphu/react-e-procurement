@@ -1,3 +1,4 @@
+// src/pages/.../AddRequisitionMonthly.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Dialog,
@@ -18,9 +19,9 @@ import {
   Box,
   Snackbar,
   Alert,
-  Chip,
   Divider,
   Tooltip,
+  Chip,
   useMediaQuery,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -37,7 +38,7 @@ import SupplierSelector from './SupplierSelector';
 import { debounce } from 'lodash';
 
 /* =========================
-   ✅ Helpers: token + email (same pattern as mẫu)
+   Helpers: token + email
 ========================= */
 const parseJwt = (token) => {
   try {
@@ -85,13 +86,25 @@ const normalizeCurrencyCode = (code) => {
   return valid.includes(n) ? n : 'VND';
 };
 
-/** ✅ pick hana sap code from supplier payload (robust key) */
+// robust hana key
 const pickHanaSAPCode = (supplierData) =>
   supplierData?.hanaSapCode ||
   supplierData?.hanaSAPCode ||
   supplierData?.hanaCode ||
   supplierData?.hana ||
   '';
+
+// ✅ PATCH: helper pick first non-empty string
+const pickFirst = (...vals) =>
+  vals.find((v) => typeof v === 'string' && v.trim() !== '') || '';
+
+/** ✅ NEW: prefill target enum */
+const PREFILL = {
+  SAP: 'sap',
+  HANA: 'hana',
+  VN: 'vn',
+  EN: 'en',
+};
 
 export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupId }) {
   const theme = useTheme();
@@ -108,7 +121,6 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       dailyMedInventory: '',
       reason: '',
       remark: '',
-      remarkComparison: '',
       supplierId: '',
       groupId: groupId || '',
       productType1Id: '',
@@ -120,6 +132,10 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   );
 
   const [formData, setFormData] = useState(defaultFormData);
+
+  // ✅ NEW: Request Unit editable (stable, not overwritten by supplier)
+  const [requestUnit, setRequestUnit] = useState('');
+
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
   const [saving, setSaving] = useState(false);
@@ -139,9 +155,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
-  // ✅ Used to fully reset SupplierSelector UI when "Change supplier" is clicked
   const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
-
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
 
   const [groupCurrency, setGroupCurrency] = useState('VND');
@@ -149,7 +163,10 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   const [currencyError, setCurrencyError] = useState(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [itemNoForSearch, setItemNoForSearch] = useState('');
+
+  /** ✅ NEW: event-driven prefill (ONLY 1 input auto) */
+  const [prefillTarget, setPrefillTarget] = useState(PREFILL.SAP);
+  const [prefillValue, setPrefillValue] = useState('');
 
   const locked = saving;
 
@@ -249,15 +266,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     setSnackbarOpen(true);
   }, []);
 
-  // ====== itemNo debounce (giữ nguyên nếu bạn đang dùng supplier search theo item no) ======
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const v = (formData.itemDescriptionVN || '').trim();
-      if (mountedRef.current) setItemNoForSearch(v);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [formData.itemDescriptionVN]);
-
+  // ====== calc totals ======
   const totalRequestQty = useMemo(
     () => deptRows.reduce((sum, row) => sum + (parseFloat(row.qty) || 0), 0),
     [deptRows]
@@ -326,11 +335,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return;
     }
 
-    if (
-      formData.dailyMedInventory === '' ||
-      formData.dailyMedInventory === null ||
-      formData.dailyMedInventory === undefined
-    ) {
+    if (formData.dailyMedInventory === '' || formData.dailyMedInventory === null || formData.dailyMedInventory === undefined) {
       setDeptRows((prev) => prev.map((r) => ({ ...r, buy: '' })));
       return;
     }
@@ -339,7 +344,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   }, [formData.dailyMedInventory, autoAllocateBuy, orderQtyError]);
 
   /**
-   * ✅ fetch currency + departments (email + token giống mẫu)
+   * fetch currency + departments
    */
   const fetchData = useCallback(async () => {
     if (!groupId) {
@@ -419,15 +424,19 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     fetchData();
 
     setFormData({ ...defaultFormData, groupId: groupId || '' });
+
+    // ✅ reset requestUnit
+    setRequestUnit('');
+    setFormData((prev) => ({ ...prev, unit: '' }));
+
     setDeptRows([{ id: '', name: '', qty: '', buy: '' }]);
     setDeptErrors(['']);
 
     setSelectedSupplier(null);
     setShowSupplierSelector(true);
-    setSupplierSelectorKey((k) => k + 1); // ✅ reset selector UI on open
+    setSupplierSelectorKey((k) => k + 1);
 
     setIsEnManuallyEdited(false);
-    setItemNoForSearch('');
     setConfirmOpen(false);
 
     // reset files
@@ -437,12 +446,16 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       return [];
     });
 
+    // reset prefill
+    setPrefillTarget(PREFILL.SAP);
+    setPrefillValue('');
+
     return () => {
       mountedRef.current = false;
     };
   }, [open, groupId, fetchData, defaultFormData]);
 
-  // cleanup when component unmount (just in case)
+  // cleanup urls
   useEffect(() => {
     return () => {
       previews.forEach((u) => URL.revokeObjectURL(u));
@@ -451,8 +464,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   }, []);
 
   /**
-   * ✅ translate kèm token
-   * ✅ IMPORTANT: KHÔNG dịch nếu EN đã có value
+   * translate vi -> en
    */
   const translateText = useCallback(
     async (text, existingEn) => {
@@ -507,10 +519,30 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
 
   /**
-   * ✅ REQUIRED BEHAVIOR (giống mẫu AddDialog):
-   * - Selecting supplier auto-fills oldSAPCode + hanaSAPCode
-   * - User can still edit hanaSAPCode manually
-   * - Do NOT overwrite itemDescriptionVN/EN/fullDescription
+   * debounce prefill push xuống SupplierSelector
+   */
+  const pushPrefill = useMemo(
+    () =>
+      debounce((target, value) => {
+        if (!mountedRef.current) return;
+        if (!showSupplierSelector) return;
+
+        setPrefillTarget(target);
+        setPrefillValue(value ?? '');
+        setSupplierSelectorKey((k) => k + 1);
+      }, 250),
+    [showSupplierSelector]
+  );
+
+  useEffect(() => {
+    return () => pushPrefill.cancel?.();
+  }, [pushPrefill]);
+
+  /**
+   * Selecting supplier:
+   * - auto fill SAP/Hana + price + product type
+   * - ✅ IMPORTANT: unit ALWAYS keep requestUnit (DO NOT overwrite)
+   * - ✅ PATCH: overwrite 4 UI fields (SAP/Hana/VN/EN)
    */
   const handleSelectSupplier = (supplierData) => {
     if (!supplierData) {
@@ -519,31 +551,55 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
         oldSAPCode: '',
         hanaSAPCode: '',
         supplierId: '',
-        unit: '',
+        unit: requestUnit || '',
         supplierPrice: 0,
         productType1Id: '',
         productType2Id: '',
       }));
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
-      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector UI
+      setSupplierSelectorKey((k) => k + 1);
       return;
     }
 
     const price = parseFloat(supplierData.supplierPrice) || 0;
     const hana = pickHanaSAPCode(supplierData);
 
+    // ✅ PATCH: lấy VN/EN từ supplierData (đa key cho chắc)
+    const vn = pickFirst(
+      supplierData.itemDescriptionVN,
+      supplierData.vietnameseName,
+      supplierData.descriptionVN,
+      supplierData.descriptionVn,
+      supplierData.vnDescription,
+      supplierData.nameVN,
+      supplierData.itemDescription
+    );
+
+    const en = pickFirst(
+      supplierData.itemDescriptionEN,
+      supplierData.englishName,
+      supplierData.descriptionEN,
+      supplierData.descriptionEn,
+      supplierData.enDescription,
+      supplierData.nameEN
+    );
+
     setFormData((prev) => ({
       ...prev,
       supplierId: supplierData.supplierId || '',
-      unit: supplierData.unit || '',
       supplierPrice: price,
       productType1Id: supplierData.productType1Id || '',
       productType2Id: supplierData.productType2Id || '',
 
-      // ✅ auto-fill from supplier
+      // ✅ PATCH: overwrite 4 fields giống EditDialog
       oldSAPCode: supplierData.oldSapCode || '',
       hanaSAPCode: hana || '',
+      itemDescriptionVN: vn || '',
+      itemDescriptionEN: en || '',
+
+      // ✅ keep requestUnit as unit
+      unit: requestUnit || prev.unit || '',
     }));
 
     setSelectedSupplier({
@@ -551,14 +607,24 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       sapCode: supplierData.oldSapCode || '',
       hanaSapCode: hana || '',
       price,
-      unit: supplierData.unit || '',
+      unit: requestUnit || '',
       currency: supplierData.currency || groupCurrency,
     });
+
+    // ✅ Supplier overwrite EN => reset manual flag
+    setIsEnManuallyEdited(false);
+
+    // ✅ Nếu supplier có VN nhưng không có EN thì auto translate
+    if (!en && vn) {
+      debouncedTranslate(vn, '');
+    }
 
     setShowSupplierSelector(false);
   };
 
-  // ✅ FIX: nhập số 0 không bị biến thành ''
+  /**
+   * handleChange + push prefill
+   */
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
 
@@ -576,12 +642,21 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
     setFormData((prev) => ({ ...prev, [field]: val }));
 
-    // ✅ EN manual edit: if user clears EN => allow auto-translate again
     if (field === 'itemDescriptionEN') {
       setIsEnManuallyEdited((raw || '').trim().length > 0);
     }
     if (field === 'itemDescriptionVN') {
       setIsEnManuallyEdited(false);
+    }
+
+    // event-driven prefill for SupplierSelector
+    if (showSupplierSelector) {
+      const v = (raw ?? '').toString();
+
+      if (field === 'oldSAPCode') pushPrefill(PREFILL.SAP, v);
+      if (field === 'hanaSAPCode') pushPrefill(PREFILL.HANA, v);
+      if (field === 'itemDescriptionVN') pushPrefill(PREFILL.VN, v);
+      if (field === 'itemDescriptionEN') pushPrefill(PREFILL.EN, v);
     }
   };
 
@@ -642,10 +717,12 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     onClose?.();
   };
 
+  /**
+   * ✅ Supplier NOT REQUIRED anymore
+   */
   const handleAddClick = () => {
-    if (!formData.supplierId) return toast('Supplier is required', 'error');
-    if (!formData.oldSAPCode?.trim()) return toast('Old SAP Code is required', 'error');
-    if (!formData.itemDescriptionVN?.trim()) return toast('Item Description (VN) is required', 'error');
+    if (!String(formData.oldSAPCode || '').trim()) return toast('Old SAP Code is required', 'error');
+    if (!String(formData.itemDescriptionVN || '').trim()) return toast('Item Description (VN) is required', 'error');
     if (totalRequestQty === 0) return toast('At least one department must have Qty', 'error');
     if (deptErrors.some(Boolean)) return toast('Please fix duplicate department selections', 'error');
 
@@ -663,7 +740,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   };
 
   /**
-   * ✅ CREATE: email query param + token + parse response
+   * CREATE
    */
   const handleConfirmAdd = async () => {
     const departmentRequisitions = deptRows
@@ -693,21 +770,27 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
     fd.append('reason', formData.reason || '');
     fd.append('remark', formData.remark || '');
-    fd.append('remarkComparison', formData.remarkComparison || '');
 
     fd.append('supplierId', formData.supplierId || '');
     fd.append('groupId', groupId || '');
 
     fd.append('productType1Id', formData.productType1Id || '');
     fd.append('productType2Id', formData.productType2Id || '');
-    fd.append('unit', formData.unit || '');
-    fd.append(
-      'supplierPrice',
-      Number.isFinite(+formData.supplierPrice) ? String(formData.supplierPrice) : '0'
-    );
+
+    // ✅ IMPORTANT: always send requestUnit as unit
+    fd.append('unit', requestUnit || '');
+
+    // NOTE: supplierPrice only meaningful if supplier selected
+    fd.append('supplierPrice', Number.isFinite(+formData.supplierPrice) ? String(formData.supplierPrice) : '0');
 
     fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
     files.forEach((f) => fd.append('files', f));
+
+    // ✅ if supplier not selected, keep BE happy
+    if (!formData.supplierId) {
+      fd.append('supplierName', '');
+      fd.append('price', '0');
+    }
 
     setSaving(true);
 
@@ -765,18 +848,28 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
   const titleName = formData.itemDescriptionVN?.trim() || 'this item';
 
+  const dialogMaxWidth = 'xl';
+
+  const paperSxEnhanced = useMemo(
+    () => ({
+      ...paperSx,
+      width: 'min(1680px, 98vw)',
+      maxWidth: '98vw',
+      maxHeight: fullScreen ? '100vh' : '92vh',
+    }),
+    [paperSx, fullScreen]
+  );
+
   return (
     <>
-      {/* MAIN DIALOG */}
       <Dialog
         open={open}
         onClose={locked ? undefined : handleClose}
         fullScreen={fullScreen}
-        maxWidth="md"
+        maxWidth={dialogMaxWidth}
         fullWidth
-        PaperProps={{ sx: paperSx }}
+        PaperProps={{ sx: paperSxEnhanced }}
       >
-        {/* Header */}
         <DialogTitle sx={headerSx}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
             <Box>
@@ -829,7 +922,12 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
           </Stack>
         </DialogTitle>
 
-        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 } }}>
+        <DialogContent
+          sx={{
+            p: { xs: 1.8, sm: 2.2 },
+            ...(showSupplierSelector && !fullScreen ? { maxHeight: 'calc(92vh - 160px)', overflowY: 'auto' } : {}),
+          }}
+        >
           <Stack spacing={1.4}>
             {currencyError && (
               <Alert severity="warning" sx={{ borderRadius: 3 }}>
@@ -846,10 +944,11 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
               <Divider sx={{ my: 1.2 }} />
 
+              {/* ✅ 3 columns: Old SAP | Hana | Request Unit */}
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
                   gap: 1.2,
                 }}
               >
@@ -862,8 +961,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   required
                   disabled={locked}
                   sx={fieldSx}
-                  helperText="Selecting supplier will auto-fill SAP + Hana from supplier."
+                  helperText="Typing here will auto-fill Supplier search (SAP) if selector is open."
                 />
+
                 <TextField
                   label="Hana SAP Code"
                   value={formData.hanaSAPCode}
@@ -872,7 +972,23 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   fullWidth
                   disabled={locked}
                   sx={fieldSx}
-                  helperText="Auto-filled when selecting supplier, but you can edit it."
+                  helperText="Typing here will auto-fill Supplier search (Hana) if selector is open."
+                />
+
+                {/* ✅ NEW: Request Unit */}
+                <TextField
+                  label="Request Unit"
+                  value={requestUnit}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRequestUnit(v);
+                    setFormData((prev) => ({ ...prev, unit: v }));
+                  }}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  helperText="Supplier list will filter by Request Unit"
                 />
 
                 <TextField
@@ -884,6 +1000,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   required
                   disabled={locked}
                   sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
                 />
 
                 <TextField
@@ -909,7 +1026,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   sx={fieldSx}
                   multiline
                   rows={2}
-                  style={{ gridColumn: '1 / span 2' }}
+                  style={{ gridColumn: '1 / span 3' }}
                 />
               </Box>
 
@@ -923,23 +1040,21 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 }}
               >
                 <Stack direction="row" spacing={1} alignItems="flex-start">
-                  <InfoRoundedIcon
-                    sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }}
-                  />
+                  <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    <b>Tip:</b> Use consistent naming so search/duplicate detection is cleaner.
+                    <b>Tip:</b> Khi SupplierSelector đang mở, field bạn gõ cuối cùng sẽ là field được “auto input vào search”.
                   </Typography>
                 </Stack>
               </Box>
             </Box>
 
-            {/* SUPPLIER (✅ giống mẫu: có Change supplier + reset SupplierSelector UI) */}
+            {/* SUPPLIER */}
             <Box sx={{ ...subtleCardSx, p: 1.6 }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Select supplier to auto-fill unit, price, product type, SAP codes.
+                    Supplier is optional. Selecting supplier will auto-fill SAP + Hana + price/type. Unit stays as Request Unit.
                   </Typography>
                 </Box>
 
@@ -950,7 +1065,17 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     disabled={locked}
                     onClick={() => {
                       setShowSupplierSelector(true);
-                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters UI
+                      setSelectedSupplier(null);
+                      setFormData((prev) => ({
+                        ...prev,
+                        supplierId: '',
+                        supplierPrice: 0,
+                        productType1Id: '',
+                        productType2Id: '',
+                        unit: requestUnit || prev.unit || '',
+                      }));
+                      setSupplierSelectorKey((k) => k + 1);
+                      pushPrefill(prefillTarget, prefillValue);
                     }}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
@@ -968,6 +1093,8 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     border: `1px dashed ${alpha(theme.palette.divider, 0.9)}`,
                     background: alpha('#fff', 0.65),
                     p: 1.2,
+                    overflowX: 'auto',
+                    '& > .MuiPaper-root': { minWidth: 1400 },
                   }}
                 >
                   <SupplierSelector
@@ -975,11 +1102,13 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     onSelectSupplier={handleSelectSupplier}
                     currency={groupCurrency}
                     disabled={locked || loadingCurrency}
-                    // ✅ giống mẫu AddDialog
+                    prefillTarget={prefillTarget}
+                    prefillValue={prefillValue}
                     prefillSapCode={formData.oldSAPCode}
                     prefillHanaCode={formData.hanaSAPCode}
-                    // ✅ nếu SupplierSelector của bạn đang dùng search theo itemNo thì giữ, không ảnh hưởng auto-fill
-                    itemNo={itemNoForSearch}
+                    prefillItemDescriptionVN={formData.itemDescriptionVN}
+                    prefillItemDescriptionEN={formData.itemDescriptionEN}
+                    prefillUnit={(requestUnit || '').trim()} // ✅ NEW
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -1011,7 +1140,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                       Hana SAP: <b>{selectedSupplier.hanaSapCode || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      Unit: <b>{selectedSupplier.unit || '—'}</b>
+                      Unit: <b>{requestUnit || '—'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Price:{' '}
@@ -1150,15 +1279,13 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 >
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} justifyContent="space-between">
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      <b>Total Request:</b>{' '}
-                      <span style={{ color: theme.palette.primary.main }}>{totalRequestQty}</span>
+                      <b>Total Request:</b> <span style={{ color: theme.palette.primary.main }}>{totalRequestQty}</span>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      <b>Total Buy:</b>{' '}
-                      <span style={{ color: theme.palette.primary.main }}>{totalBuyQty}</span>
+                      <b>Total Buy:</b> <span style={{ color: theme.palette.primary.main }}>{totalBuyQty}</span>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      <b>Unit:</b> {formData.unit || '-'}
+                      <b>Unit:</b> {requestUnit || '-'}
                     </Typography>
                   </Stack>
                 </Box>
@@ -1182,9 +1309,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
             {/* NOTES */}
             <Box sx={{ ...subtleCardSx, p: 1.6 }}>
               <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
-              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Reason, remark, and comparison notes.
-              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>Reason, remark.</Typography>
 
               <Divider sx={{ my: 1.2 }} />
 
@@ -1210,18 +1335,6 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   sx={fieldSx}
                   multiline
                   rows={2}
-                />
-                <TextField
-                  label="Remark Comparison"
-                  value={formData.remarkComparison || ''}
-                  onChange={handleChange('remarkComparison')}
-                  size="small"
-                  fullWidth
-                  disabled={locked}
-                  sx={fieldSx}
-                  multiline
-                  rows={2}
-                  style={{ gridColumn: '1 / span 2' }}
                 />
               </Box>
             </Box>
@@ -1253,9 +1366,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     <input hidden multiple accept="image/*" type="file" onChange={handleFileChange} />
                   </Button>
 
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    {files.length}/10 selected
-                  </Typography>
+                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{files.length}/10 selected</Typography>
                 </Stack>
 
                 {previews.length > 0 && (
@@ -1318,7 +1429,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
         </DialogActions>
       </Dialog>
 
-      {/* CONFIRM DIALOG */}
+      {/* CONFIRM */}
       <Dialog
         open={confirmOpen}
         onClose={() => (!locked ? setConfirmOpen(false) : null)}
@@ -1361,6 +1472,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
               </Typography>
               <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
                 • Supplier: <b>{selectedSupplier?.supplierName || '—'}</b>
+              </Typography>
+              <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
+                • Unit: <b>{requestUnit || '—'}</b>
               </Typography>
               <Typography sx={{ fontSize: 12.6, color: 'text.secondary' }}>
                 • Images: <b>{files.length}</b>

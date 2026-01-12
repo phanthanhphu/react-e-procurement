@@ -1,3 +1,4 @@
+// src/pages/RequisitionMonthlyPage/RequisitionMonthlyPage.jsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PropTypes from 'prop-types';
@@ -42,7 +43,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import ExportRequisitionMonthlyExcelButton from './ExportRequisitionMonthlyExcelButton';
 import ImportExcelButtonMonthly from './ImportExcelButtonMonthly';
-import ImportExcelButtonMonthlySupplement from './ImportExcelButtonMonthlySupplement'; // ✅ NEW
+import ImportExcelButtonMonthlySupplement from './ImportExcelButtonMonthlySupplement';
 import EditRequisitionMonthly from './EditRequisitionMonthly';
 import AddRequisitionMonthly from './AddRequisitionMonthly';
 import RequisitionMonthlySearch from './RequisitionMonthlySearch';
@@ -78,7 +79,7 @@ if (!axios.__SUMMARY_PAGE_INTERCEPTORS__) {
 }
 
 /* =========================
-   Auth helpers (EMAIL) - same as SummaryPage
+   Auth helpers (EMAIL)
    ========================= */
 const parseJwt = (token) => {
   try {
@@ -102,10 +103,7 @@ const parseJwt = (token) => {
 const looksLikeEmail = (v) => typeof v === 'string' && v.includes('@') && v.includes('.');
 
 const getUserEmail = () => {
-  const direct =
-    localStorage.getItem('email') ||
-    localStorage.getItem('userEmail') ||
-    localStorage.getItem('username');
+  const direct = localStorage.getItem('email') || localStorage.getItem('userEmail') || localStorage.getItem('username');
 
   if (direct && looksLikeEmail(String(direct).trim())) return String(direct).trim();
 
@@ -131,10 +129,15 @@ const GROUP_URL = `${API_BASE_URL}/api/group-summary-requisitions`;
 const DELETE_URL = `${API_BASE_URL}/requisition-monthly`;
 
 /* =========================
-   Completion endpoints (same as SummaryPage)
+   Completion endpoints
    ========================= */
 const MARK_COMPLETED_URL = `${API_BASE_URL}/api/summary-requisitions/mark-completed`;
 const MARK_UNCOMPLETED_URL = `${API_BASE_URL}/api/summary-requisitions/mark-uncompleted`;
+
+/* =========================
+   ✅ Auto supplier endpoint (same as Weekly)
+   ========================= */
+const AUTO_SUPPLIER_BY_GROUP_URL = `${API_BASE_URL}/requisition-monthly/auto-supplier/by-group`;
 
 /* =========================
    Helpers
@@ -157,7 +160,6 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-// parse boolean chuẩn (đặc biệt case "false" string)
 const toBoolStrict = (v) => {
   if (v === true || v === 1) return true;
   if (v === false || v === 0 || v == null) return false;
@@ -197,7 +199,7 @@ const normalizeCompletedBy = (item) => {
 };
 
 /* =========================
-   ✅ Sorting helpers (CLIENT fallback)
+   Sorting helpers (CLIENT fallback)
    ========================= */
 const toTimestamp = (v) => {
   if (!v) return 0;
@@ -317,7 +319,7 @@ function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageCh
   const totalPages = Math.max(1, Math.ceil((count || 0) / (rowsPerPage || 1)));
   const from = count === 0 ? 0 : page * rowsPerPage + 1;
   const to = Math.min(count, (page + 1) * rowsPerPage);
-  const btnSx = { textTransform: 'none', fontWeight: 400 };
+  const btnSx = { textTransform: 'none', fontWeight: 400, whiteSpace: 'nowrap' };
 
   return (
     <Paper
@@ -408,7 +410,6 @@ PaginationBar.propTypes = {
 
 /* =========================
    Headers (Monthly)
-   ✅ SAP Completed removed
    ========================= */
 const HEADERS = [
   { label: 'Select', key: 'select', sortable: false },
@@ -456,7 +457,19 @@ export default function RequisitionMonthlyPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
 
-  const btnSx = useMemo(() => ({ textTransform: 'none', fontWeight: 400 }), []);
+  // ✅ UPDATED: prevent button text wrap + responsive shrink/wrap behavior
+  const btnSx = useMemo(
+    () => ({
+      textTransform: 'none',
+      fontWeight: 500,
+      whiteSpace: 'nowrap', // ✅ never wrap text inside button
+      flexShrink: 0, // ✅ prevent excessive shrinking that triggers wrap
+      px: 1.5, // ✅ slightly tighter width
+      minHeight: 36,
+    }),
+    []
+  );
+
   const [data, setData] = useState([]);
   const [groupStatus, setGroupStatus] = useState(null);
   const [totalElements, setTotalElements] = useState(0);
@@ -495,6 +508,9 @@ export default function RequisitionMonthlyPage() {
   // pending desired changes
   const [pendingComplete, setPendingComplete] = useState(() => new Set());
   const [pendingUncomplete, setPendingUncomplete] = useState(() => new Set());
+
+  // ✅ NEW: store all ids across pages (lazy loaded)
+  const [allRowMeta, setAllRowMeta] = useState(null); // null = chưa load
 
   const isGroupCompleted = (groupStatus || '').toLowerCase() === 'completed';
   const isPopoverOpen = Boolean(anchorEl);
@@ -646,20 +662,87 @@ export default function RequisitionMonthlyPage() {
     fetchData({ page: 0 });
   }, [fetchGroupStatus, fetchData, navigate]);
 
-  // ✅ reset pending khi đổi groupId/page/size/sort/search
+  // ✅ reset pending + reset allRowMeta khi đổi context
+  // ✅ FIX: KHÔNG reset khi đổi page (giữ selection khi chuyển trang)
   const searchKey = useMemo(() => JSON.stringify(searchValues), [searchValues]);
   useEffect(() => {
     setPendingComplete(new Set());
     setPendingUncomplete(new Set());
-  }, [groupId, page, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
+    setAllRowMeta(null);
+  }, [groupId, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
 
-  // ✅ nếu group Completed thì clear pending vì read-only
   useEffect(() => {
     if (isGroupCompleted) {
       setPendingComplete(new Set());
       setPendingUncomplete(new Set());
+      setAllRowMeta(null);
     }
   }, [isGroupCompleted]);
+
+  /* =========================
+     ✅ Fetch ALL row meta across pages (lazy)
+     ========================= */
+  const fetchAllRowMeta = useCallback(async () => {
+    if (!groupId) return [];
+
+    const hasSearch = Object.values(searchValues).some((v) => v && String(v).trim() !== '');
+
+    const canSort = sortConfig.key && sortConfig.key !== 'select' && sortConfig.key !== 'no' && sortConfig.direction;
+    const backendKey = HEADERS.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    const sortParam = canSort ? `${backendKey},${sortConfig.direction}` : 'updatedDate,desc';
+
+    try {
+      const params = {
+        groupId,
+        hasFilter: hasSearch,
+        page: 0,
+        size: 999999,
+        sort: sortParam,
+
+        productType1Name: searchValues.productType1Name || undefined,
+        productType2Name: searchValues.productType2Name || undefined,
+
+        englishName: searchValues.englishName || undefined,
+        vietnameseName: searchValues.vietnameseName || undefined,
+        itemDescriptionEN: searchValues.englishName || undefined,
+        itemDescriptionVN: searchValues.vietnameseName || undefined,
+
+        oldSapCode: searchValues.oldSapCode || undefined,
+        oldSAPCode: searchValues.oldSapCode || undefined,
+
+        hanaSapCode: searchValues.hanaSapCode || undefined,
+        hanaSAPCode: searchValues.hanaSapCode || undefined,
+
+        supplierName: searchValues.supplierName || undefined,
+        departmentName: searchValues.departmentName || undefined,
+      };
+
+      const res = await axios.get(LIST_URL, { params, headers: { Accept: '*/*' } });
+
+      const items = res.data?.requisitions?.content || [];
+      const meta = items
+        .map((item) => {
+          const id = item?.id;
+          if (!id) return null;
+
+          const completedDate = item.completedDate ?? null;
+          const currentCompleted = hasCompletedDate(completedDate)
+            ? true
+            : toBoolStrict(item.isCompleted ?? item.completed);
+
+          return { id, currentCompleted };
+        })
+        .filter(Boolean);
+
+      setAllRowMeta(meta);
+      return meta;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Fetch ALL row meta error:', e.response?.data || e.message);
+      setNotification({ open: true, severity: 'error', message: 'Failed to load all rows for Select All.' });
+      return [];
+    }
+  }, [groupId, searchValues, sortConfig]);
 
   /* =========================
      Desired completion logic
@@ -668,6 +751,9 @@ export default function RequisitionMonthlyPage() {
     () => data.map((x) => ({ id: x?.id, currentCompleted: x?.isCompleted === true })).filter((x) => Boolean(x.id)),
     [data]
   );
+
+  // ✅ IMPORTANT: header checkbox uses ALL meta if loaded, else page meta
+  const effectiveAllMeta = allRowMeta || rowMeta;
 
   const getDesiredCompleted = useCallback(
     (id, currentCompleted) => {
@@ -680,12 +766,12 @@ export default function RequisitionMonthlyPage() {
 
   const desiredCheckedCount = useMemo(() => {
     let c = 0;
-    for (const r of rowMeta) if (getDesiredCompleted(r.id, r.currentCompleted)) c += 1;
+    for (const r of effectiveAllMeta) if (getDesiredCompleted(r.id, r.currentCompleted)) c += 1;
     return c;
-  }, [rowMeta, getDesiredCompleted]);
+  }, [effectiveAllMeta, getDesiredCompleted]);
 
-  const headerChecked = rowMeta.length > 0 && desiredCheckedCount === rowMeta.length;
-  const headerIndeterminate = desiredCheckedCount > 0 && desiredCheckedCount < rowMeta.length;
+  const headerChecked = effectiveAllMeta.length > 0 && desiredCheckedCount === effectiveAllMeta.length;
+  const headerIndeterminate = desiredCheckedCount > 0 && desiredCheckedCount < effectiveAllMeta.length;
 
   const setDesiredForOne = (id, currentCompleted, newDesired) => {
     if (newDesired === currentCompleted) {
@@ -719,26 +805,34 @@ export default function RequisitionMonthlyPage() {
     }
   };
 
-  const setDesiredForAll = (newDesired) => {
-    const nextComplete = new Set(pendingComplete);
-    const nextUncomplete = new Set(pendingUncomplete);
+  // ✅ NEW: Select All applies to ALL pages (lazy load allRowMeta)
+  const setDesiredForAllGlobal = useCallback(
+    async (newDesired) => {
+      let meta = allRowMeta;
+      if (!meta) meta = await fetchAllRowMeta();
+      if (!meta || meta.length === 0) return;
 
-    rowMeta.forEach((r) => {
-      if (newDesired === r.currentCompleted) {
-        nextComplete.delete(r.id);
-        nextUncomplete.delete(r.id);
-      } else if (newDesired) {
-        nextComplete.add(r.id);
-        nextUncomplete.delete(r.id);
-      } else {
-        nextUncomplete.add(r.id);
-        nextComplete.delete(r.id);
-      }
-    });
+      const nextComplete = new Set(pendingComplete);
+      const nextUncomplete = new Set(pendingUncomplete);
 
-    setPendingComplete(nextComplete);
-    setPendingUncomplete(nextUncomplete);
-  };
+      meta.forEach((r) => {
+        if (newDesired === r.currentCompleted) {
+          nextComplete.delete(r.id);
+          nextUncomplete.delete(r.id);
+        } else if (newDesired) {
+          nextComplete.add(r.id);
+          nextUncomplete.delete(r.id);
+        } else {
+          nextUncomplete.add(r.id);
+          nextComplete.delete(r.id);
+        }
+      });
+
+      setPendingComplete(nextComplete);
+      setPendingUncomplete(nextUncomplete);
+    },
+    [allRowMeta, fetchAllRowMeta, pendingComplete, pendingUncomplete]
+  );
 
   const pendingCompleteIds = useMemo(() => Array.from(pendingComplete), [pendingComplete]);
   const pendingUncompleteIds = useMemo(() => Array.from(pendingUncomplete), [pendingUncomplete]);
@@ -771,6 +865,7 @@ export default function RequisitionMonthlyPage() {
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
       setPendingComplete(new Set());
+      setAllRowMeta(null);
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -804,6 +899,7 @@ export default function RequisitionMonthlyPage() {
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
       setPendingUncomplete(new Set());
+      setAllRowMeta(null);
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -819,6 +915,53 @@ export default function RequisitionMonthlyPage() {
   };
 
   /* =========================
+     ✅ NEW: Auto choose supplier by group (same as Weekly)
+     ========================= */
+  const handleAutoSupplierByGroup = async () => {
+    if (loading || isGroupCompleted) return;
+
+    if (!groupId) {
+      setNotification({ open: true, severity: 'error', message: 'Invalid Group ID' });
+      return;
+    }
+
+    const email = getUserEmail();
+    if (!email) {
+      setNotification({ open: true, severity: 'error', message: 'Missing user email. Please login again.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.patch(
+        AUTO_SUPPLIER_BY_GROUP_URL,
+        null, // PATCH no body
+        {
+          params: { groupId, email },
+          headers: { Accept: '*/*' },
+        }
+      );
+
+      setNotification({ open: true, severity: 'success', message: 'Auto supplier selection completed.' });
+
+      // refresh UI
+      setPage(0);
+      setAllRowMeta(null);
+      await Promise.all([fetchData({ page: 0 }), fetchGroupStatus()]);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('Auto supplier error:', e.response?.data || e.message);
+      setNotification({
+        open: true,
+        severity: 'error',
+        message: e.response?.data?.message || 'Failed to auto choose supplier',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
      UI actions
      ========================= */
   const openEdit = (item) => {
@@ -827,9 +970,16 @@ export default function RequisitionMonthlyPage() {
     setOpenEditDialog(true);
   };
 
-  const closeEdit = () => {
+  const closeEdit = (msg) => {
     setOpenEditDialog(false);
     setSelectedItem(null);
+    if (msg) {
+      setNotification({
+        open: true,
+        severity: msg.toLowerCase().includes('success') ? 'success' : 'info',
+        message: msg,
+      });
+    }
   };
 
   const openAdd = () => {
@@ -837,7 +987,16 @@ export default function RequisitionMonthlyPage() {
     setOpenAddDialog(true);
   };
 
-  const closeAdd = () => setOpenAddDialog(false);
+  const closeAdd = (msg) => {
+    setOpenAddDialog(false);
+    if (msg) {
+      setNotification({
+        open: true,
+        severity: msg.toLowerCase().includes('success') ? 'success' : 'info',
+        message: msg,
+      });
+    }
+  };
 
   const askDelete = (item) => {
     if (isGroupCompleted) return;
@@ -858,7 +1017,9 @@ export default function RequisitionMonthlyPage() {
     try {
       await axios.delete(`${DELETE_URL}/${id}`, { headers: { Accept: '*/*' } });
       setNotification({ open: true, severity: 'success', message: 'Item deleted successfully' });
-      await fetchData({ page });
+      setAllRowMeta(null);
+      await fetchData({ page: 0 });
+      setPage(0);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Delete error:', e.response?.data || e.message);
@@ -869,7 +1030,7 @@ export default function RequisitionMonthlyPage() {
     }
   };
 
-  // ✅ NEW: click row -> open edit, nhưng ignore click trên control
+  // click row -> open edit, but ignore click on control
   const shouldIgnoreRowClick = (e) => {
     const t = e?.target;
     return !!t?.closest?.(
@@ -894,36 +1055,8 @@ export default function RequisitionMonthlyPage() {
     const nextSort = { key: direction ? key : null, direction };
     setSortConfig(nextSort);
     setPage(0);
+    setAllRowMeta(null);
     fetchData({ page: 0, sortConfig: nextSort });
-  };
-
-  const handleSearchChange = (v) => {
-    setSearchValues(v);
-    setPage(0);
-  };
-
-  const handleSearch = () => {
-    setPage(0);
-    fetchData({ page: 0 });
-  };
-
-  const handleReset = () => {
-    const cleared = {
-      productType1Name: '',
-      productType2Name: '',
-      englishName: '',
-      vietnameseName: '',
-      oldSapCode: '',
-      hanaSapCode: '',
-      supplierName: '',
-      departmentName: '',
-    };
-    const nextSort = { key: null, direction: null };
-
-    setSearchValues(cleared);
-    setSortConfig(nextSort);
-    setPage(0);
-    fetchData({ page: 0, searchValues: cleared, sortConfig: nextSort });
   };
 
   const openPopover = (event, imageUrls) => {
@@ -1053,11 +1186,14 @@ export default function RequisitionMonthlyPage() {
       />
 
       {/* Header */}
-      <Paper
-        elevation={0}
-        sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
-      >
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+      <Paper elevation={0} sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
+        {/* ✅ UPDATED: make header responsive so buttons can wrap (buttons won't wrap text) */}
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          alignItems={{ xs: 'stretch', md: 'center' }}
+          justifyContent="space-between"
+          spacing={1}
+        >
           <Stack spacing={0.5}>
             <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Monthly Requisition</Typography>
 
@@ -1075,7 +1211,16 @@ export default function RequisitionMonthlyPage() {
             </Stack>
           </Stack>
 
-          <Stack direction="row" spacing={1} alignItems="center">
+          {/* ✅ UPDATED: wrap buttons as a group; text inside buttons never wraps */}
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="flex-end"
+            useFlexGap
+            flexWrap="wrap"
+            gap={1}
+            sx={{ maxWidth: '100%' }}
+          >
             <ExportRequisitionMonthlyExcelButton
               groupId={groupId}
               data={data}
@@ -1087,30 +1232,41 @@ export default function RequisitionMonthlyPage() {
             <ImportExcelButtonMonthly
               groupId={groupId}
               disabled={isGroupCompleted}
-              onImport={() => fetchData({ page: 0 })}
+              onImport={() => {
+                setPage(0);
+                setAllRowMeta(null);
+                fetchData({ page: 0 });
+              }}
               sx={btnSx}
             />
 
-            {/* ✅ NEW: Upload bổ sung lần 2 */}
             <ImportExcelButtonMonthlySupplement
               groupId={groupId}
               disabled={isGroupCompleted}
-              onImport={() => fetchData({ page: 0 })}
+              onImport={() => {
+                setPage(0);
+                setAllRowMeta(null);
+                fetchData({ page: 0 });
+              }}
               sx={btnSx}
             />
 
-            <Button variant="outlined" onClick={() => navigate(`/request-monthly-comparison/${groupId}`)} sx={btnSx}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate(`/request-monthly-comparison/${groupId}`)}
+              sx={btnSx}
+            >
               Comparison
             </Button>
 
             <Button
               variant="outlined"
+              size="small"
               startIcon={<AddIcon fontSize="small" />}
-              onClick={() => {
-                if (!isGroupCompleted) setOpenAddDialog(true);
-              }}
+              onClick={openAdd}
               disabled={isGroupCompleted}
-              sx={btnSx}
+              sx={{ ...btnSx, minWidth: 110 }}
             >
               Add New
             </Button>
@@ -1119,13 +1275,22 @@ export default function RequisitionMonthlyPage() {
       </Paper>
 
       {/* Bulk actions */}
-      <Paper
-        elevation={0}
-        sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
-      >
+      <Paper elevation={0} sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={1}>
+          {/* ✅ Auto choose supplier */}
           <Button
             variant="contained"
+            size="small"
+            onClick={handleAutoSupplierByGroup}
+            disabled={loading || isGroupCompleted}
+            sx={{ ...btnSx, minWidth: 190 }}
+          >
+            {loading ? 'Auto is running...' : 'Auto-select supplier'}
+          </Button>
+
+          <Button
+            variant="contained"
+            size="small"
             onClick={handleMarkCompleted}
             disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0}
             sx={btnSx}
@@ -1135,6 +1300,7 @@ export default function RequisitionMonthlyPage() {
 
           <Button
             variant="outlined"
+            size="small"
             onClick={handleMarkUncompleted}
             disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0}
             sx={btnSx}
@@ -1142,7 +1308,13 @@ export default function RequisitionMonthlyPage() {
             Mark as Uncompleted
           </Button>
 
-          <Button variant="text" onClick={discardChanges} disabled={loading || isGroupCompleted || !hasPending} sx={btnSx}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={discardChanges}
+            disabled={loading || isGroupCompleted || !hasPending}
+            sx={btnSx}
+          >
             Discard
           </Button>
         </Stack>
@@ -1157,6 +1329,7 @@ export default function RequisitionMonthlyPage() {
         }}
         onSearch={() => {
           setPage(0);
+          setAllRowMeta(null);
           fetchData({ page: 0 });
         }}
         onReset={() => {
@@ -1175,6 +1348,7 @@ export default function RequisitionMonthlyPage() {
           setSearchValues(cleared);
           setSortConfig(nextSort);
           setPage(0);
+          setAllRowMeta(null);
           fetchData({ page: 0, searchValues: cleared, sortConfig: nextSort });
         }}
       />
@@ -1235,14 +1409,14 @@ export default function RequisitionMonthlyPage() {
                       onClick={() => sortable && handleSort(key)}
                     >
                       {key === 'select' ? (
-                        <Tooltip title="Toggle all (desired completed state)" arrow>
+                        <Tooltip title="Toggle all (applies to ALL pages)" arrow>
                           <span>
                             <Checkbox
                               size="small"
-                              disabled={isGroupCompleted || rowMeta.length === 0}
+                              disabled={isGroupCompleted || effectiveAllMeta.length === 0}
                               checked={headerChecked}
                               indeterminate={headerIndeterminate}
-                              onChange={(e) => setDesiredForAll(e.target.checked)}
+                              onChange={(e) => setDesiredForAllGlobal(e.target.checked)}
                               onClick={(e) => e.stopPropagation()}
                               sx={{ p: 0.2 }}
                             />
@@ -1268,6 +1442,8 @@ export default function RequisitionMonthlyPage() {
                     const currentCompleted = row.isCompleted === true;
                     const desiredCompleted = rowId ? getDesiredCompleted(rowId, currentCompleted) : false;
 
+                    const imageUrls = row.imageUrls || [];
+
                     return (
                       <TableRow
                         key={rowId || idx}
@@ -1279,10 +1455,7 @@ export default function RequisitionMonthlyPage() {
                           cursor: isGroupCompleted ? 'default' : 'pointer',
                         }}
                       >
-                        <TableCell
-                          align="center"
-                          sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}>
                           <Checkbox
                             size="small"
                             disabled={isGroupCompleted || !rowId}
@@ -1300,27 +1473,19 @@ export default function RequisitionMonthlyPage() {
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
 
-                        <TableCell
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT1, PT1_W, zebra, 3) }}
-                        >
+                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT1, PT1_W, zebra, 3) }}>
                           {row.groupItem1 || ''}
                         </TableCell>
 
-                        <TableCell
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT2, PT2_W, zebra, 3) }}
-                        >
+                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_PT2, PT2_W, zebra, 3) }}>
                           {row.groupItem2 || ''}
                         </TableCell>
 
-                        <TableCell
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_EN, EN_W, zebra, 3) }}
-                        >
+                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_EN, EN_W, zebra, 3) }}>
                           {row.itemDescriptionEN || ''}
                         </TableCell>
 
-                        <TableCell
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_VN, VN_W, zebra, 3) }}
-                        >
+                        <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_VN, VN_W, zebra, 3) }}>
                           {row.itemDescriptionVN || ''}
                         </TableCell>
 
@@ -1360,15 +1525,15 @@ export default function RequisitionMonthlyPage() {
                         </TableCell>
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
-                          {formatCurrency(row.price, row.currency)}
+                          {row.price ? formatCurrency(row.price, row.currency) : '0'}
                         </TableCell>
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
-                          {row.currency || 'VND'}
+                          {row.currency || '-'}
                         </TableCell>
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
-                          {formatCurrency(row.amount, row.currency)}
+                          {row.amount ? formatCurrency(row.amount, row.currency) : '0'}
                         </TableCell>
 
                         <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap' }}>
@@ -1400,7 +1565,7 @@ export default function RequisitionMonthlyPage() {
                         </TableCell>
 
                         <TableCell sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, whiteSpace: 'nowrap' }}>
-                          {row.completedBy || '—'}
+                          {row.completedBy || ''}
                         </TableCell>
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
@@ -1408,10 +1573,10 @@ export default function RequisitionMonthlyPage() {
                         </TableCell>
 
                         <TableCell align="center" sx={{ py: 0.4, px: 0.6 }}>
-                          {row.imageUrls?.length > 0 ? (
+                          {imageUrls.length > 0 ? (
                             <IconButton
                               size="small"
-                              onMouseEnter={(e) => openPopover(e, row.imageUrls)}
+                              onMouseEnter={(e) => openPopover(e, imageUrls)}
                               onClick={(e) => e.stopPropagation()}
                               aria-owns={isPopoverOpen ? 'mouse-over-popover' : undefined}
                               aria-haspopup="true"
@@ -1428,6 +1593,7 @@ export default function RequisitionMonthlyPage() {
                             <Tooltip title={isGroupCompleted ? 'Disabled' : 'Edit'}>
                               <span>
                                 <IconButton
+                                  aria-label="edit"
                                   color="primary"
                                   size="small"
                                   onClick={(e) => {
@@ -1444,6 +1610,7 @@ export default function RequisitionMonthlyPage() {
                             <Tooltip title={isGroupCompleted ? 'Disabled' : 'Delete'}>
                               <span>
                                 <IconButton
+                                  aria-label="delete"
                                   color="error"
                                   size="small"
                                   onClick={(e) => {
@@ -1487,11 +1654,11 @@ export default function RequisitionMonthlyPage() {
             onRowsPerPageChange={(size) => {
               setRowsPerPage(size);
               setPage(0);
+              setAllRowMeta(null);
               fetchData({ page: 0, size });
             }}
           />
 
-          {/* Delete confirm */}
           <Dialog open={deleteDialogOpen} onClose={cancelDelete}>
             <DialogTitle sx={{ fontSize: '0.95rem' }}>Delete Item</DialogTitle>
             <DialogContent>
@@ -1500,16 +1667,15 @@ export default function RequisitionMonthlyPage() {
               </Typography>
             </DialogContent>
             <DialogActions>
-              <Button onClick={cancelDelete} sx={btnSx}>
+              <Button onClick={cancelDelete} size="small" sx={btnSx}>
                 Cancel
               </Button>
-              <Button onClick={confirmDelete} variant="contained" color="error" disabled={loading} sx={btnSx}>
+              <Button onClick={confirmDelete} size="small" variant="contained" color="error" disabled={loading} sx={btnSx}>
                 Delete
               </Button>
             </DialogActions>
           </Dialog>
 
-          {/* Images Popover */}
           <Popover
             id="mouse-over-popover"
             sx={{ pointerEvents: 'auto' }}
@@ -1547,25 +1713,11 @@ export default function RequisitionMonthlyPage() {
             </Box>
           </Popover>
 
-          {/* Dialogs */}
-          <EditRequisitionMonthly
-            open={openEditDialog}
-            item={selectedItem}
-            onClose={closeEdit}
-            onRefresh={() => fetchData({ page })}
-          />
-          <AddRequisitionMonthly
-            open={openAddDialog}
-            onClose={() => setOpenAddDialog(false)}
-            onRefresh={() => fetchData({ page: 0 })}
-            groupId={groupId}
-          />
+          <EditRequisitionMonthly open={openEditDialog} item={selectedItem} onClose={closeEdit} onRefresh={() => fetchData({ page })} />
+
+          <AddRequisitionMonthly open={openAddDialog} onClose={closeAdd} onRefresh={() => fetchData({ page: 0 })} groupId={groupId} />
         </>
       )}
     </Box>
   );
 }
-
-RequisitionMonthlyPage.propTypes = {
-  groupId: PropTypes.string,
-};

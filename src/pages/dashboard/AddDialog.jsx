@@ -80,14 +80,16 @@ const getUserEmail = () => {
   const token = getAccessToken();
   const payload = token ? parseJwt(token) : null;
 
-  const email =
-    payload?.email ||
-    payload?.preferred_username ||
-    payload?.upn ||
-    payload?.sub;
+  const email = payload?.email || payload?.preferred_username || payload?.upn || payload?.sub;
 
   return typeof email === 'string' ? email.trim() : '';
 };
+
+/**
+ * ✅ Helper: pick first non-empty string
+ */
+const pickFirst = (...vals) =>
+  vals.find((v) => typeof v === 'string' && v.trim() !== '') || '';
 
 export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const theme = useTheme();
@@ -103,7 +105,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       orderQty: '',
       reason: '',
       remark: '',
-      remarkComparison: '',
       supplierId: '',
       groupId: groupId || '',
       productType1Id: '',
@@ -115,6 +116,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   );
 
   const [formData, setFormData] = useState(defaultFormData);
+
+  // ✅ requestUnit để filter supplier + gửi API
+  const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
@@ -139,7 +143,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
-  // ✅ Used to fully reset SupplierSelector UI when "Change supplier" is clicked
   const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
 
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
@@ -147,6 +150,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   const locked = saving;
   const mountedRef = useRef(false);
+
+  const unitForFilter = (requestUnit || '').trim();
 
   // ===== UI TOKENS =====
   const paperSx = useMemo(
@@ -267,7 +272,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     return errors;
   }, []);
 
-  // Auto allocate buy: smallest requests first
   const autoAllocateBuy = useCallback(
     (rows, orderQtyInput) => {
       const orderQty = parseFloat(orderQtyInput) || 0;
@@ -280,10 +284,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       const sorted = rows
         .map((r, i) => ({ ...r, originalIndex: i }))
         .filter((r) => parseFloat(r.qty) > 0)
-        .sort(
-          (a, b) =>
-            (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex
-        );
+        .sort((a, b) => (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex);
 
       const allocated = {};
       let remaining = effectiveQty;
@@ -389,6 +390,8 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
     setFormData({ ...defaultFormData, groupId: groupId || '' });
 
+    setRequestUnit('');
+
     const baseRows = [{ department: '', qty: '', buy: '' }];
     setDeptRows(baseRows);
     setDeptErrors(['']);
@@ -453,48 +456,82 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   }, [formData.itemDescriptionVN, debouncedTranslate, isEnManuallyEdited]);
 
   /**
-   * ✅ REQUIRED BEHAVIOR:
-   * - Selecting supplier auto-fills oldSapCode + hanaSapCode
-   * - User can still edit hanaSapCode manually in the form
-   * - Do NOT overwrite itemDescriptionVN/EN/fullDescription
+   * ✅ Supplier = source of truth
+   * Selecting supplier -> auto-fill SAP/Hana + VN/EN + price/type
    */
   const handleSelectSupplier = (supplierData) => {
-    if (supplierData) {
-      setFormData((prev) => ({
-        ...prev,
-        supplierId: supplierData.supplierId || '',
-        unit: supplierData.unit || '',
-        supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
-        productType1Id: supplierData.productType1Id || '',
-        productType2Id: supplierData.productType2Id || '',
-
-        // ✅ auto-fill from supplier
-        oldSapCode: supplierData.oldSapCode || '',
-        hanaSapCode: supplierData.hanaSapCode || '',
-      }));
-
-      setSelectedSupplier({
-        supplierName: supplierData.supplierName || '',
-        sapCode: supplierData.oldSapCode || '',
-        hanaCode: supplierData.hanaSapCode || '',
-        price: parseFloat(supplierData.supplierPrice) || 0,
-        unit: supplierData.unit || '',
-      });
-
-      setShowSupplierSelector(false);
-    } else {
+    if (!supplierData) {
+      // clear supplier but keep request unit
       setFormData((prev) => ({
         ...prev,
         supplierId: '',
-        unit: '',
         supplierPrice: 0,
         productType1Id: '',
         productType2Id: '',
+        unit: requestUnit || prev.unit || '',
       }));
+
       setSelectedSupplier(null);
       setShowSupplierSelector(true);
       setSupplierSelectorKey((k) => k + 1);
+      return;
     }
+
+    console.log('SUPPLIER DATA:', supplierData);
+
+    const vn = pickFirst(
+      supplierData.itemDescriptionVN,
+      supplierData.vietnameseName,
+      supplierData.descriptionVN,
+      supplierData.descriptionVn,
+      supplierData.vnDescription,
+      supplierData.nameVN,
+      supplierData.itemDescription
+    );
+
+    const en = pickFirst(
+      supplierData.itemDescriptionEN,
+      supplierData.englishName,
+      supplierData.descriptionEN,
+      supplierData.descriptionEn,
+      supplierData.enDescription,
+      supplierData.nameEN
+    );
+
+    // ✅ UPDATED: overwrite 4 fields always (SAP/Hana/VN/EN)
+    setFormData((prev) => ({
+      ...prev,
+      supplierId: supplierData.supplierId || '',
+      supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
+      productType1Id: supplierData.productType1Id || '',
+      productType2Id: supplierData.productType2Id || '',
+
+      // ✅ overwrite always
+      oldSapCode: supplierData.oldSapCode || '',
+      hanaSapCode: supplierData.hanaSapCode || '',
+      itemDescriptionVN: vn || '',
+      itemDescriptionEN: en || '',
+
+      unit: requestUnit || prev.unit || '',
+    }));
+
+    setSelectedSupplier({
+      supplierName: supplierData.supplierName || '',
+      sapCode: supplierData.oldSapCode || '',
+      hanaCode: supplierData.hanaSapCode || '',
+      price: parseFloat(supplierData.supplierPrice) || 0,
+      unit: requestUnit || '',
+    });
+
+    // ✅ EN now supplier-driven
+    setIsEnManuallyEdited(false);
+
+    // ✅ if supplier no EN but has VN -> auto translate
+    if (!en && vn) {
+      debouncedTranslate(vn);
+    }
+
+    setShowSupplierSelector(false);
   };
 
   const handleChange = (field) => (e) => {
@@ -553,7 +590,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const handleAddClick = () => {
-    if (!formData.supplierId?.trim()) return toastError('Please select supplier first');
     if (!formData.oldSapCode?.trim()) return toastError('Old SAP Code is required');
     if (!formData.itemDescriptionVN?.trim()) return toastError('Item Description (VN) is required');
 
@@ -584,13 +620,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     formDataToSend.append('orderQty', parseFloat(formData.orderQty) || 0);
     formDataToSend.append('reason', formData.reason || '');
     formDataToSend.append('remark', formData.remark || '');
-    formDataToSend.append('remarkComparison', formData.remarkComparison || '');
     formDataToSend.append('supplierId', formData.supplierId || '');
     formDataToSend.append('groupId', formData.groupId || '');
     formDataToSend.append('productType1Id', formData.productType1Id || '');
     formDataToSend.append('productType2Id', formData.productType2Id || '');
-    formDataToSend.append('unit', formData.unit || '');
+
+    formDataToSend.append('unit', requestUnit || '');
     formDataToSend.append('supplierPrice', formData.supplierPrice || 0);
+
     files.forEach((f) => formDataToSend.append('files', f));
 
     setSaving(true);
@@ -600,17 +637,14 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
       const token = getAccessToken();
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/summary-requisitions/create?email=${encodeURIComponent(email)}`,
-        {
-          method: 'POST',
-          headers: {
-            accept: '*/*',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formDataToSend,
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/api/summary-requisitions/create?email=${encodeURIComponent(email)}`, {
+        method: 'POST',
+        headers: {
+          accept: '*/*',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formDataToSend,
+      });
 
       let data = null;
       const ct = res.headers.get('content-type') || '';
@@ -634,6 +668,17 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const currentImagesCount = files.length;
+  const dialogMaxWidth = 'xl';
+
+  const paperSxEnhanced = useMemo(
+    () => ({
+      ...paperSx,
+      width: 'min(1680px, 98vw)',
+      maxWidth: '98vw',
+      maxHeight: fullScreen ? '100vh' : '92vh',
+    }),
+    [paperSx, fullScreen]
+  );
 
   return (
     <>
@@ -641,9 +686,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         open={open}
         onClose={locked ? undefined : onClose}
         fullScreen={fullScreen}
-        maxWidth="md"
+        maxWidth={dialogMaxWidth}
         fullWidth
-        PaperProps={{ sx: paperSx }}
+        PaperProps={{ sx: paperSxEnhanced }}
       >
         <DialogTitle sx={headerSx}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
@@ -660,7 +705,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 Add Request
               </Typography>
               <Typography sx={{ opacity: 0.9, mt: 0.4, fontSize: 12.5 }}>
-                Create a new request with supplier, departments, qty and images.
+                Create a new request with optional supplier, departments, qty and images.
               </Typography>
             </Box>
 
@@ -696,7 +741,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
           </Stack>
         </DialogTitle>
 
-        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 } }}>
+        {/* ===== CONTENT ===== */}
+        <DialogContent
+          sx={{
+            p: { xs: 1.8, sm: 2.2 },
+            ...(showSupplierSelector && !fullScreen ? { maxHeight: 'calc(92vh - 160px)', overflowY: 'auto' } : {}),
+          }}
+        >
           <Stack spacing={1.4}>
             {currencyError && (
               <Alert severity="warning" sx={{ borderRadius: 3 }}>
@@ -716,7 +767,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
                   gap: 1.2,
                 }}
               >
@@ -729,7 +780,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   required
                   disabled={locked}
                   sx={fieldSx}
-                  helperText="Selecting supplier will auto-fill SAP + Hana from supplier."
+                  helperText="You can type manually or select supplier to auto-fill."
                 />
 
                 <TextField
@@ -744,6 +795,21 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 />
 
                 <TextField
+                  label="Request Unit"
+                  value={requestUnit}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRequestUnit(v);
+                    setFormData((prev) => ({ ...prev, unit: v }));
+                  }}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  helperText="Used to auto-filter supplier list."
+                />
+
+                <TextField
                   label="Item Description (VN) *"
                   value={formData.itemDescriptionVN}
                   onChange={handleChange('itemDescriptionVN')}
@@ -753,6 +819,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   autoFocus
                   disabled={locked}
                   sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
                 />
 
                 <TextField
@@ -776,18 +843,18 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   rows={2}
                   disabled={locked}
                   sx={fieldSx}
-                  style={{ gridColumn: '1 / span 2' }}
+                  style={{ gridColumn: '1 / span 3' }}
                 />
               </Box>
             </Box>
 
-            {/* SUPPLIER */}
+            {/* SUPPLIER OPTIONAL */}
             <Box sx={subtleCardSx}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier</Typography>
+                  <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier (Optional)</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Select supplier to auto-fill SAP + Hana and store unit/price/type.
+                    Supplier is optional. Selecting supplier auto-fills SAP + Hana + VN/EN + price/type.
                   </Typography>
                 </Box>
 
@@ -797,8 +864,18 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     size="small"
                     disabled={locked}
                     onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        supplierId: '',
+                        supplierPrice: 0,
+                        productType1Id: '',
+                        productType2Id: '',
+                        unit: requestUnit || prev.unit || '',
+                      }));
+
+                      setSelectedSupplier(null);
                       setShowSupplierSelector(true);
-                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters UI
+                      setSupplierSelectorKey((k) => k + 1);
                     }}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
@@ -816,12 +893,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     border: `1px dashed ${alpha(theme.palette.divider, 0.9)}`,
                     background: alpha('#fff', 0.65),
                     p: 1.2,
+                    overflowX: 'auto',
+                    '& > .MuiPaper-root': { minWidth: 1400 },
                   }}
                 >
-                  {/* ✅ IMPORTANT:
-                      - Do NOT pass itemDescriptionVN as a prefill to SupplierSelector filters
-                      - Only pass SAP/Hana if you want
-                  */}
                   <SupplierSelector
                     key={supplierSelectorKey}
                     onSelectSupplier={handleSelectSupplier}
@@ -829,6 +904,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                     disabled={loadingCurrency || locked}
                     prefillSapCode={formData.oldSapCode}
                     prefillHanaCode={formData.hanaSapCode}
+                    prefillItemDescriptionVN={formData.itemDescriptionVN}
+                    prefillItemDescriptionEN={formData.itemDescriptionEN}
+                    prefillUnit={unitForFilter}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -860,7 +938,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                       Hana: <b>{selectedSupplier.hanaCode || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      Unit: <b>{selectedSupplier.unit || '-'}</b>
+                      Unit: <b>{requestUnit || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Price:{' '}
@@ -882,9 +960,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 <Stack direction="row" spacing={0.75} alignItems="center">
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department Requests</Typography>
                   <Tooltip title="Buy is auto-allocated based on Order Q'ty (smallest requests first)." arrow>
-                    <InfoOutlinedIcon
-                      sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }}
-                    />
+                    <InfoOutlinedIcon sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }} />
                   </Tooltip>
                 </Stack>
 
@@ -1017,7 +1093,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                       Total Buy: <b style={{ color: theme.palette.text.primary }}>{calcTotalBuy()}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      Unit: <b style={{ color: theme.palette.text.primary }}>{formData.unit || '-'}</b>
+                      Unit: <b style={{ color: theme.palette.text.primary }}>{requestUnit || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
                       Price:{' '}
@@ -1060,9 +1136,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
             {/* NOTES */}
             <Box sx={subtleCardSx}>
               <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
-              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Reason / Remark / Comparison notes.
-              </Typography>
+              <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>Reason / Remark.</Typography>
 
               <Divider sx={{ my: 1.2 }} />
 
@@ -1088,19 +1162,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   rows={2}
                   disabled={locked}
                   sx={fieldSx}
-                />
-                <TextField
-                  label="Remark Comparison"
-                  value={formData.remarkComparison || ''}
-                  onChange={handleChange('remarkComparison')}
-                  size="small"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  placeholder="Enter remark comparison..."
-                  disabled={locked}
-                  sx={fieldSx}
-                  style={{ gridColumn: '1 / span 2' }}
                 />
               </Box>
             </Box>

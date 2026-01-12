@@ -79,11 +79,7 @@ const getUserEmail = () => {
 
   const token = getAccessToken();
   const payload = token ? parseJwt(token) : null;
-  const email =
-    payload?.email ||
-    payload?.preferred_username ||
-    payload?.upn ||
-    payload?.sub;
+  const email = payload?.email || payload?.preferred_username || payload?.upn || payload?.sub;
 
   return typeof email === 'string' ? email.trim() : '';
 };
@@ -94,6 +90,12 @@ const withEmail = (url, email) => {
     ? `${url}&email=${encodeURIComponent(email)}`
     : `${url}?email=${encodeURIComponent(email)}`;
 };
+
+/**
+ * ✅ Helper: pick first non-empty string
+ */
+const pickFirst = (...vals) =>
+  vals.find((v) => typeof v === 'string' && v.trim() !== '') || '';
 
 export default function EditDialog({ open, item, onClose, onRefresh }) {
   const theme = useTheme();
@@ -109,7 +111,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     orderQty: '',
     reason: '',
     remark: '',
-    remarkComparison: '',
     supplierId: '',
     groupId: '',
     productType1Id: '',
@@ -117,6 +118,9 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     unit: '',
     supplierPrice: 0,
   });
+
+  // ✅ NEW: unit gốc của request (editable + dùng để filter + gửi lên server)
+  const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
   const [deptErrors, setDeptErrors] = useState(['']);
@@ -141,16 +145,19 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [showSupplierSelector, setShowSupplierSelector] = useState(true);
 
-  // ✅ same as AddDialog: force reset SupplierSelector UI filters when change supplier
+  // ✅ reset SupplierSelector UI filters when change supplier
   const [supplierSelectorKey, setSupplierSelectorKey] = useState(0);
 
-  // ✅ NEW: user đã bấm Change supplier (để cho phép "clear supplier" khi save)
+  // ✅ user đã bấm Change supplier
   const [supplierChangeMode, setSupplierChangeMode] = useState(false);
 
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const locked = saving;
+
+  // ✅ unit dùng để filter supplier (ưu tiên requestUnit)
+  const unitForFilter = (requestUnit || formData.unit || '').trim();
 
   // ===== UI TOKENS =====
   const paperSx = useMemo(
@@ -161,6 +168,13 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
       background: alpha('#FFFFFF', 0.92),
       backdropFilter: 'blur(14px)',
+
+      width: fullScreen ? '100%' : '96vw',
+      maxWidth: fullScreen ? '100%' : '1600px',
+      height: fullScreen ? '100%' : '92vh',
+      maxHeight: fullScreen ? '100%' : '92vh',
+      display: 'flex',
+      flexDirection: 'column',
     }),
     [fullScreen, theme]
   );
@@ -172,6 +186,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       px: 2.2,
       color: 'common.white',
       background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+      flex: '0 0 auto',
     }),
     [theme]
   );
@@ -258,7 +273,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     return oq > totalRequestQty ? `Order Q'ty cannot exceed total request (${totalRequestQty})` : '';
   }, [formData.orderQty, totalRequestQty]);
 
-  // ✅ validate duplicates properly for ALL rows
   const validateDeptDuplicates = useCallback((rows) => {
     const errors = rows.map((row, idx) => {
       if (!row.department) return '';
@@ -269,7 +283,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     return errors;
   }, []);
 
-  // Auto allocate buy: ưu tiên phòng có Qty nhỏ nhất trước
   const autoAllocateBuy = useCallback(
     (rows, orderQtyInput) => {
       const orderQty = parseFloat(orderQtyInput) || 0;
@@ -279,10 +292,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const sorted = rows
         .map((r, i) => ({ ...r, originalIndex: i }))
         .filter((r) => parseFloat(r.qty) > 0)
-        .sort(
-          (a, b) =>
-            (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex
-        );
+        .sort((a, b) => (parseFloat(a.qty) || 0) - (parseFloat(b.qty) || 0) || a.originalIndex - b.originalIndex);
 
       const allocated = {};
       let remaining = effectiveQty;
@@ -394,6 +404,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const data = await res.json();
       if (!mountedRef.current) return;
 
+      const unitValue = data.unit || '';
+
       setFormData({
         itemDescriptionEN: data.itemDescriptionEN || '',
         itemDescriptionVN: data.itemDescriptionVN || '',
@@ -403,14 +415,16 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         orderQty: data.orderQty?.toString() || '',
         reason: data.reason || '',
         remark: data.remark || '',
-        remarkComparison: data.remarkComparison || '',
         supplierId: data.supplierId || '',
         groupId: data.groupId || '',
         productType1Id: data.productType1Id || '',
         productType2Id: data.productType2Id || '',
-        unit: data.unit || '',
+        unit: unitValue,
         supplierPrice: data.price || 0,
       });
+
+      // ✅ request unit = unit của request thật (editable)
+      setRequestUnit(unitValue);
 
       const depts = (data.departmentRequisitions || []).map((d) => ({
         department: d.id ? String(d.id) : '',
@@ -424,7 +438,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
       setImageUrls(data.imageUrls || []);
 
-      // reset new uploads + deletes
       setFiles([]);
       setPreviews((p) => {
         p.forEach((u) => URL.revokeObjectURL(u));
@@ -438,7 +451,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           sapCode: data.oldSAPCode || '',
           hanaCode: data.hanaSAPCode || '',
           price: data.price || 0,
-          unit: data.unit || '',
+          unit: unitValue,
         });
         setShowSupplierSelector(false);
       } else {
@@ -447,11 +460,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       }
 
       setIsEnManuallyEdited(false);
-
-      // ✅ NEW: default là chưa đổi supplier
       setSupplierChangeMode(false);
-
-      // ✅ make sure selector UI is reset when data loads
       setSupplierSelectorKey((k) => k + 1);
     } catch (e) {
       console.error(e);
@@ -475,7 +484,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       return;
     }
 
-    // reset when closed / no item
     setFormData({
       itemDescriptionEN: '',
       itemDescriptionVN: '',
@@ -485,7 +493,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       orderQty: '',
       reason: '',
       remark: '',
-      remarkComparison: '',
       supplierId: '',
       groupId: '',
       productType1Id: '',
@@ -493,6 +500,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       unit: '',
       supplierPrice: 0,
     });
+
+    setRequestUnit('');
 
     setDeptRows([{ department: '', qty: '', buy: '' }]);
     setDeptErrors(['']);
@@ -510,7 +519,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     setShowSupplierSelector(true);
     setSupplierSelectorKey((k) => k + 1);
 
-    // ✅ NEW
     setSupplierChangeMode(false);
 
     setIsEnManuallyEdited(false);
@@ -553,7 +561,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     const vn = (formData.itemDescriptionVN || '').trim();
     const en = (formData.itemDescriptionEN || '').trim();
 
-    // ✅ nếu EN đã có value thì KHÔNG dịch nữa
     if (vn && !isEnManuallyEdited && !en) {
       debouncedTranslate(vn);
     }
@@ -562,26 +569,47 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   }, [formData.itemDescriptionVN, formData.itemDescriptionEN, debouncedTranslate, isEnManuallyEdited]);
 
   /**
-   * ✅ APPLY SAME RULE AS ADD:
-   * - selecting supplier auto-fills oldSapCode + hanaSapCode
-   * - user can still edit hanaSapCode in the form at any time
+   * ✅ selecting supplier auto-fills 4 fields on UI:
+   * oldSapCode + hanaSapCode + itemDescriptionVN + itemDescriptionEN
+   * (unit still follows existing logic: requestUnit priority)
    */
   const handleSelectSupplier = (supplierData) => {
     if (supplierData) {
-      // ✅ NEW: đã chọn supplier mới => không còn ở mode "clear"
       setSupplierChangeMode(false);
+
+      // ✅ PATCH: compute VN/EN from supplier payload
+      const vn = pickFirst(
+        supplierData.itemDescriptionVN,
+        supplierData.vietnameseName,
+        supplierData.descriptionVN,
+        supplierData.descriptionVn,
+        supplierData.vnDescription,
+        supplierData.nameVN,
+        supplierData.itemDescription
+      );
+
+      const en = pickFirst(
+        supplierData.itemDescriptionEN,
+        supplierData.englishName,
+        supplierData.descriptionEN,
+        supplierData.descriptionEn,
+        supplierData.enDescription,
+        supplierData.nameEN
+      );
 
       setFormData((prev) => ({
         ...prev,
         supplierId: supplierData.supplierId || '',
-        unit: supplierData.unit || '',
+        unit: requestUnit?.trim() ? requestUnit : (supplierData.unit || ''), // ✅ keep current behavior
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
 
-        // ✅ auto-fill from supplier
+        // ✅ PATCH: overwrite 4 input fields always
         oldSapCode: supplierData.oldSapCode || '',
         hanaSapCode: supplierData.hanaSapCode || '',
+        itemDescriptionVN: vn || '',
+        itemDescriptionEN: en || '',
       }));
 
       setSelectedSupplier({
@@ -592,17 +620,27 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         unit: supplierData.unit || '',
       });
 
+      // ✅ EN now supplier-driven
+      setIsEnManuallyEdited(false);
+
+      // ✅ if supplier no EN but has VN -> auto translate (same as Add)
+      if (!en && vn) {
+        debouncedTranslate(vn);
+      }
+
       setShowSupplierSelector(false);
     } else {
-      // ✅ user clear supplier from selector
+      // user clear supplier
       setSupplierChangeMode(true);
 
       setFormData((prev) => ({
         ...prev,
+
+        // ✅ keep old behavior
         oldSapCode: '',
         hanaSapCode: '',
-        supplierId: '', // ✅ must be empty string so BE can clear supplier fields
-        unit: '',
+        supplierId: '',
+        unit: requestUnit || '',
         supplierPrice: 0,
         productType1Id: '',
         productType2Id: '',
@@ -621,7 +659,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
   };
 
-  // ✅ dept change w/ global validation
   const handleDeptChange = (index, field, value) => {
     setDeptRows((prev) => {
       const next = [...prev];
@@ -651,7 +688,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   const calcTotalRequestQty = () => deptRows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
   const calcTotalBuy = () => deptRows.reduce((s, r) => s + (parseFloat(r.buy) || 0), 0);
 
-  // ✅ count images đúng
   const currentImagesCount = Math.max(0, files.length + imageUrls.length);
 
   const handleFileChange = (e) => {
@@ -668,7 +704,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   };
 
   const handleRemoveFile = (index) => {
-    // old images first
     if (index < imageUrls.length) {
       const url = imageUrls[index];
       setImageUrls((prev) => prev.filter((_, i) => i !== index));
@@ -713,14 +748,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     fd.append('orderQty', parseFloat(formData.orderQty) || 0);
     fd.append('reason', formData.reason || '');
     fd.append('remark', formData.remark || '');
-    fd.append('remarkComparison', formData.remarkComparison || '');
 
-    // ✅ IMPORTANT: always send supplierId (even empty string) so BE can clear supplier fields
     fd.append('supplierId', formData.supplierId ?? '');
     fd.append('groupId', formData.groupId || '');
     fd.append('productType1Id', formData.productType1Id || '');
     fd.append('productType2Id', formData.productType2Id || '');
-    fd.append('unit', formData.unit || '');
+
+    // ✅ FIX: submit unit luôn ưu tiên requestUnit (value user edit)
+    fd.append('unit', (requestUnit || formData.unit || '').trim());
+
     fd.append('supplierPrice', formData.supplierPrice || 0);
 
     files.forEach((f) => fd.append('files', f));
@@ -766,7 +802,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         open={open}
         onClose={locked ? undefined : onClose}
         fullScreen={fullScreen}
-        maxWidth="md"
+        maxWidth={false}
         fullWidth
         PaperProps={{ sx: paperSx }}
       >
@@ -822,7 +858,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
           </Stack>
         </DialogTitle>
 
-        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 } }}>
+        {/* ✅ make content scroll inside the big dialog */}
+        <DialogContent sx={{ p: { xs: 1.8, sm: 2.2 }, flex: '1 1 auto', overflow: 'auto' }}>
           <Stack spacing={1.4}>
             {/* BASIC */}
             <Box sx={subtleCardSx}>
@@ -833,7 +870,14 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
               <Divider sx={{ my: 1.2 }} />
 
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.2 }}>
+              {/* ✅ 3 columns on desktop */}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+                  gap: 1.2,
+                }}
+              >
                 <TextField
                   label="Old SAP Code"
                   value={formData.oldSapCode}
@@ -844,6 +888,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   sx={fieldSx}
                   helperText="Selecting supplier will auto-fill SAP + Hana."
                 />
+
                 <TextField
                   label="Hana SAP Code"
                   value={formData.hanaSapCode}
@@ -855,6 +900,18 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
+                {/* ✅ Request Unit */}
+                <TextField
+                  label="Request Unit"
+                  value={requestUnit}
+                  onChange={(e) => setRequestUnit(e.target.value)}
+                  size="small"
+                  fullWidth
+                  disabled={locked}
+                  sx={fieldSx}
+                  helperText="Used to auto-filter supplier list + submitted as unit."
+                />
+
                 <TextField
                   label="Item Description (VN) *"
                   value={formData.itemDescriptionVN}
@@ -864,6 +921,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   required
                   disabled={locked}
                   sx={fieldSx}
+                  style={{ gridColumn: '1 / span 2' }}
                 />
 
                 <TextField
@@ -887,7 +945,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   rows={2}
                   disabled={locked}
                   sx={fieldSx}
-                  style={{ gridColumn: '1 / span 2' }}
+                  style={{ gridColumn: '1 / span 3' }}
                 />
               </Box>
             </Box>
@@ -907,24 +965,21 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     variant="outlined"
                     size="small"
                     onClick={() => {
-                      // ✅ NEW: bật mode đổi supplier và CLEAR supplier ngay lập tức
                       setSupplierChangeMode(true);
 
+                      // ✅ keep requestUnit for filtering + prevent losing unit
                       setFormData((prev) => ({
                         ...prev,
-                        supplierId: '', // ✅ để BE hiểu "clear supplier"
-                        unit: '',
+                        supplierId: '',
+                        unit: requestUnit || prev.unit || '',
                         supplierPrice: 0,
                         productType1Id: '',
                         productType2Id: '',
-                        // nếu muốn clear luôn code:
-                        // oldSapCode: '',
-                        // hanaSapCode: '',
                       }));
 
                       setSelectedSupplier(null);
                       setShowSupplierSelector(true);
-                      setSupplierSelectorKey((k) => k + 1); // ✅ reset selector filters
+                      setSupplierSelectorKey((k) => k + 1);
                     }}
                     disabled={locked}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
@@ -936,7 +991,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
               <Divider sx={{ my: 1.2 }} />
 
-              {/* ✅ NEW: info when supplier will be cleared */}
               {supplierChangeMode && !formData.supplierId && (
                 <Alert
                   severity="info"
@@ -966,9 +1020,11 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     onSelectSupplier={handleSelectSupplier}
                     currency={groupCurrency}
                     disabled={loadingCurrency || locked}
-                    // ✅ IMPORTANT: do NOT pass itemNo/itemDescriptionVN to selector
                     prefillSapCode={formData.oldSapCode}
                     prefillHanaCode={formData.hanaSapCode}
+                    prefillItemDescriptionVN={formData.itemDescriptionVN}
+                    prefillItemDescriptionEN={formData.itemDescriptionEN}
+                    prefillUnit={unitForFilter} // ✅ ALWAYS filter by requestUnit
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -1022,9 +1078,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 <Stack direction="row" spacing={0.75} alignItems="center">
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Department requests</Typography>
                   <Tooltip title="Buy is auto-allocated based on Order Q'ty (smallest requests first)." arrow>
-                    <InfoOutlinedIcon
-                      sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }}
-                    />
+                    <InfoOutlinedIcon sx={{ fontSize: '1.05rem', color: alpha(theme.palette.text.secondary, 0.65) }} />
                   </Tooltip>
                 </Stack>
 
@@ -1157,7 +1211,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                       Total Buy: <b style={{ color: theme.palette.text.primary }}>{calcTotalBuy()}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
-                      Unit: <b style={{ color: theme.palette.text.primary }}>{formData.unit || '-'}</b>
+                      Unit:{' '}
+                      <b style={{ color: theme.palette.text.primary }}>{(requestUnit || formData.unit) || '-'}</b>
                     </Typography>
                     <Typography sx={{ fontSize: 12.8, color: 'text.secondary' }}>
                       Price:{' '}
@@ -1201,7 +1256,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
             <Box sx={subtleCardSx}>
               <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Notes</Typography>
               <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                Reason / Remark / Comparison.
+                Reason / Remark.
               </Typography>
 
               <Divider sx={{ my: 1.2 }} />
@@ -1228,19 +1283,6 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                   rows={2}
                   disabled={locked}
                   sx={fieldSx}
-                />
-                <TextField
-                  label="Remark Comparison"
-                  value={formData.remarkComparison || ''}
-                  onChange={handleChange('remarkComparison')}
-                  size="small"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  placeholder="Enter remark comparison..."
-                  disabled={locked}
-                  sx={fieldSx}
-                  style={{ gridColumn: '1 / span 2' }}
                 />
               </Box>
             </Box>
@@ -1363,7 +1405,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         </DialogContent>
 
         {/* Footer */}
-        <DialogActions sx={{ px: { xs: 2, sm: 2.2 }, py: 1.8, gap: 1 }}>
+        <DialogActions sx={{ px: { xs: 2, sm: 2.2 }, py: 1.8, gap: 1, flex: '0 0 auto' }}>
           <Button onClick={onClose} disabled={locked} variant="outlined" sx={outlineBtnSx}>
             Cancel
           </Button>
@@ -1406,12 +1448,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
         </DialogContent>
 
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-          <Button
-            onClick={() => setOpenConfirmDialog(false)}
-            disabled={locked}
-            variant="outlined"
-            sx={outlineBtnSx}
-          >
+          <Button onClick={() => setOpenConfirmDialog(false)} disabled={locked} variant="outlined" sx={outlineBtnSx}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={locked} variant="contained" sx={gradientBtnSx}>

@@ -52,6 +52,11 @@ const parsePrice = (value, currency) => {
   return cleanValue ? cleanValue : '';
 };
 
+// ====== helper for "NEW" or empty (case-insensitive) ======
+const isBlank = (v) => v == null || String(v).trim() === '';
+const isNewToken = (v) => String(v ?? '').trim().toLowerCase() === 'new';
+const canEditWhenUsed = (v) => isBlank(v) || isNewToken(v);
+
 export default function EditProductDialog({ open, onClose, product, onRefresh }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -88,8 +93,25 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
+  // ✅ NEW: lock logic based on ORIGINAL value only, and keep editable while typing.
+  const [originalCodes, setOriginalCodes] = useState({ sapCode: '', hanaSapCode: '' });
+  const [sapUnlocked, setSapUnlocked] = useState(false);
+  const [hanaUnlocked, setHanaUnlocked] = useState(false);
+
   const locked = saving; // khoá thao tác khi đang save
-  const disabledAll = saving || loadingProduct || isUsedInRequests;
+  const disableSave = saving || loadingProduct;
+
+  const isFieldDisabled = (field) => {
+    if (saving || loadingProduct) return true;
+    if (!isUsedInRequests) return false;
+
+    // used in requests => only allow editing these fields IF unlocked (based on original empty/NEW)
+    if (field === 'sapCode') return !sapUnlocked;
+    if (field === 'hanaSapCode') return !hanaUnlocked;
+
+    // lock everything else
+    return true;
+  };
 
   // ====== STYLE TOKENS (same vibe) ======
   const paperSx = useMemo(
@@ -243,6 +265,11 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setNotification({ open: false, message: '', severity: 'info' });
       setFormattedPrice('');
       setOpenConfirmDialog(false);
+
+      // ✅ reset unlock state
+      setOriginalCodes({ sapCode: '', hanaSapCode: '' });
+      setSapUnlocked(false);
+      setHanaUnlocked(false);
     }
   }, [open]);
 
@@ -278,6 +305,15 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
         productData.price && productData.currency ? formatPrice(productData.price, productData.currency) : ''
       );
 
+      // ✅ capture original codes and decide unlock ONCE (based on original)
+      const originalSap = productData.sapCode || '';
+      const originalHana = productData.hanaSapCode || '';
+      setOriginalCodes({ sapCode: originalSap, hanaSapCode: originalHana });
+
+      // unlock condition depends on original empty/NEW (case-insensitive)
+      setSapUnlocked(canEditWhenUsed(originalSap));
+      setHanaUnlocked(canEditWhenUsed(originalHana));
+
       const initialImageUrls = (productData.imageUrls || []).map((imgUrl) =>
         imgUrl.startsWith('http')
           ? `${imgUrl}?t=${new Date().getTime()}`
@@ -312,7 +348,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       if (result.data) {
         setNotification({
           open: true,
-          message: 'This product is used in requests, so all fields are disabled.',
+          message:
+            'This product is used in requests. Only SAP Code / Hana Code can be edited when the ORIGINAL value is empty or "NEW".',
           severity: 'warning',
         });
       }
@@ -548,6 +585,11 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
       setFiles([]);
       setRemovedImageUrls([]);
 
+      // ✅ IMPORTANT: after save, lock SAP/Hana again (your requirement)
+      setOriginalCodes({ sapCode: (formData.sapCode || '').trim(), hanaSapCode: (formData.hanaSapCode || '').trim() });
+      setSapUnlocked(false);
+      setHanaUnlocked(false);
+
       setNotification({ open: true, message: 'Product updated successfully', severity: 'success' });
 
       if (typeof onRefresh === 'function') await onRefresh();
@@ -644,7 +686,8 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                   <Stack direction="row" spacing={1} alignItems="flex-start">
                     <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.warning.main, 0.9) }} />
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                      <b>Locked:</b> This product is used in requests, so all fields are disabled.
+                      <b>Locked:</b> Used in requests. Only <b>SAP Code</b>/<b>Hana Code</b> can be edited if the ORIGINAL
+                      value was empty or “NEW” (case-insensitive). It will lock again after Save.
                     </Typography>
                   </Stack>
                 </Box>
@@ -672,7 +715,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                       value={formData.productType1Id}
                       label="Product Type 1"
                       onChange={handleChange('productType1Id')}
-                      disabled={disabledAll || loadingType1}
+                      disabled={isFieldDisabled('productType1Id') || loadingType1}
                     >
                       <MenuItem value="">
                         <em>None</em>
@@ -690,7 +733,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     fullWidth
                     size="small"
                     sx={fieldSx}
-                    disabled={!formData.productType1Id || disabledAll || loadingType2}
+                    disabled={!formData.productType1Id || isFieldDisabled('productType2Id') || loadingType2}
                   >
                     <InputLabel id="product-type-2-label">Product Type 2</InputLabel>
                     <Select
@@ -698,7 +741,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                       value={formData.productType2Id}
                       label="Product Type 2"
                       onChange={handleChange('productType2Id')}
-                      disabled={!formData.productType1Id || disabledAll || loadingType2}
+                      disabled={!formData.productType1Id || isFieldDisabled('productType2Id') || loadingType2}
                     >
                       <MenuItem value="">
                         <em>None</em>
@@ -712,7 +755,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     {loadingType2 ? <FormHelperText>Loading subtypes...</FormHelperText> : null}
                   </FormControl>
 
-                  <FormControl fullWidth size="small" sx={fieldSx} disabled={disabledAll}>
+                  <FormControl fullWidth size="small" sx={fieldSx} disabled={isFieldDisabled('goodType')}>
                     <InputLabel id="good-type-label">Good Type</InputLabel>
                     <Select
                       labelId="good-type-label"
@@ -720,7 +763,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                       label="Good Type"
                       onChange={handleChange('goodType')}
                       required
-                      disabled={disabledAll}
+                      disabled={isFieldDisabled('goodType')}
                     >
                       <MenuItem value="">
                         <em>Select Good Type</em>
@@ -742,15 +785,10 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                         border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
                       }}
                     >
-                      <RadioGroup
-                        row
-                        name="currency"
-                        value={formData.currency}
-                        onChange={handleChange('currency')}
-                      >
-                        <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={disabledAll} />
-                        <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={disabledAll} />
-                        <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={disabledAll} />
+                      <RadioGroup row name="currency" value={formData.currency} onChange={handleChange('currency')}>
+                        <FormControlLabel value="VND" control={<Radio />} label="VND" disabled={isFieldDisabled('currency')} />
+                        <FormControlLabel value="USD" control={<Radio />} label="USD" disabled={isFieldDisabled('currency')} />
+                        <FormControlLabel value="EURO" control={<Radio />} label="EURO" disabled={isFieldDisabled('currency')} />
                       </RadioGroup>
                       {!formData.currency ? (
                         <FormHelperText error sx={{ mt: 0.2 }}>
@@ -800,7 +838,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     onChange={handleChange('supplierCode')}
                     size="small"
                     fullWidth
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('supplierCode')}
                     sx={fieldSx}
                     placeholder="(optional)"
                   />
@@ -812,7 +850,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     size="small"
                     fullWidth
                     required
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('supplierName')}
                     sx={fieldSx}
                     placeholder="e.g., Supplier ABC - cookies"
                   />
@@ -824,20 +862,30 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     size="small"
                     fullWidth
                     required
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('sapCode')}
                     sx={fieldSx}
-                    placeholder="e.g., 10002341"
+                    placeholder={isUsedInRequests ? 'Editable only if original was empty/NEW' : 'e.g., 10002341'}
+                    helperText={
+                      isUsedInRequests
+                        ? `Original SAP: ${originalCodes.sapCode?.trim() || '∅'}`
+                        : ' '
+                    }
                   />
 
                   <TextField
-                    label="Item No"
+                    label="Hana Code"
                     value={formData.hanaSapCode}
                     onChange={handleChange('hanaSapCode')}
                     size="small"
                     fullWidth
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('hanaSapCode')}
                     sx={fieldSx}
-                    placeholder="e.g., HANA-xxxx"
+                    placeholder={isUsedInRequests ? 'Editable only if original was empty/NEW' : 'e.g., HANA-xxxx'}
+                    helperText={
+                      isUsedInRequests
+                        ? `Original Hana: ${originalCodes.hanaSapCode?.trim() || '∅'}`
+                        : ' '
+                    }
                   />
 
                   <TextField
@@ -846,7 +894,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     onChange={handleChange('size')}
                     size="small"
                     fullWidth
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('size')}
                     sx={fieldSx}
                     placeholder="e.g., 500g"
                   />
@@ -857,7 +905,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     onChange={handleChange('unit')}
                     size="small"
                     fullWidth
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('unit')}
                     sx={fieldSx}
                     placeholder="e.g., box / pcs"
                   />
@@ -869,7 +917,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     size="small"
                     fullWidth
                     type="text"
-                    disabled={!formData.currency || disabledAll}
+                    disabled={!formData.currency || isFieldDisabled('price')}
                     sx={fieldSx}
                     inputProps={{
                       inputMode: 'numeric',
@@ -897,7 +945,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     onChange={handleChange('itemDescriptionEN')}
                     size="small"
                     fullWidth
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('itemDescriptionEN')}
                     sx={fieldSx}
                     placeholder="Short english description"
                   />
@@ -910,7 +958,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     fullWidth
                     multiline
                     minRows={4}
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('itemDescriptionVN')}
                     sx={fieldSx}
                     placeholder="Mô tả chi tiết tiếng Việt..."
                   />
@@ -930,7 +978,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                     variant="outlined"
                     component="label"
                     startIcon={<PhotoCamera />}
-                    disabled={disabledAll}
+                    disabled={isFieldDisabled('images')}
                     sx={outlineBtnSx}
                   >
                     Choose Images
@@ -940,7 +988,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                       accept="image/*"
                       multiple
                       onChange={handleFileChange}
-                      disabled={disabledAll}
+                      disabled={isFieldDisabled('images')}
                     />
                   </Button>
 
@@ -1017,7 +1065,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
                             <span>
                               <IconButton
                                 onClick={() => handleRemoveFile(index)}
-                                disabled={disabledAll}
+                                disabled={isFieldDisabled('images')}
                                 sx={{
                                   position: 'absolute',
                                   right: 8,
@@ -1064,12 +1112,7 @@ export default function EditProductDialog({ open, onClose, product, onRefresh })
             Cancel
           </Button>
 
-          <Button
-            variant="contained"
-            onClick={handleSaveClick}
-            disabled={disabledAll}
-            sx={gradientBtnSx}
-          >
+          <Button variant="contained" onClick={handleSaveClick} disabled={disableSave} sx={gradientBtnSx}>
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>

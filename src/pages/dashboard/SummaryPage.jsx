@@ -99,10 +99,7 @@ const parseJwt = (token) => {
 const looksLikeEmail = (v) => typeof v === 'string' && v.includes('@') && v.includes('.');
 
 const getUserEmail = () => {
-  const direct =
-    localStorage.getItem('email') ||
-    localStorage.getItem('userEmail') ||
-    localStorage.getItem('username');
+  const direct = localStorage.getItem('email') || localStorage.getItem('userEmail') || localStorage.getItem('username');
 
   if (direct && looksLikeEmail(String(direct).trim())) return String(direct).trim();
 
@@ -499,6 +496,9 @@ export default function SummaryPage() {
   const [pendingComplete, setPendingComplete] = useState(() => new Set());
   const [pendingUncomplete, setPendingUncomplete] = useState(() => new Set());
 
+  // ✅ store all ids across pages (lazy loaded)
+  const [allRowMeta, setAllRowMeta] = useState(null); // null = chưa load
+
   const isGroupCompleted = (groupStatus || '').toLowerCase() === 'completed';
   const isPopoverOpen = Boolean(anchorEl);
 
@@ -523,7 +523,6 @@ export default function SummaryPage() {
 
   /* =========================
      Fetch data (supports overrides)
-     ✅ Added: frontend fallback sort
      ========================= */
   const fetchData = useCallback(
     async (overrides = {}) => {
@@ -605,20 +604,68 @@ export default function SummaryPage() {
     fetchData();
   }, [fetchGroupStatus, fetchData, navigate]);
 
-  // ✅ reset pending khi đổi context (group/page/size/sort/search)
+  // ✅ reset pending + reset allRowMeta khi đổi context
+  // ✅ FIX: KHÔNG reset khi đổi page (giữ selection khi chuyển trang)
   const searchKey = useMemo(() => JSON.stringify(searchValues), [searchValues]);
   useEffect(() => {
     setPendingComplete(new Set());
     setPendingUncomplete(new Set());
-  }, [groupId, page, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
+    setAllRowMeta(null);
+  }, [groupId, rowsPerPage, sortConfig.key, sortConfig.direction, searchKey]);
 
   // ✅ nếu group Completed thì clear pending (read-only)
   useEffect(() => {
     if (isGroupCompleted) {
       setPendingComplete(new Set());
       setPendingUncomplete(new Set());
+      setAllRowMeta(null);
     }
   }, [isGroupCompleted]);
+
+  /* =========================
+     Fetch ALL row meta across pages (lazy)
+     ========================= */
+  const fetchAllRowMeta = useCallback(async () => {
+    if (!groupId) return [];
+    const hasSearch = Object.values(searchValues).some((v) => v && String(v).trim() !== '');
+
+    const canSort = sortConfig.key && sortConfig.key !== 'select' && sortConfig.key !== 'no' && sortConfig.direction;
+    const backendKey = HEADERS.find((h) => h.key === sortConfig.key)?.backendKey || sortConfig.key;
+    const sortParam = canSort ? `${backendKey},${sortConfig.direction}` : 'updatedDate,desc';
+
+    try {
+      const params = {
+        groupId,
+        hasFilter: hasSearch,
+        disablePagination: true,
+        sort: sortParam,
+        ...searchValues,
+      };
+
+      const res = await axios.get(`${API_BASE_URL}/api/summary-requisitions/search`, {
+        params,
+        headers: { Accept: '*/*' },
+      });
+
+      const content = res.data?.content || [];
+      const meta = content
+        .map((item) => {
+          const r = item?.requisition || {};
+          const id = r?.id;
+          if (!id) return null;
+          const currentCompleted = toBoolStrict(r.isCompleted ?? item.isCompleted ?? false);
+          return { id, currentCompleted };
+        })
+        .filter(Boolean);
+
+      setAllRowMeta(meta);
+      return meta;
+    } catch (e) {
+      console.error('Fetch ALL row meta error:', e.response?.data || e.message);
+      setNotification({ open: true, severity: 'error', message: 'Failed to load all rows for Select All.' });
+      return [];
+    }
+  }, [groupId, searchValues, sortConfig]);
 
   /* =========================
      Desired state logic
@@ -631,6 +678,8 @@ export default function SummaryPage() {
     [data]
   );
 
+  const effectiveAllMeta = allRowMeta || rowMeta;
+
   const getDesiredCompleted = useCallback(
     (id, currentCompleted) => {
       if (pendingComplete.has(id)) return true;
@@ -642,12 +691,12 @@ export default function SummaryPage() {
 
   const desiredCheckedCount = useMemo(() => {
     let c = 0;
-    for (const r of rowMeta) if (getDesiredCompleted(r.id, r.currentCompleted)) c += 1;
+    for (const r of effectiveAllMeta) if (getDesiredCompleted(r.id, r.currentCompleted)) c += 1;
     return c;
-  }, [rowMeta, getDesiredCompleted]);
+  }, [effectiveAllMeta, getDesiredCompleted]);
 
-  const headerChecked = rowMeta.length > 0 && desiredCheckedCount === rowMeta.length;
-  const headerIndeterminate = desiredCheckedCount > 0 && desiredCheckedCount < rowMeta.length;
+  const headerChecked = effectiveAllMeta.length > 0 && desiredCheckedCount === effectiveAllMeta.length;
+  const headerIndeterminate = desiredCheckedCount > 0 && desiredCheckedCount < effectiveAllMeta.length;
 
   const setDesiredForOne = (id, currentCompleted, newDesired) => {
     if (newDesired === currentCompleted) {
@@ -681,26 +730,33 @@ export default function SummaryPage() {
     }
   };
 
-  const setDesiredForAll = (newDesired) => {
-    const nextComplete = new Set(pendingComplete);
-    const nextUncomplete = new Set(pendingUncomplete);
+  const setDesiredForAllGlobal = useCallback(
+    async (newDesired) => {
+      let meta = allRowMeta;
+      if (!meta) meta = await fetchAllRowMeta();
+      if (!meta || meta.length === 0) return;
 
-    rowMeta.forEach((r) => {
-      if (newDesired === r.currentCompleted) {
-        nextComplete.delete(r.id);
-        nextUncomplete.delete(r.id);
-      } else if (newDesired) {
-        nextComplete.add(r.id);
-        nextUncomplete.delete(r.id);
-      } else {
-        nextUncomplete.add(r.id);
-        nextComplete.delete(r.id);
-      }
-    });
+      const nextComplete = new Set(pendingComplete);
+      const nextUncomplete = new Set(pendingUncomplete);
 
-    setPendingComplete(nextComplete);
-    setPendingUncomplete(nextUncomplete);
-  };
+      meta.forEach((r) => {
+        if (newDesired === r.currentCompleted) {
+          nextComplete.delete(r.id);
+          nextUncomplete.delete(r.id);
+        } else if (newDesired) {
+          nextComplete.add(r.id);
+          nextUncomplete.delete(r.id);
+        } else {
+          nextUncomplete.add(r.id);
+          nextComplete.delete(r.id);
+        }
+      });
+
+      setPendingComplete(nextComplete);
+      setPendingUncomplete(nextUncomplete);
+    },
+    [allRowMeta, fetchAllRowMeta, pendingComplete, pendingUncomplete]
+  );
 
   const pendingCompleteIds = useMemo(() => Array.from(pendingComplete), [pendingComplete]);
   const pendingUncompleteIds = useMemo(() => Array.from(pendingUncomplete), [pendingUncomplete]);
@@ -728,14 +784,12 @@ export default function SummaryPage() {
       await axios.patch(
         `${API_BASE_URL}/api/summary-requisitions/mark-completed`,
         { requisitionIds: pendingCompleteIds },
-        {
-          params: { email },
-          headers: { Accept: '*/*' },
-        }
+        { params: { email }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
       setPendingComplete(new Set());
+      setAllRowMeta(null);
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark completed error:', e.response?.data || e.message);
@@ -763,14 +817,12 @@ export default function SummaryPage() {
       await axios.patch(
         `${API_BASE_URL}/api/summary-requisitions/mark-uncompleted`,
         { requisitionIds: pendingUncompleteIds },
-        {
-          params: { email },
-          headers: { Accept: '*/*' },
-        }
+        { params: { email }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
       setPendingUncomplete(new Set());
+      setAllRowMeta(null);
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark uncompleted error:', e.response?.data || e.message);
@@ -778,6 +830,48 @@ export default function SummaryPage() {
         open: true,
         severity: 'error',
         message: e.response?.data?.message || 'Failed to mark uncompleted',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+     Auto choose supplier by group
+     ========================= */
+  const handleAutoSupplierByGroup = async () => {
+    if (loading || isGroupCompleted) return;
+
+    if (!groupId) {
+      setNotification({ open: true, severity: 'error', message: 'Invalid Group ID' });
+      return;
+    }
+
+    const email = getUserEmail();
+    if (!email) {
+      setNotification({ open: true, severity: 'error', message: 'Missing user email. Please login again.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.patch(
+        `${API_BASE_URL}/requisition-monthly/auto-supplier/by-group`,
+        null,
+        { params: { groupId, email }, headers: { Accept: '*/*' } }
+      );
+
+      setNotification({ open: true, severity: 'success', message: 'Auto supplier selection completed.' });
+
+      setPage(0);
+      setAllRowMeta(null);
+      await Promise.all([fetchData({ page: 0 }), fetchGroupStatus()]);
+    } catch (e) {
+      console.error('Auto supplier error:', e.response?.data || e.message);
+      setNotification({
+        open: true,
+        severity: 'error',
+        message: e.response?.data?.message || 'Failed to auto choose supplier',
       });
     } finally {
       setLoading(false);
@@ -830,6 +924,7 @@ export default function SummaryPage() {
     try {
       await axios.delete(`${API_BASE_URL}/api/summary-requisitions/${id}`, { headers: { Accept: '*/*' } });
       setNotification({ open: true, severity: 'success', message: 'Item deleted successfully' });
+      setAllRowMeta(null);
       await fetchData();
     } catch (e) {
       console.error('Delete error:', e.response?.data || e.message);
@@ -840,7 +935,6 @@ export default function SummaryPage() {
     }
   };
 
-  // ✅ NEW: click row -> open edit (trừ khi click vào control)
   const shouldIgnoreRowClick = (e) => {
     const t = e?.target;
     return !!t?.closest?.(
@@ -854,7 +948,6 @@ export default function SummaryPage() {
     openEdit(item);
   };
 
-  // Click header -> asc -> desc -> none
   const handleSort = (key) => {
     if (!key || key === 'select' || key === 'no') return;
 
@@ -865,6 +958,7 @@ export default function SummaryPage() {
     const nextSort = { key: direction ? key : null, direction };
     setSortConfig(nextSort);
     setPage(0);
+    setAllRowMeta(null);
     fetchData({ page: 0, sortConfig: nextSort });
   };
 
@@ -875,6 +969,7 @@ export default function SummaryPage() {
 
   const handleSearch = () => {
     setPage(0);
+    setAllRowMeta(null);
     fetchData({ page: 0 });
   };
 
@@ -894,6 +989,7 @@ export default function SummaryPage() {
     setSearchValues(cleared);
     setSortConfig(nextSort);
     setPage(0);
+    setAllRowMeta(null);
     fetchData({ page: 0, searchValues: cleared, sortConfig: nextSort });
   };
 
@@ -1029,10 +1125,7 @@ export default function SummaryPage() {
       />
 
       {/* Header */}
-      <Paper
-        elevation={0}
-        sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
-      >
+      <Paper elevation={0} sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
           <Stack spacing={0.5}>
             <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Weekly Requisition</Typography>
@@ -1074,26 +1167,17 @@ export default function SummaryPage() {
       </Paper>
 
       {/* Bulk actions */}
-      <Paper
-        elevation={0}
-        sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}
-      >
+      <Paper elevation={0} sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={1}>
-          <Button
-            variant="contained"
-            onClick={handleMarkCompleted}
-            disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0}
-            sx={btnSx}
-          >
+          <Button variant="contained" onClick={handleAutoSupplierByGroup} disabled={loading || isGroupCompleted} sx={btnSx}>
+            {loading ? 'Auto is running...' : 'Auto-select supplier'}
+          </Button>
+
+          <Button variant="contained" onClick={handleMarkCompleted} disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0} sx={btnSx}>
             Mark as Completed
           </Button>
 
-          <Button
-            variant="outlined"
-            onClick={handleMarkUncompleted}
-            disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0}
-            sx={btnSx}
-          >
+          <Button variant="outlined" onClick={handleMarkUncompleted} disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0} sx={btnSx}>
             Mark as Uncompleted
           </Button>
 
@@ -1125,17 +1209,7 @@ export default function SummaryPage() {
 
       {!loading && !error && (
         <>
-          <TableContainer
-            component={Paper}
-            elevation={0}
-            sx={{
-              borderRadius: 1.5,
-              border: '1px solid #e5e7eb',
-              maxHeight: 560,
-              overflowX: 'auto',
-              backgroundColor: '#fff',
-            }}
-          >
+          <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 1.5, border: '1px solid #e5e7eb', maxHeight: 560, overflowX: 'auto', backgroundColor: '#fff' }}>
             <Table stickyHeader size="small" sx={{ minWidth: 2100 }}>
               <TableHead>
                 <TableRow>
@@ -1166,14 +1240,14 @@ export default function SummaryPage() {
                       onClick={() => sortable && handleSort(key)}
                     >
                       {key === 'select' ? (
-                        <Tooltip title="Toggle all (desired completed state)" arrow>
+                        <Tooltip title="Toggle all (applies to ALL pages)" arrow>
                           <span>
                             <Checkbox
                               size="small"
-                              disabled={isGroupCompleted || rowMeta.length === 0}
+                              disabled={isGroupCompleted || effectiveAllMeta.length === 0}
                               checked={headerChecked}
                               indeterminate={headerIndeterminate}
-                              onChange={(e) => setDesiredForAll(e.target.checked)}
+                              onChange={(e) => setDesiredForAllGlobal(e.target.checked)}
                               onClick={(e) => e.stopPropagation()}
                               sx={{ p: 0.2 }}
                             />
@@ -1230,7 +1304,7 @@ export default function SummaryPage() {
                     return (
                       <TableRow
                         key={rowId || idx}
-                        onClick={handleRowClick(item)} // ✅ CLICK ROW OPEN EDIT
+                        onClick={handleRowClick(item)}
                         sx={{
                           backgroundColor: zebra,
                           '&:hover': { backgroundColor: '#f1f5f9' },
@@ -1238,24 +1312,18 @@ export default function SummaryPage() {
                           cursor: isGroupCompleted ? 'default' : 'pointer',
                         }}
                       >
-                        <TableCell
-                          align="center"
-                          sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ py: 0.4, px: 0.5, ...stickyBodySx(LEFT_SELECT, SELECT_W, zebra, 3) }}>
                           <Checkbox
                             size="small"
                             disabled={isGroupCompleted || !rowId}
                             checked={desiredCompleted}
                             onChange={(e) => setDesiredForOne(rowId, currentCompleted, e.target.checked)}
-                            onClick={(e) => e.stopPropagation()} // ✅ IMPORTANT
+                            onClick={(e) => e.stopPropagation()}
                             sx={{ p: 0.2 }}
                           />
                         </TableCell>
 
-                        <TableCell
-                          align="center"
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
 
@@ -1275,10 +1343,7 @@ export default function SummaryPage() {
                           {r.vietnameseName || ''}
                         </TableCell>
 
-                        <TableCell
-                          align="center"
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}>
                           {r.oldSapCode || ''}
                         </TableCell>
 
@@ -1320,7 +1385,7 @@ export default function SummaryPage() {
                             color: isGroupCompleted ? 'text.secondary' : theme.palette.primary.main,
                           }}
                           onClick={(e) => {
-                            e.stopPropagation(); // ✅ IMPORTANT
+                            e.stopPropagation();
                             handleCurrencyClick(item.currency);
                           }}
                         >
@@ -1360,7 +1425,7 @@ export default function SummaryPage() {
                             <IconButton
                               size="small"
                               onMouseEnter={(e) => openPopover(e, imageUrls)}
-                              onClick={(e) => e.stopPropagation()} // ✅ IMPORTANT
+                              onClick={(e) => e.stopPropagation()}
                               aria-owns={isPopoverOpen ? 'mouse-over-popover' : undefined}
                               aria-haspopup="true"
                             >
@@ -1380,7 +1445,7 @@ export default function SummaryPage() {
                                   color="primary"
                                   size="small"
                                   onClick={(e) => {
-                                    e.stopPropagation(); // ✅ IMPORTANT
+                                    e.stopPropagation();
                                     openEdit(item);
                                   }}
                                   disabled={isGroupCompleted}
@@ -1397,7 +1462,7 @@ export default function SummaryPage() {
                                   color="error"
                                   size="small"
                                   onClick={(e) => {
-                                    e.stopPropagation(); // ✅ IMPORTANT
+                                    e.stopPropagation();
                                     askDelete(item);
                                   }}
                                   disabled={isGroupCompleted}
@@ -1483,7 +1548,9 @@ export default function SummaryPage() {
                           e.target.alt = 'Failed to load';
                         }}
                       />
-                      <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>Image {i + 1}</Typography>
+                      <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                        Image {i + 1}
+                      </Typography>
                     </Box>
                   ))}
                 </Stack>
@@ -1494,7 +1561,13 @@ export default function SummaryPage() {
           </Popover>
 
           <EditDialog open={openEditDialog} item={selectedItem} onClose={closeEdit} onRefresh={fetchData} />
-          <AddDialog open={openAddDialog} onClose={closeAdd} onRefresh={fetchData} groupId={groupId} currency={selectedCurrency} />
+          <AddDialog
+            open={openAddDialog}
+            onClose={closeAdd}
+            onRefresh={fetchData}
+            groupId={groupId}
+            currency={selectedCurrency}
+          />
         </>
       )}
     </Box>

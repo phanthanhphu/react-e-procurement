@@ -525,23 +525,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   {loadingType2 ? <FormHelperText>Loading subtypes...</FormHelperText> : null}
                 </FormControl>
 
-                <FormControl fullWidth size="small" disabled={disabledAll} sx={fieldSx}>
-                  <InputLabel id="good-type-label">Good Type</InputLabel>
-                  <Select
-                    labelId="good-type-label"
-                    value={formData.goodType}
-                    label="Good Type"
-                    onChange={handleChange('goodType')}
-                    required
-                  >
-                    <MenuItem value="">
-                      <em>Select Good Type</em>
-                    </MenuItem>
-                    <MenuItem value="Common">Common</MenuItem>
-                    <MenuItem value="Special">Special</MenuItem>
-                  </Select>
-                </FormControl>
-
+                {/* ✅ Currency FIRST (closer to Price) */}
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3, fontSize: 12.5, mb: 0.6 }}>
                     Currency
@@ -566,6 +550,23 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                     ) : null}
                   </Box>
                 </Box>
+
+                <FormControl fullWidth size="small" disabled={disabledAll} sx={fieldSx}>
+                  <InputLabel id="good-type-label">Good Type</InputLabel>
+                  <Select
+                    labelId="good-type-label"
+                    value={formData.goodType}
+                    label="Good Type"
+                    onChange={handleChange('goodType')}
+                    required
+                  >
+                    <MenuItem value="">
+                      <em>Select Good Type</em>
+                    </MenuItem>
+                    <MenuItem value="Common">Common</MenuItem>
+                    <MenuItem value="Special">Special</MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
 
               <Box
@@ -594,6 +595,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
               </Typography>
               <Divider sx={{ my: 1.6 }} />
 
+              {/* ✅ Re-ordered grid */}
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.8 }}>
                 <TextField
                   label="Supplier Description"
@@ -605,6 +607,17 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   disabled={disabledAll}
                   sx={fieldSx}
                 />
+
+                <TextField
+                  label="Unit"
+                  value={formData.unit}
+                  onChange={handleChange('unit')}
+                  size="small"
+                  fullWidth
+                  disabled={disabledAll}
+                  sx={fieldSx}
+                />
+
                 <TextField
                   label="SAP Code"
                   value={formData.sapCode}
@@ -615,6 +628,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   disabled={disabledAll}
                   sx={fieldSx}
                 />
+
                 <TextField
                   label="Hana SAP Code"
                   value={formData.hanaSapCode}
@@ -626,8 +640,6 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   sx={fieldSx}
                 />
 
-                <Box sx={{ display: { xs: 'none', md: 'block' } }} />
-
                 <TextField
                   label="Size"
                   value={formData.size}
@@ -637,17 +649,9 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   disabled={disabledAll}
                   sx={fieldSx}
                 />
+
                 <TextField
-                  label="Unit"
-                  value={formData.unit}
-                  onChange={handleChange('unit')}
-                  size="small"
-                  fullWidth
-                  disabled={disabledAll}
-                  sx={fieldSx}
-                />
-                <TextField
-                  label="Price"
+                  label={`Price ${formData.currency ? `(${formData.currency})` : ''}`}
                   value={formattedPrice}
                   onChange={handleChange('price')}
                   size="small"
@@ -672,6 +676,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
               </Typography>
               <Divider sx={{ my: 1.6 }} />
 
+              {/* ✅ Balanced multiline */}
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.8 }}>
                 <TextField
                   label="Item Description (EN)"
@@ -679,6 +684,8 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   onChange={handleChange('itemDescriptionEN')}
                   size="small"
                   fullWidth
+                  multiline
+                  minRows={3}
                   disabled={disabledAll}
                   sx={fieldSx}
                 />
@@ -689,7 +696,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
                   size="small"
                   fullWidth
                   multiline
-                  minRows={4}
+                  minRows={3}
                   disabled={disabledAll}
                   sx={fieldSx}
                 />
@@ -821,12 +828,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
             Cancel
           </Button>
 
-          <Button
-            variant="contained"
-            onClick={handleSaveClick}
-            disabled={disabledAll}
-            sx={gradientBtnSx}
-          >
+          <Button variant="contained" onClick={handleSaveClick} disabled={disabledAll} sx={gradientBtnSx}>
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
           </Button>
         </DialogActions>
@@ -840,7 +842,7 @@ export default function AddProductDialog({ open, onClose, onRefresh, onSuccess, 
         />
       </Dialog>
 
-      {/* Confirm dialog (same vibe) */}
+      {/* Confirm dialog */}
       <Dialog
         open={openConfirmDialog}
         onClose={handleCancelSave}

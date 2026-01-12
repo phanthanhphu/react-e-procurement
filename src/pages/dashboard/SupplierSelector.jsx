@@ -78,16 +78,81 @@ const formatDateTime = (d) => {
   }
 };
 
+/** ✅ helper normalize:
+ * - trim
+ * - collapse spaces
+ */
+const normalizeText = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+
+/** ✅ helper check "NEW" (case-insensitive) */
+const isNew = (v) => normalizeText(v).toLowerCase() === 'new';
+
+/** ✅ SAP normalize:
+ * - trim + UPPERCASE
+ * - if empty or equals "NEW" (case-insensitive) => return ''
+ */
+const normalizeSapInput = (v) => {
+  const s = normalizeText(v);
+  if (!s) return '';
+  const upper = s.toUpperCase();
+  if (upper === 'NEW') return '';
+  return upper;
+};
+
+/** ✅ For Hana code: usually uppercase, but if "NEW" -> return '' */
+const normalizeHanaInput = (v) => {
+  const s = normalizeText(v);
+  if (!s) return '';
+  const upper = s.toUpperCase();
+  if (upper === 'NEW') return '';
+  return upper;
+};
+
+/**
+ * ✅ NEW RULE (AUTO INPUT ONLY 1 FIELD)
+ */
+const pickOneAutoFilter = ({
+  prefillSapCode,
+  prefillHanaCode,
+  prefillItemDescriptionVN,
+  prefillItemDescriptionEN,
+}) => {
+  const sapRaw = normalizeText(prefillSapCode);
+  const hanaRaw = normalizeText(prefillHanaCode);
+  const vnPref = normalizeText(prefillItemDescriptionVN);
+  const enPref = normalizeText(prefillItemDescriptionEN);
+
+  const sapIsNewOrEmpty = !sapRaw || isNew(sapRaw);
+  const hanaIsNewOrEmpty = !hanaRaw || isNew(hanaRaw);
+
+  const base = { sapCode: '', hanaSapCode: '', itemDescriptionVN: '', itemDescriptionEN: '' };
+
+  if (!sapIsNewOrEmpty) {
+    return { ...base, sapCode: normalizeSapInput(sapRaw) };
+  }
+
+  if (!hanaIsNewOrEmpty) {
+    return { ...base, hanaSapCode: normalizeHanaInput(hanaRaw) };
+  }
+
+  if (vnPref) return { ...base, itemDescriptionVN: vnPref };
+  if (enPref) return { ...base, itemDescriptionEN: enPref };
+
+  return base;
+};
+
 export default function SupplierSelector({
   onSelectSupplier,
   currency = 'VND',
   disabled = false,
 
-  // ✅ Only prefill these two (safe)
+  // ✅ Prefill inputs from parent
   prefillSapCode = '',
   prefillHanaCode = '',
+  prefillItemDescriptionVN = '',
+  prefillItemDescriptionEN = '',
+  prefillUnit = '', // ✅ NEW: auto input Unit from parent
 
-  // Optional lists if you want
   productType1List = [],
   productType2List = [],
 }) {
@@ -103,38 +168,92 @@ export default function SupplierSelector({
   const containerRef = useRef(null);
   const debounceRef = useRef(null);
 
-  // ✅ Filters (NOTICE: itemDescriptionVN is NOT prefilled from parent)
-  const [filters, setFilters] = useState({
-    sapCode: (prefillSapCode || '').trim(),
-    hanaSapCode: (prefillHanaCode || '').trim(),
-    itemDescriptionVN: '',
-    itemDescriptionEN: '',
-    supplierName: '',
+  /**
+   * ✅ Filters state
+   */
+  const [filters, setFilters] = useState(() => {
+    const picked = pickOneAutoFilter({
+      prefillSapCode,
+      prefillHanaCode,
+      prefillItemDescriptionVN,
+      prefillItemDescriptionEN,
+    });
+
+    return {
+      ...picked,
+      unit: normalizeText(prefillUnit), // ✅ AUTO SET UNIT INIT
+      supplierName: '',
+    };
   });
 
-  // ✅ Keep only sap/hana synced from parent (not VN/EN)
+  /**
+   * ✅ Track previous prefills
+   */
+  const prevPrefillRef = useRef({
+    prefillSapCode: undefined,
+    prefillHanaCode: undefined,
+    prefillItemDescriptionVN: undefined,
+    prefillItemDescriptionEN: undefined,
+    prefillUnit: undefined,
+  });
+
+  /**
+   * ✅ SYNC PREFILL FROM PARENT (FORCE OVERWRITE)
+   */
   useEffect(() => {
-    setFilters((prev) => ({
-      ...prev,
-      sapCode: (prefillSapCode || '').trim(),
-      hanaSapCode: (prefillHanaCode || '').trim(),
-    }));
-  }, [prefillSapCode, prefillHanaCode]);
+    const prev = prevPrefillRef.current;
+
+    const changed =
+      prev.prefillSapCode !== prefillSapCode ||
+      prev.prefillHanaCode !== prefillHanaCode ||
+      prev.prefillItemDescriptionVN !== prefillItemDescriptionVN ||
+      prev.prefillItemDescriptionEN !== prefillItemDescriptionEN ||
+      prev.prefillUnit !== prefillUnit;
+
+    prevPrefillRef.current = {
+      prefillSapCode,
+      prefillHanaCode,
+      prefillItemDescriptionVN,
+      prefillItemDescriptionEN,
+      prefillUnit,
+    };
+
+    if (!changed) return;
+
+    setFilters((prevFilters) => {
+      const keepSupplierName = prevFilters.supplierName || '';
+
+      const picked = pickOneAutoFilter({
+        prefillSapCode,
+        prefillHanaCode,
+        prefillItemDescriptionVN,
+        prefillItemDescriptionEN,
+      });
+
+      return {
+        ...picked,
+        unit: normalizeText(prefillUnit), // ✅ ALWAYS OVERWRITE UNIT FROM PARENT
+        supplierName: keepSupplierName,
+      };
+    });
+  }, [prefillSapCode, prefillHanaCode, prefillItemDescriptionVN, prefillItemDescriptionEN, prefillUnit]);
 
   const hasAnyFilter =
-    !!filters.sapCode?.trim() ||
-    !!filters.hanaSapCode?.trim() ||
-    !!filters.itemDescriptionVN?.trim() ||
-    !!filters.itemDescriptionEN?.trim() ||
-    !!filters.supplierName?.trim();
+    !!normalizeSapInput(filters.sapCode) ||
+    !!normalizeHanaInput(filters.hanaSapCode) ||
+    !!normalizeText(filters.itemDescriptionVN) ||
+    !!normalizeText(filters.itemDescriptionEN) ||
+    !!normalizeText(filters.unit) || // ✅ include unit
+    !!normalizeText(filters.supplierName);
 
   const queryKey = useMemo(() => {
     return [
-      (filters.sapCode || '').trim(),
-      (filters.hanaSapCode || '').trim(),
-      (filters.itemDescriptionVN || '').trim(),
-      (filters.itemDescriptionEN || '').trim(),
-      (filters.supplierName || '').trim(),
+      normalizeSapInput(filters.sapCode),
+      normalizeHanaInput(filters.hanaSapCode),
+      normalizeText(filters.itemDescriptionVN),
+      normalizeText(filters.itemDescriptionEN),
+      normalizeText(filters.unit), // ✅ include unit
+      normalizeText(filters.supplierName),
       (currency || 'VND').trim().toUpperCase(),
     ].join('|');
   }, [filters, currency]);
@@ -164,11 +283,22 @@ export default function SupplierSelector({
         size: String(PAGE_SIZE),
       });
 
-      if (filters.sapCode?.trim()) queryParams.append('sapCode', filters.sapCode.trim());
-      if (filters.hanaSapCode?.trim()) queryParams.append('hanaSapCode', filters.hanaSapCode.trim());
-      if (filters.itemDescriptionVN?.trim()) queryParams.append('itemDescriptionVN', filters.itemDescriptionVN.trim());
-      if (filters.itemDescriptionEN?.trim()) queryParams.append('itemDescriptionEN', filters.itemDescriptionEN.trim());
-      if (filters.supplierName?.trim()) queryParams.append('supplierName', filters.supplierName.trim());
+      const sap = normalizeSapInput(filters.sapCode);
+      const hana = normalizeHanaInput(filters.hanaSapCode);
+      const vn = normalizeText(filters.itemDescriptionVN);
+      const en = normalizeText(filters.itemDescriptionEN);
+      const unit = normalizeText(filters.unit);
+      const supplierName = normalizeText(filters.supplierName);
+
+      if (sap) queryParams.append('sapCode', sap);
+      if (hana) queryParams.append('hanaSapCode', hana);
+      if (vn) queryParams.append('itemDescriptionVN', vn);
+      if (en) queryParams.append('itemDescriptionEN', en);
+
+      // ✅ ALWAYS FILTER BY UNIT IF EXISTS
+      if (unit) queryParams.append('unit', unit);
+
+      if (supplierName) queryParams.append('supplierName', supplierName);
 
       queryParams.append('currency', (currency || 'VND').trim());
 
@@ -225,11 +355,14 @@ export default function SupplierSelector({
     if (nearBottom) loadNextPage();
   };
 
-  // ✅ When selecting, return both SAP + Hana (for AddDialog auto-fill)
   const handleSelectSupplier = (opt) => {
     onSelectSupplier?.({
       oldSapCode: opt.sapCode || '',
       hanaSapCode: opt.hanaSapCode || '',
+
+      // ✅ ADD: pass VN/EN description back to parent (AddDialog)
+      itemDescriptionVN: opt.itemDescriptionVN || '',
+      itemDescriptionEN: opt.itemDescriptionEN || '',
 
       supplierId: opt.id,
       unit: opt.unit || '',
@@ -242,25 +375,55 @@ export default function SupplierSelector({
   };
 
   const handleChangeFilter = (key) => (e) => {
-    setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+    const raw = e.target.value;
+
+    setFilters((prev) => {
+      if (key === 'sapCode') return { ...prev, sapCode: normalizeSapInput(raw) };
+      if (key === 'hanaSapCode') return { ...prev, hanaSapCode: normalizeHanaInput(raw) };
+      return { ...prev, [key]: raw };
+    });
   };
 
   const clearFilters = () => {
+    // ✅ keep Unit from parent even when user clears
+    const unitKeep = normalizeText(prefillUnit);
+
     setFilters({
       sapCode: '',
       hanaSapCode: '',
       itemDescriptionVN: '',
       itemDescriptionEN: '',
+      unit: unitKeep,
       supplierName: '',
     });
   };
 
-  const lastPurchaseHeaderSx = { fontWeight: 'bold', bgcolor: '#e3f2fd' };
+  const smallSx = {
+    '& .MuiTypography-root': { fontSize: 12.2 },
+    '& .MuiInputLabel-root': { fontSize: 11.5 },
+    '& .MuiOutlinedInput-input': { fontSize: 12.2, py: 0.85 },
+    '& .MuiFormHelperText-root': { fontSize: 11.2 },
+    '& .MuiTableCell-root': { fontSize: 12.0, py: 0.7, px: 1 },
+    '& .MuiTableCell-head': { fontSize: 12.0 },
+    '& .MuiButton-root': { fontSize: 11.5, minHeight: 30, px: 1.2 },
+    '& .MuiIconButton-root': { width: 32, height: 32 },
+  };
+
+  const headerCellSx = { fontWeight: 'bold', bgcolor: '#f5f5f5', fontSize: 12.0 };
+  const lastPurchaseHeaderSx = { fontWeight: 'bold', bgcolor: '#e3f2fd', fontSize: 12.0 };
   const lastPurchaseCellSx = { bgcolor: '#f6fbff' };
   const colSpanCount = 14;
 
   return (
-    <Paper variant="outlined" sx={{ mb: 1, p: 1, opacity: disabled ? 0.7 : 1 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        mb: 1,
+        p: 1,
+        opacity: disabled ? 0.7 : 1,
+        ...smallSx,
+      }}
+    >
       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
         Select Supplier | Currency: <strong>{currency}</strong>
       </Typography>
@@ -273,6 +436,7 @@ export default function SupplierSelector({
           onChange={handleChangeFilter('sapCode')}
           fullWidth
           disabled={disabled}
+          helperText="If left blank or entered as ‘NEW’, the search will prioritize Hana code or item description"
         />
         <TextField
           size="small"
@@ -281,6 +445,7 @@ export default function SupplierSelector({
           onChange={handleChangeFilter('hanaSapCode')}
           fullWidth
           disabled={disabled}
+          helperText="If ‘NEW’ is entered, the Hana filter will be ignored"
         />
         <TextField
           size="small"
@@ -298,6 +463,17 @@ export default function SupplierSelector({
           fullWidth
           disabled={disabled}
         />
+
+        {/* ✅ AUTO INPUT UNIT ON UI */}
+        <TextField
+          size="small"
+          label="Unit (Auto)"
+          value={filters.unit}
+          fullWidth
+          disabled // ✅ lock so user cannot change and break filtering
+          helperText="Auto-filled from item unit (used for filtering suppliers)."
+        />
+
         <TextField
           size="small"
           label="Supplier"
@@ -320,31 +496,27 @@ export default function SupplierSelector({
 
       {searchLoading ? (
         <div style={{ textAlign: 'center', padding: '20px' }}>
-          <CircularProgress size={28} />
+          <CircularProgress size={24} />
         </div>
       ) : supplierOptions.length > 0 ? (
-        <TableContainer
-          ref={containerRef}
-          onScroll={handleScroll}
-          sx={{ maxHeight: '340px', overflowY: 'auto' }}
-        >
+        <TableContainer ref={containerRef} onScroll={handleScroll} sx={{ maxHeight: '340px', overflowY: 'auto' }}>
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>No</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Type 1</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Type 2</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>SAP Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Hana Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Description</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Supplier</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Price</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Currency</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Unit</TableCell>
+                <TableCell sx={headerCellSx}>No</TableCell>
+                <TableCell sx={headerCellSx}>Type 1</TableCell>
+                <TableCell sx={headerCellSx}>Type 2</TableCell>
+                <TableCell sx={headerCellSx}>SAP Code</TableCell>
+                <TableCell sx={headerCellSx}>Hana Code</TableCell>
+                <TableCell sx={headerCellSx}>Description</TableCell>
+                <TableCell sx={headerCellSx}>Supplier</TableCell>
+                <TableCell sx={headerCellSx}>Price</TableCell>
+                <TableCell sx={headerCellSx}>Currency</TableCell>
+                <TableCell sx={headerCellSx}>Unit</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Purchase Date</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Price</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Order Qty</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}>Action</TableCell>
+                <TableCell sx={headerCellSx}>Action</TableCell>
               </TableRow>
             </TableHead>
 
@@ -368,9 +540,9 @@ export default function SupplierSelector({
                     <TableCell>{opt.hanaSapCode || '-'}</TableCell>
 
                     <TableCell>
-                      <div style={{ fontWeight: 600 }}>{opt.itemDescriptionVN || '-'}</div>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>{opt.itemDescriptionVN || '-'}</div>
                       {opt.itemDescriptionEN ? (
-                        <div style={{ fontSize: 12, color: '#666' }}>{opt.itemDescriptionEN}</div>
+                        <div style={{ fontSize: 11, color: '#666' }}>{opt.itemDescriptionEN}</div>
                       ) : null}
                     </TableCell>
 
@@ -406,6 +578,7 @@ export default function SupplierSelector({
                         size="small"
                         onClick={() => handleSelectSupplier(opt)}
                         disabled={disabled}
+                        sx={{ fontSize: 11.5 }}
                       >
                         Select
                       </Button>
@@ -416,7 +589,7 @@ export default function SupplierSelector({
 
               {hasMore && (
                 <TableRow>
-                  <TableCell colSpan={colSpanCount} sx={{ py: 1.2 }}>
+                  <TableCell colSpan={colSpanCount} sx={{ py: 1.0 }}>
                     <Box display="flex" justifyContent="center" alignItems="center" gap={1}>
                       <IconButton
                         onClick={loadNextPage}
@@ -424,9 +597,9 @@ export default function SupplierSelector({
                         size="small"
                         color="primary"
                       >
-                        <KeyboardArrowDownIcon />
+                        <KeyboardArrowDownIcon fontSize="small" />
                       </IconButton>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
                         {loadingMore ? 'Loading more…' : 'Load more'}
                       </Typography>
                     </Box>
@@ -437,7 +610,7 @@ export default function SupplierSelector({
               {loadingMore && (
                 <TableRow>
                   <TableCell colSpan={colSpanCount} sx={{ textAlign: 'center', py: 1 }}>
-                    <CircularProgress size={20} />
+                    <CircularProgress size={18} />
                   </TableCell>
                 </TableRow>
               )}
@@ -445,7 +618,7 @@ export default function SupplierSelector({
           </Table>
         </TableContainer>
       ) : (
-        <Typography variant="body2" color="text.secondary" align="center" sx={{ p: 3 }}>
+        <Typography variant="body2" color="text.secondary" align="center" sx={{ p: 3, fontSize: 12 }}>
           {hasAnyFilter ? 'No products match your search criteria.' : `No products available for currency: ${currency}`}
         </Typography>
       )}
