@@ -404,6 +404,16 @@ export default function GroupRequestPage() {
     []
   );
 
+  // ✅ NEW: click mở view
+  const goToView = useCallback(
+    (group) => {
+      if (!group?.id) return;
+      if (group.type === 'Requisition_monthly') navigate(`/requisition-monthly/${group.id}`);
+      else navigate(`/summary/${group.id}`);
+    },
+    [navigate]
+  );
+
   /* =========================
      ✅ Fetch data (support overrides like Monthly)
      ========================= */
@@ -424,9 +434,10 @@ export default function GroupRequestPage() {
 
       const [startDate, endDate] = effDateRange || [];
 
-      const sortParam = effSort.key && effSort.direction
-        ? `${headers.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
-        : 'createdDate,desc';
+      const sortParam =
+        effSort.key && effSort.direction
+          ? `${headers.find((h) => h.key === effSort.key)?.backendKey || effSort.key},${effSort.direction}`
+          : 'createdDate,desc';
 
       const { content, totalElements: te, totalPages: tp } = await fetchGroups(
         effPage,
@@ -792,8 +803,10 @@ export default function GroupRequestPage() {
                   return (
                     <TableRow
                       key={group.id}
+                      onClick={() => goToView(group)} // ✅ click row => view
                       sx={{
                         backgroundColor: zebra,
+                        cursor: 'pointer',
                         '&:hover': { backgroundColor: '#f1f5f9' },
                         '& > *': { borderBottom: '1px solid #f3f4f6' },
                       }}
@@ -815,6 +828,10 @@ export default function GroupRequestPage() {
                       </TableCell>
 
                       <TableCell
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToView(group);
+                        }} // ✅ click name => view
                         sx={{
                           fontSize: '0.75rem',
                           py: 0.45,
@@ -823,6 +840,8 @@ export default function GroupRequestPage() {
                           fontWeight: 500,
                           whiteSpace: 'normal',
                           wordBreak: 'break-word',
+                          cursor: 'pointer',
+                          '&:hover': { textDecoration: 'underline' },
                         }}
                       >
                         {group.name || ''}
@@ -844,7 +863,11 @@ export default function GroupRequestPage() {
                         </Box>
                       </TableCell>
 
-                      <TableCell align="center" sx={{ py: 0.45, px: 0.7 }}>
+                      <TableCell
+                        align="center"
+                        onClick={(e) => e.stopPropagation()} // ✅ prevent row click
+                        sx={{ py: 0.45, px: 0.7 }}
+                      >
                         <UpdateStatusGroup
                           groupId={group.id}
                           currentStatus={group.status || 'Not Started'}
@@ -854,6 +877,7 @@ export default function GroupRequestPage() {
                       </TableCell>
 
                       <TableCell
+                        onClick={(e) => e.stopPropagation()} // ✅ prevent row click
                         sx={{
                           fontSize: '0.75rem',
                           py: 0.45,
@@ -870,12 +894,16 @@ export default function GroupRequestPage() {
                         {group.createdBy || ''}
                       </TableCell>
 
-                      <TableCell sx={{ fontSize: '0.75rem', py: 0.45, px: 0.7, color: '#374151' }}>
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()} // ✅ prevent row click
+                        sx={{ fontSize: '0.75rem', py: 0.45, px: 0.7, color: '#374151' }}
+                      >
                         {formatDateISO(group.createdDate)}
                       </TableCell>
 
                       <TableCell
                         align="center"
+                        onClick={(e) => e.stopPropagation()} // ✅ prevent row click
                         sx={{
                           py: 0.45,
                           px: 0.7,
@@ -888,7 +916,11 @@ export default function GroupRequestPage() {
                         <Box sx={{ ...tagPillSx, backgroundColor: curColor }}>{group.currency || 'N/A'}</Box>
                       </TableCell>
 
-                      <TableCell align="center" sx={{ py: 0.45, px: 0.7 }}>
+                      <TableCell
+                        align="center"
+                        onClick={(e) => e.stopPropagation()} // ✅ prevent row click (Actions)
+                        sx={{ py: 0.45, px: 0.7 }}
+                      >
                         <Stack direction="row" spacing={0.4} justifyContent="center">
                           <Tooltip title="View details" arrow>
                             <span>
@@ -896,9 +928,9 @@ export default function GroupRequestPage() {
                                 color="primary"
                                 size="small"
                                 sx={{ p: 0.25 }}
-                                onClick={() => {
-                                  if (group.type === 'Requisition_monthly') navigate(`/requisition-monthly/${group.id}`);
-                                  else navigate(`/summary/${group.id}`);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  goToView(group);
                                 }}
                               >
                                 <Visibility fontSize="small" />
@@ -913,7 +945,8 @@ export default function GroupRequestPage() {
                                 size="small"
                                 sx={{ p: 0.25 }}
                                 disabled={isCompleted}
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setCurrentItem(group);
                                   setIsEditModalOpen(true);
                                 }}
@@ -930,7 +963,10 @@ export default function GroupRequestPage() {
                                 size="small"
                                 sx={{ p: 0.25 }}
                                 disabled={loading || isCompleted}
-                                onClick={() => handleDelete(group)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(group);
+                                }}
                               >
                                 <Delete fontSize="small" />
                               </IconButton>

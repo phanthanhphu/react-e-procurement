@@ -788,11 +788,19 @@ export default function SummaryPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
+
+      // ✅ success: clear selection
       setPendingComplete(new Set());
       setAllRowMeta(null);
+
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark completed error:', e.response?.data || e.message);
+
+      // ✅ FAIL: bỏ checked ngay (clear pending) để UI không giữ trạng thái sai
+      discardChanges();
+      setAllRowMeta(null);
+
       setNotification({
         open: true,
         severity: 'error',
@@ -821,11 +829,19 @@ export default function SummaryPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
+
+      // ✅ success: clear selection
       setPendingUncomplete(new Set());
       setAllRowMeta(null);
+
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
       console.error('Mark uncompleted error:', e.response?.data || e.message);
+
+      // ✅ FAIL: bỏ checked ngay
+      discardChanges();
+      setAllRowMeta(null);
+
       setNotification({
         open: true,
         severity: 'error',
@@ -855,11 +871,10 @@ export default function SummaryPage() {
 
     setLoading(true);
     try {
-      await axios.patch(
-        `${API_BASE_URL}/requisition-monthly/auto-supplier/by-group`,
-        null,
-        { params: { groupId, email }, headers: { Accept: '*/*' } }
-      );
+      await axios.patch(`${API_BASE_URL}/requisition-monthly/auto-supplier/by-group`, null, {
+        params: { groupId, email },
+        headers: { Accept: '*/*' },
+      });
 
       setNotification({ open: true, severity: 'success', message: 'Auto supplier selection completed.' });
 
@@ -1173,11 +1188,21 @@ export default function SummaryPage() {
             {loading ? 'Auto is running...' : 'Auto-select supplier'}
           </Button>
 
-          <Button variant="contained" onClick={handleMarkCompleted} disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0} sx={btnSx}>
+          <Button
+            variant="contained"
+            onClick={handleMarkCompleted}
+            disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0}
+            sx={btnSx}
+          >
             Mark as Completed
           </Button>
 
-          <Button variant="outlined" onClick={handleMarkUncompleted} disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0} sx={btnSx}>
+          <Button
+            variant="outlined"
+            onClick={handleMarkUncompleted}
+            disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0}
+            sx={btnSx}
+          >
             Mark as Uncompleted
           </Button>
 

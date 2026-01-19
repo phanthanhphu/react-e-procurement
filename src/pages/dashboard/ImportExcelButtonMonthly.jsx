@@ -73,7 +73,7 @@ export default function ImportExcelButtonMonthly({ onImport, groupId, disabled }
     formData.append('file', file);
 
     try {
-      const url = `${API_BASE_URL}/requisition-monthly/upload-requisition?groupId=${groupId}`;
+      const url = `${API_BASE_URL}/upload-requisition?groupId=${groupId}`;
       const response = await axios.post(url, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });

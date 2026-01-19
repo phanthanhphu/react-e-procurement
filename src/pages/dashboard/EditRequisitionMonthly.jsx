@@ -97,12 +97,51 @@ const unwrapData = (payload) => {
   return payload;
 };
 
+/**
+ * ✅ IMPORTANT:
+ * Intl.NumberFormat / toLocaleString with { style:'currency' } chỉ chấp nhận ISO-4217 (EUR, USD, VND...)
+ * Nếu backend trả "EURO" thì KHÔNG được dùng style:'currency' -> sẽ throw RangeError.
+ *
+ * Theo yêu cầu của bạn: "không map EURO -> EUR", ta sẽ:
+ * - normalize: chỉ upper/trim, giữ nguyên EURO
+ * - formatMoney: nếu là ISO -> dùng style currency
+ *               nếu không (EURO) -> format số + " EURO" (fallback) để không crash UI
+ */
 const normalizeCurrencyCode = (code) => {
-  const valid = ['VND', 'USD', 'EUR', 'JPY', 'GBP'];
-  const map = { EURO: 'EUR' };
   if (!code) return 'VND';
-  const n = map[String(code).toUpperCase()] || String(code).toUpperCase();
-  return valid.includes(n) ? n : 'VND';
+  return String(code).trim().toUpperCase();
+};
+
+const ISO_CURRENCIES = new Set([
+  'VND',
+  'USD',
+  'EUR',
+  'JPY',
+  'GBP',
+  'AUD',
+  'CAD',
+  'CHF',
+  'CNY',
+  'HKD',
+  'KRW',
+  'SGD',
+]);
+
+const formatMoney = (value, currency, locale = 'vi-VN') => {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  const cur = normalizeCurrencyCode(currency);
+
+  if (ISO_CURRENCIES.has(cur)) {
+    try {
+      return safe.toLocaleString(locale, { style: 'currency', currency: cur });
+    } catch {
+      // fallback below
+    }
+  }
+
+  // Fallback for non-ISO currency code like "EURO"
+  return `${safe.toLocaleString(locale)} ${cur}`;
 };
 
 // ✅ robust hana sap key
@@ -171,6 +210,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const prevConfirmedRef = useRef('');
+
+  // ✅ NEW: Completed lock (cannot leave supplier empty once completed)
+  const completedLockRef = useRef(false);
+  const initialSupplierRef = useRef({ supplierId: '', supplierName: '' });
 
   const locked = saving;
 
@@ -461,6 +504,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setGroupCurrency('VND');
       setIsEnManuallyEdited(false);
 
+      // ✅ reset completed lock
+      completedLockRef.current = false;
+      initialSupplierRef.current = { supplierId: '', supplierName: '' };
+
       setFormData({
         itemDescriptionEN: '',
         itemDescriptionVN: '',
@@ -531,14 +578,27 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         const rawReq = await readBodyByContentType(reqRes);
         const data = unwrapData(rawReq) || {};
 
+        // ✅ Completed lock detection (robust)
+        const wasCompleted =
+          !!data?.completedDate ||
+          data?.isCompleted === true ||
+          data?.completed === true ||
+          String(data?.status || '').toLowerCase() === 'completed';
+
+        completedLockRef.current = wasCompleted;
+        initialSupplierRef.current = {
+          supplierId: data?.supplierId || '',
+          supplierName: data?.supplierName || '',
+        };
+
         if (!mountedRef.current) return;
 
         setFormData({
           itemDescriptionEN: data.itemDescriptionEN || '',
           itemDescriptionVN: data.itemDescriptionVN || '',
           fullDescription: data.fullDescription || '',
-          oldSAPCode: data.oldSAPCode || '',
-          hanaSAPCode: data.hanaSAPCode || '',
+          oldSAPCode: data.oldSapCode || data.oldSAPCode || '',
+          hanaSAPCode: data.hanaSapCode || data.hanaSAPCode || '',
           dailyMedInventory:
             data.dailyMedInventory !== undefined && data.dailyMedInventory !== null
               ? String(data.dailyMedInventory)
@@ -588,11 +648,12 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         if (data.supplierId) {
           setSelectedSupplier({
             supplierName: data.supplierName || 'Unknown',
-            sapCode: data.oldSAPCode || '',
-            hanaSapCode: data.hanaSAPCode || '',
+            sapCode: data.oldSapCode || data.oldSAPCode || '',
+            hanaSapCode: data.hanaSapCode || data.hanaSAPCode || '',
             price: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
             unit: data.unit || '',
-            currency: data.currency || undefined,
+            // ✅ keep EURO as EURO (no mapping)
+            currency: normalizeCurrencyCode(data.currency || groupCurrency),
           });
           setShowSupplierSelector(false);
         } else {
@@ -683,7 +744,8 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         hanaSapCode: hana || '',
         price,
         unit: requestUnit || '',
-        currency: supplierData.currency || groupCurrency,
+        // ✅ keep EURO as EURO (no mapping)
+        currency: normalizeCurrencyCode(supplierData.currency || groupCurrency),
       });
 
       // ✅ Supplier overwrite EN => reset manual flag
@@ -697,6 +759,18 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setShowSupplierSelector(false);
     } else {
       // user cleared supplier inside selector
+
+      // ✅ BLOCK: if requisition already completed, supplier cannot be empty
+      if (completedLockRef.current) {
+        const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
+        toast(
+          `Cannot leave the supplier blank because this requisition has been marked as Completed. 
+      Please keep ${oldName} or choose another supplier before saving.`,
+          'error'
+        );
+        return;
+      }
+
       setFormData((prev) => ({
         ...prev,
         supplierId: '',
@@ -830,6 +904,16 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
     if (!formData.groupId?.trim()) return toast('groupId is required', 'error');
     if (!formData.oldSAPCode?.trim()) return toast('oldSAPCode is required', 'error');
+
+    // ✅ BLOCK SAVE: completed requisition cannot have empty supplier
+    if (completedLockRef.current && !formData.supplierId?.trim()) {
+      const oldName = initialSupplierRef.current?.supplierName || 'nhà cung cấp';
+      return toast(
+        `Requisition này đã Completed nên không thể lưu khi thiếu nhà cung cấp.
+Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm Save.`,
+        'error'
+      );
+    }
 
     setConfirmOpen(true);
   };
@@ -1132,7 +1216,15 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={changeSupplier}
+                    onClick={() => {
+                      if (completedLockRef.current) {
+                        toast(
+                          'This requisition has been completed. You can change the supplier, but it cannot be left blank when saving.',
+                          'warning'
+                        );
+                      }
+                      changeSupplier();
+                    }}
                     disabled={locked}
                     sx={{ borderRadius: 999, textTransform: 'none', fontWeight: 800 }}
                   >
@@ -1200,10 +1292,11 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Price:{' '}
                       <b>
-                        {(selectedSupplier.price || 0).toLocaleString('vi-VN', {
-                          style: 'currency',
-                          currency: selectedSupplier.currency || groupCurrency,
-                        })}
+                        {formatMoney(
+                          selectedSupplier.price || 0,
+                          selectedSupplier.currency || groupCurrency,
+                          'vi-VN'
+                        )}
                       </b>
                     </Typography>
                   </Box>

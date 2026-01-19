@@ -401,8 +401,7 @@ function PaginationBar({ count, page, rowsPerPage, onPageChange, onRowsPerPageCh
 
 /* =========================
    SupplierProductsTable
-   ✅ sort icon-only + tri-state
-   ✅ DOUBLE CLICK ROW => OPEN EDIT
+   ✅ SINGLE CLICK ROW => OPEN EDIT (FIX)
    ========================= */
 function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, onSort, onEdit, onDelete }) {
   const WRAP_SX = {
@@ -489,11 +488,18 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, o
     return base;
   };
 
-  const shouldIgnoreRowDblClick = (e) => {
+  // ✅ ignore click when user clicks on buttons/inputs inside row
+  const shouldIgnoreRowClick = (e) => {
     const t = e?.target;
     return !!t?.closest?.(
       'button, a, input, textarea, select, [role="button"], .MuiIconButton-root, .MuiButton-root, .MuiCheckbox-root, .MuiButtonBase-root'
     );
+  };
+
+  // ✅ optional: prevent open edit when user is selecting text
+  const hasTextSelection = () => {
+    const sel = window.getSelection?.();
+    return sel && String(sel).trim().length > 0;
   };
 
   // Images popover
@@ -635,8 +641,10 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, o
               return (
                 <TableRow
                   key={p.id || `${p.sapCode || ''}_${i}`}
-                  onDoubleClick={(e) => {
-                    if (shouldIgnoreRowDblClick(e)) return;
+                  // ✅ FIX: single click open edit
+                  onClick={(e) => {
+                    if (shouldIgnoreRowClick(e)) return;
+                    if (hasTextSelection()) return;
                     onEdit?.(p);
                   }}
                   sx={{
@@ -720,7 +728,7 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, o
                           e.stopPropagation();
                           openPopover(e, p.imageUrls);
                         }}
-                        onDoubleClick={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                         aria-haspopup="true"
                       >
                         <ImageIcon fontSize="small" />
@@ -746,7 +754,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, o
                           e.stopPropagation();
                           onEdit?.(p);
                         }}
-                        onDoubleClick={(e) => e.stopPropagation()}
                         sx={{ p: 0.25 }}
                       >
                         <Edit fontSize="small" />
@@ -758,7 +765,6 @@ function SupplierProductsTable({ rows, page, rowsPerPage, sortConfig, loading, o
                           e.stopPropagation();
                           onDelete?.(p);
                         }}
-                        onDoubleClick={(e) => e.stopPropagation()}
                         sx={{ p: 0.25 }}
                       >
                         <Delete fontSize="small" />
@@ -1042,7 +1048,7 @@ export default function SupplierProductsPage() {
                 Sort: <span style={{ color: '#111827' }}>{sortLabel}</span>
               </Typography>
               <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-                Tip: double click row to edit
+                Tip: click row to edit
               </Typography>
             </Stack>
 

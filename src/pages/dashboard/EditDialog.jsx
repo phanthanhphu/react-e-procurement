@@ -159,6 +159,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
   // ✅ unit dùng để filter supplier (ưu tiên requestUnit)
   const unitForFilter = (requestUnit || formData.unit || '').trim();
 
+  // ✅ NEW: Completed lock (cannot leave supplier empty once completed)
+  const completedLockRef = useRef(false);
+  const initialSupplierRef = useRef({ supplierId: '', supplierName: '' });
+
   // ===== UI TOKENS =====
   const paperSx = useMemo(
     () => ({
@@ -404,6 +408,19 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       const data = await res.json();
       if (!mountedRef.current) return;
 
+      // ✅ Completed lock detection (robust)
+      const wasCompleted =
+        !!data?.completedDate ||
+        data?.isCompleted === true ||
+        data?.completed === true ||
+        String(data?.status || '').toLowerCase() === 'completed';
+
+      completedLockRef.current = wasCompleted;
+      initialSupplierRef.current = {
+        supplierId: data?.supplierId || '',
+        supplierName: data?.supplierName || '',
+      };
+
       const unitValue = data.unit || '';
 
       setFormData({
@@ -473,7 +490,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // cleanup previews
+      previews.forEach((u) => URL.revokeObjectURL(u));
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -523,6 +543,10 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
     setIsEnManuallyEdited(false);
     setOpenConfirmDialog(false);
+
+    // ✅ reset completed lock
+    completedLockRef.current = false;
+    initialSupplierRef.current = { supplierId: '', supplierName: '' };
   }, [open, item, fetchData, fetchGroupCurrency, fetchDepartmentList]);
 
   // ===== Auto translate VN -> EN =====
@@ -600,7 +624,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setFormData((prev) => ({
         ...prev,
         supplierId: supplierData.supplierId || '',
-        unit: requestUnit?.trim() ? requestUnit : (supplierData.unit || ''), // ✅ keep current behavior
+        unit: requestUnit?.trim() ? requestUnit : supplierData.unit || '', // ✅ keep current behavior
         supplierPrice: parseFloat(supplierData.supplierPrice) || 0,
         productType1Id: supplierData.productType1Id || '',
         productType2Id: supplierData.productType2Id || '',
@@ -623,7 +647,7 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       // ✅ EN now supplier-driven
       setIsEnManuallyEdited(false);
 
-      // ✅ if supplier no EN but has VN -> auto translate (same as Add)
+      // ✅ if supplier no EN but has VN -> auto translate
       if (!en && vn) {
         debouncedTranslate(vn);
       }
@@ -631,11 +655,22 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       setShowSupplierSelector(false);
     } else {
       // user clear supplier
+
+      // ✅ BLOCK: if requisition already completed, supplier cannot be empty
+        if (completedLockRef.current) {
+          const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
+          toast(
+            `Cannot leave the supplier blank because this requisition has been marked as Completed. 
+        Please keep ${oldName} or choose another supplier before saving.`,
+            'error'
+          );
+          return;
+        }
+
       setSupplierChangeMode(true);
 
       setFormData((prev) => ({
         ...prev,
-
         // ✅ keep old behavior
         oldSapCode: '',
         hanaSapCode: '',
@@ -722,12 +757,30 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
     if (orderQtyError) return toastError(orderQtyError);
     if (deptErrors.some(Boolean)) return toastError('Duplicate departments');
 
+    // ✅ BLOCK SAVE: completed requisition cannot have empty supplier
+    if (completedLockRef.current && !formData.supplierId?.trim()) {
+      const oldName = initialSupplierRef.current?.supplierName || 'nhà cung cấp';
+      return toastError(
+        `Requisition này đã Completed nên không thể lưu khi thiếu nhà cung cấp.
+Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm Save.`
+      );
+    }
+
     setOpenConfirmDialog(true);
   };
 
   const handleSave = async () => {
     const rid = item?.requisition?.id;
     if (!rid) return toastError('Missing requisition id');
+
+    // ✅ HARD BLOCK (in case bypass SaveClick)
+    if (completedLockRef.current && !formData.supplierId?.trim()) {
+      const oldName = initialSupplierRef.current?.supplierName || 'nhà cung cấp';
+      return toastError(
+        `Requisition này đã Completed nên không thể cập nhật khi thiếu nhà cung cấp.
+Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác.`
+      );
+    }
 
     const departmentRequisitions = deptRows
       .filter((r) => r.department && r.qty !== '' && r.qty !== null && r.qty !== undefined)
@@ -965,6 +1018,12 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                     variant="outlined"
                     size="small"
                     onClick={() => {
+                      if (completedLockRef.current) {
+                        toastError(
+                          "This requisition has been completed. You can change the supplier, but it cannot be left blank when saving."
+                        );
+                      }
+
                       setSupplierChangeMode(true);
 
                       // ✅ keep requestUnit for filtering + prevent losing unit
@@ -991,7 +1050,8 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
 
               <Divider sx={{ my: 1.2 }} />
 
-              {supplierChangeMode && !formData.supplierId && (
+              {/* ✅ keep existing info alert - but now hard-block if completed */}
+              {supplierChangeMode && !formData.supplierId && !completedLockRef.current && (
                 <Alert
                   severity="info"
                   sx={{
@@ -1003,6 +1063,21 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
                 >
                   Supplier is currently <b>empty</b>. If you Save now, the supplier (supplierId/supplierName/price/amount)
                   will be cleared on the server.
+                </Alert>
+              )}
+
+              {supplierChangeMode && !formData.supplierId && completedLockRef.current && (
+                <Alert
+                  severity="warning"
+                  sx={{
+                    mb: 1.2,
+                    borderRadius: 3,
+                    bgcolor: alpha(theme.palette.warning.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.18)}`,
+                  }}
+                >
+                  Requisition này đã <b>Completed</b> nên bạn <b>không thể</b> để trống nhà cung cấp.
+                  Vui lòng chọn một nhà cung cấp trước khi lưu.
                 </Alert>
               )}
 

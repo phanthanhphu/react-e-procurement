@@ -182,7 +182,7 @@ useEffect(() => {
     const signaturePositions = [
       { title: 'Request by', name: 'DANG THI NHU NGOC' },
       { title: 'Purchasing Teamleader', name: 'Ms. SELENA TAM' },
-      { title: 'Purchasing Manager', name: 'Mr. EJ KIM' },
+      { title: 'Director', name: 'Mr. EJ KIM' },
       { title: 'Approval by', name: 'Mr. YONGUK LEE' },
     ];
 

@@ -462,9 +462,9 @@ export default function RequisitionMonthlyPage() {
     () => ({
       textTransform: 'none',
       fontWeight: 500,
-      whiteSpace: 'nowrap', // ✅ never wrap text inside button
-      flexShrink: 0, // ✅ prevent excessive shrinking that triggers wrap
-      px: 1.5, // ✅ slightly tighter width
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+      px: 1.5,
       minHeight: 36,
     }),
     []
@@ -509,7 +509,7 @@ export default function RequisitionMonthlyPage() {
   const [pendingComplete, setPendingComplete] = useState(() => new Set());
   const [pendingUncomplete, setPendingUncomplete] = useState(() => new Set());
 
-  // ✅ NEW: store all ids across pages (lazy loaded)
+  // ✅ store all ids across pages (lazy loaded)
   const [allRowMeta, setAllRowMeta] = useState(null); // null = chưa load
 
   const isGroupCompleted = (groupStatus || '').toLowerCase() === 'completed';
@@ -525,7 +525,6 @@ export default function RequisitionMonthlyPage() {
       const res = await axios.get(`${GROUP_URL}/${groupId}`, { headers: { Accept: '*/*' } });
       setGroupStatus(res.data?.status || null);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Fetch group status error:', e.response?.data || e.message);
       setError('Failed to fetch group status.');
     }
@@ -583,10 +582,7 @@ export default function RequisitionMonthlyPage() {
         const mapped = items.map((item) => {
           const completedDate = item.completedDate ?? null;
 
-          const isCompletedRow = hasCompletedDate(completedDate)
-            ? true
-            : toBoolStrict(item.isCompleted ?? item.completed);
-
+          const isCompletedRow = hasCompletedDate(completedDate) ? true : toBoolStrict(item.isCompleted ?? item.completed);
           const completedBy = normalizeCompletedBy(item);
 
           return {
@@ -641,7 +637,6 @@ export default function RequisitionMonthlyPage() {
         setData(finalData);
         setTotalElements(res.data?.requisitions?.totalElements ?? finalData.length);
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.error('Fetch data error:', e.response?.data || e.message);
         setError(`Failed to fetch data: ${e.message}`);
       } finally {
@@ -662,8 +657,7 @@ export default function RequisitionMonthlyPage() {
     fetchData({ page: 0 });
   }, [fetchGroupStatus, fetchData, navigate]);
 
-  // ✅ reset pending + reset allRowMeta khi đổi context
-  // ✅ FIX: KHÔNG reset khi đổi page (giữ selection khi chuyển trang)
+  // ✅ reset pending + reset allRowMeta khi đổi context (NOT when page changes)
   const searchKey = useMemo(() => JSON.stringify(searchValues), [searchValues]);
   useEffect(() => {
     setPendingComplete(new Set());
@@ -737,7 +731,6 @@ export default function RequisitionMonthlyPage() {
       setAllRowMeta(meta);
       return meta;
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Fetch ALL row meta error:', e.response?.data || e.message);
       setNotification({ open: true, severity: 'error', message: 'Failed to load all rows for Select All.' });
       return [];
@@ -752,7 +745,6 @@ export default function RequisitionMonthlyPage() {
     [data]
   );
 
-  // ✅ IMPORTANT: header checkbox uses ALL meta if loaded, else page meta
   const effectiveAllMeta = allRowMeta || rowMeta;
 
   const getDesiredCompleted = useCallback(
@@ -805,7 +797,6 @@ export default function RequisitionMonthlyPage() {
     }
   };
 
-  // ✅ NEW: Select All applies to ALL pages (lazy load allRowMeta)
   const setDesiredForAllGlobal = useCallback(
     async (newDesired) => {
       let meta = allRowMeta;
@@ -838,10 +829,10 @@ export default function RequisitionMonthlyPage() {
   const pendingUncompleteIds = useMemo(() => Array.from(pendingUncomplete), [pendingUncomplete]);
   const hasPending = pendingCompleteIds.length > 0 || pendingUncompleteIds.length > 0;
 
-  const discardChanges = () => {
+  const discardChanges = useCallback(() => {
     setPendingComplete(new Set());
     setPendingUncomplete(new Set());
-  };
+  }, []);
 
   /* =========================
      API actions
@@ -864,12 +855,19 @@ export default function RequisitionMonthlyPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });
+
+      // ✅ success: clear selection
       setPendingComplete(new Set());
       setAllRowMeta(null);
+
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Mark completed error:', e.response?.data || e.message);
+
+      // ✅ FAIL: bỏ checked ngay (clear pending) để UI không giữ trạng thái sai
+      discardChanges();
+      setAllRowMeta(null);
+
       setNotification({
         open: true,
         severity: 'error',
@@ -898,12 +896,19 @@ export default function RequisitionMonthlyPage() {
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked uncompleted: ${pendingUncompleteIds.length}` });
+
+      // ✅ success: clear selection
       setPendingUncomplete(new Set());
       setAllRowMeta(null);
+
       await Promise.all([fetchData(), fetchGroupStatus()]);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Mark uncompleted error:', e.response?.data || e.message);
+
+      // ✅ FAIL: bỏ checked ngay
+      discardChanges();
+      setAllRowMeta(null);
+
       setNotification({
         open: true,
         severity: 'error',
@@ -915,7 +920,7 @@ export default function RequisitionMonthlyPage() {
   };
 
   /* =========================
-     ✅ NEW: Auto choose supplier by group (same as Weekly)
+     Auto choose supplier by group
      ========================= */
   const handleAutoSupplierByGroup = async () => {
     if (loading || isGroupCompleted) return;
@@ -933,23 +938,17 @@ export default function RequisitionMonthlyPage() {
 
     setLoading(true);
     try {
-      await axios.patch(
-        AUTO_SUPPLIER_BY_GROUP_URL,
-        null, // PATCH no body
-        {
-          params: { groupId, email },
-          headers: { Accept: '*/*' },
-        }
-      );
+      await axios.patch(AUTO_SUPPLIER_BY_GROUP_URL, null, {
+        params: { groupId, email },
+        headers: { Accept: '*/*' },
+      });
 
       setNotification({ open: true, severity: 'success', message: 'Auto supplier selection completed.' });
 
-      // refresh UI
       setPage(0);
       setAllRowMeta(null);
       await Promise.all([fetchData({ page: 0 }), fetchGroupStatus()]);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Auto supplier error:', e.response?.data || e.message);
       setNotification({
         open: true,
@@ -1021,7 +1020,6 @@ export default function RequisitionMonthlyPage() {
       await fetchData({ page: 0 });
       setPage(0);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Delete error:', e.response?.data || e.message);
       setNotification({ open: true, severity: 'error', message: e.response?.data?.message || 'Could not delete item' });
     } finally {
@@ -1030,7 +1028,6 @@ export default function RequisitionMonthlyPage() {
     }
   };
 
-  // click row -> open edit, but ignore click on control
   const shouldIgnoreRowClick = (e) => {
     const t = e?.target;
     return !!t?.closest?.(
@@ -1044,7 +1041,6 @@ export default function RequisitionMonthlyPage() {
     openEdit(row);
   };
 
-  // Sort: asc -> desc -> none
   const handleSort = (key) => {
     if (!key || key === 'select' || key === 'no') return;
 
@@ -1178,22 +1174,11 @@ export default function RequisitionMonthlyPage() {
 
   return (
     <Box sx={{ p: 1.5, minHeight: '100vh', backgroundColor: '#f7f7f7' }}>
-      <Notification
-        open={notification.open}
-        message={notification.message}
-        severity={notification.severity}
-        onClose={closeNotification}
-      />
+      <Notification open={notification.open} message={notification.message} severity={notification.severity} onClose={closeNotification} />
 
       {/* Header */}
       <Paper elevation={0} sx={{ p: 1.25, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
-        {/* ✅ UPDATED: make header responsive so buttons can wrap (buttons won't wrap text) */}
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          alignItems={{ xs: 'stretch', md: 'center' }}
-          justifyContent="space-between"
-          spacing={1}
-        >
+        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'stretch', md: 'center' }} justifyContent="space-between" spacing={1}>
           <Stack spacing={0.5}>
             <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>Monthly Requisition</Typography>
 
@@ -1211,23 +1196,8 @@ export default function RequisitionMonthlyPage() {
             </Stack>
           </Stack>
 
-          {/* ✅ UPDATED: wrap buttons as a group; text inside buttons never wraps */}
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="flex-end"
-            useFlexGap
-            flexWrap="wrap"
-            gap={1}
-            sx={{ maxWidth: '100%' }}
-          >
-            <ExportRequisitionMonthlyExcelButton
-              groupId={groupId}
-              data={data}
-              searchValues={searchValues}
-              disabled={isGroupCompleted}
-              sx={btnSx}
-            />
+          <Stack direction="row" alignItems="center" justifyContent="flex-end" useFlexGap flexWrap="wrap" gap={1} sx={{ maxWidth: '100%' }}>
+            <ExportRequisitionMonthlyExcelButton groupId={groupId} data={data} searchValues={searchValues} disabled={isGroupCompleted} sx={btnSx} />
 
             <ImportExcelButtonMonthly
               groupId={groupId}
@@ -1251,12 +1221,7 @@ export default function RequisitionMonthlyPage() {
               sx={btnSx}
             />
 
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => navigate(`/request-monthly-comparison/${groupId}`)}
-              sx={btnSx}
-            >
+            <Button variant="outlined" size="small" onClick={() => navigate(`/request-monthly-comparison/${groupId}`)} sx={btnSx}>
               Comparison
             </Button>
 
@@ -1277,7 +1242,6 @@ export default function RequisitionMonthlyPage() {
       {/* Bulk actions */}
       <Paper elevation={0} sx={{ p: 1, mb: 1, borderRadius: 1.5, border: '1px solid #e5e7eb', backgroundColor: '#fff' }}>
         <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={1}>
-          {/* ✅ Auto choose supplier */}
           <Button
             variant="contained"
             size="small"
@@ -1288,33 +1252,15 @@ export default function RequisitionMonthlyPage() {
             {loading ? 'Auto is running...' : 'Auto-select supplier'}
           </Button>
 
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleMarkCompleted}
-            disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0}
-            sx={btnSx}
-          >
+          <Button variant="contained" size="small" onClick={handleMarkCompleted} disabled={loading || isGroupCompleted || pendingCompleteIds.length === 0} sx={btnSx}>
             Mark as Completed
           </Button>
 
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleMarkUncompleted}
-            disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0}
-            sx={btnSx}
-          >
+          <Button variant="outlined" size="small" onClick={handleMarkUncompleted} disabled={loading || isGroupCompleted || pendingUncompleteIds.length === 0} sx={btnSx}>
             Mark as Uncompleted
           </Button>
 
-          <Button
-            variant="text"
-            size="small"
-            onClick={discardChanges}
-            disabled={loading || isGroupCompleted || !hasPending}
-            sx={btnSx}
-          >
+          <Button variant="text" size="small" onClick={discardChanges} disabled={loading || isGroupCompleted || !hasPending} sx={btnSx}>
             Discard
           </Button>
         </Stack>
@@ -1367,17 +1313,7 @@ export default function RequisitionMonthlyPage() {
 
       {!loading && !error && (
         <>
-          <TableContainer
-            component={Paper}
-            elevation={0}
-            sx={{
-              borderRadius: 1.5,
-              border: '1px solid #e5e7eb',
-              maxHeight: 560,
-              overflowX: 'auto',
-              backgroundColor: '#fff',
-            }}
-          >
+          <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 1.5, border: '1px solid #e5e7eb', maxHeight: 560, overflowX: 'auto', backgroundColor: '#fff' }}>
             <Table stickyHeader size="small" sx={{ minWidth: 2400 }}>
               <TableHead>
                 <TableRow>
@@ -1466,10 +1402,7 @@ export default function RequisitionMonthlyPage() {
                           />
                         </TableCell>
 
-                        <TableCell
-                          align="center"
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_NO, NO_W, zebra, 3) }}>
                           {page * rowsPerPage + idx + 1}
                         </TableCell>
 
@@ -1489,10 +1422,7 @@ export default function RequisitionMonthlyPage() {
                           {row.itemDescriptionVN || ''}
                         </TableCell>
 
-                        <TableCell
-                          align="center"
-                          sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}
-                        >
+                        <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6, ...stickyBodySx(LEFT_OLD, OLD_W, zebra, 3) }}>
                           {row.oldSapCode || ''}
                         </TableCell>
 
