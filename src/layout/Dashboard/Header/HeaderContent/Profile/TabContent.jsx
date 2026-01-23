@@ -117,19 +117,24 @@ export default function TabContent({ onRequestClose }) {
 
   const CARD_AVATAR = isMobile ? 44 : 52;
 
-  // ===== Modern tokens =====
-  // ✅ FIX: nền card + phần body OPAQUE để chữ "Good Type" phía sau không xuyên qua
   const cardSx = {
+    width: isMobile ? 280 : 320,
     borderRadius: 4,
     overflow: 'hidden',
     border: `1px solid ${alpha(theme.palette.common.white, 0.18)}`,
-    // trước bạn dùng alpha(0.92) nên bị “xuyên”
     backgroundColor: theme.palette.mode === 'dark'
       ? alpha(theme.palette.background.paper, 0.96)
       : '#FFFFFF',
     backdropFilter: 'blur(14px)',
     boxShadow: `0 22px 70px ${alpha('#000', 0.22)}`,
-    isolation: 'isolate' // ✅ tránh blend weird
+
+    // ✅ KEY FIX: tách khỏi table scroll/overflow bằng fixed + Portal
+    position: 'fixed',
+    top: 76,
+    right: 18,
+
+    // ✅ luôn đè lên sticky header/footer của table
+    zIndex: (theme) => theme.zIndex.modal + 4000
   };
 
   const headerSx = {
@@ -235,109 +240,113 @@ export default function TabContent({ onRequestClose }) {
     setOpenChangePassDialog(true);
   };
 
+  const cardNode = (
+    <Box sx={cardSx}>
+      <Box sx={headerSx}>
+        <Stack spacing={1} alignItems="center">
+          <Tooltip
+            arrow
+            placement="bottom"
+            sx={tooltipSx}
+            title={
+              <Box sx={{ minWidth: 220 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.7 }}>
+                  <Typography sx={{ fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4 }}>
+                    USER SUMMARY
+                  </Typography>
+
+                  <Chip
+                    size="small"
+                    icon={<VerifiedRoundedIcon sx={{ fontSize: 16 }} />}
+                    label={(role || 'USER').toUpperCase()}
+                    sx={{
+                      height: 22,
+                      borderRadius: 999,
+                      fontWeight: 900,
+                      bgcolor: alpha(theme.palette.primary.main, 0.08),
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`
+                    }}
+                  />
+                </Stack>
+
+                <Divider sx={{ my: 0.8 }} />
+
+                <Stack spacing={0.6}>
+                  <Typography sx={{ fontWeight: 900, fontSize: 13 }}>
+                    {username || 'User'}
+                  </Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
+                    {email || '—'}
+                  </Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
+                    ID: {userId || '—'}
+                  </Typography>
+                </Stack>
+              </Box>
+            }
+          >
+            <Box sx={{ display: 'inline-flex', borderRadius: '50%' }}>
+              {cardAvatarNode}
+            </Box>
+          </Tooltip>
+
+          <Typography
+            sx={{
+              mt: 0.3,
+              fontWeight: 900,
+              lineHeight: 1.05,
+              letterSpacing: 0.6,
+              textTransform: 'uppercase',
+              fontSize: isMobile ? 14.5 : 15.5
+            }}
+          >
+            {username || 'User'}
+          </Typography>
+
+          <Chip label={(role || 'USER').toUpperCase()} size="small" sx={pillChipSx} />
+        </Stack>
+      </Box>
+
+      <Divider />
+
+      <Box sx={{ p: 1, bgcolor: theme.palette.mode === 'dark' ? theme.palette.background.paper : '#fff' }}>
+        <MenuItem onClick={handleView} sx={menuItemSx('primary')}>
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <User size={18} color={theme.palette.primary.main} />
+          </ListItemIcon>
+          <ListItemText primary="View" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+        </MenuItem>
+
+        <MenuItem onClick={handleEdit} sx={menuItemSx('primary')}>
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <Edit2 size={18} color={theme.palette.primary.main} />
+          </ListItemIcon>
+          <ListItemText primary="Edit" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+        </MenuItem>
+
+        <MenuItem onClick={handleChangePassword} sx={menuItemSx('info')}>
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <Lock size={18} color={theme.palette.info.main} />
+          </ListItemIcon>
+          <ListItemText primary="Change Password" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+        </MenuItem>
+
+        <Divider sx={{ my: 0.8 }} />
+
+        <MenuItem onClick={handleLogout} sx={menuItemSx('error')}>
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <Logout size={18} color={theme.palette.error.main} />
+          </ListItemIcon>
+          <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
+        </MenuItem>
+      </Box>
+    </Box>
+  );
+
   return (
     <>
-      <Box sx={cardSx}>
-        <Box sx={headerSx}>
-          <Stack spacing={1} alignItems="center">
-            <Tooltip
-              arrow
-              placement="bottom"
-              sx={tooltipSx}
-              title={
-                <Box sx={{ minWidth: 220 }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.7 }}>
-                    <Typography sx={{ fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4 }}>
-                      USER SUMMARY
-                    </Typography>
-
-                    <Chip
-                      size="small"
-                      icon={<VerifiedRoundedIcon sx={{ fontSize: 16 }} />}
-                      label={(role || 'USER').toUpperCase()}
-                      sx={{
-                        height: 22,
-                        borderRadius: 999,
-                        fontWeight: 900,
-                        bgcolor: alpha(theme.palette.primary.main, 0.08),
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`
-                      }}
-                    />
-                  </Stack>
-
-                  <Divider sx={{ my: 0.8 }} />
-
-                  <Stack spacing={0.6}>
-                    <Typography sx={{ fontWeight: 900, fontSize: 13 }}>
-                      {username || 'User'}
-                    </Typography>
-                    <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
-                      {email || '—'}
-                    </Typography>
-                    <Typography sx={{ color: 'text.secondary', fontSize: 12.5 }}>
-                      ID: {userId || '—'}
-                    </Typography>
-                  </Stack>
-                </Box>
-              }
-            >
-              <Box sx={{ display: 'inline-flex', borderRadius: '50%' }}>
-                {cardAvatarNode}
-              </Box>
-            </Tooltip>
-
-            <Typography
-              sx={{
-                mt: 0.3,
-                fontWeight: 900,
-                lineHeight: 1.05,
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-                fontSize: isMobile ? 14.5 : 15.5
-              }}
-            >
-              {username || 'User'}
-            </Typography>
-
-            <Chip label={(role || 'USER').toUpperCase()} size="small" sx={pillChipSx} />
-          </Stack>
-        </Box>
-
-        <Divider />
-
-        {/* ✅ FIX: phần menu items đặt bgcolor trắng đặc để không xuyên chữ table */}
-        <Box sx={{ p: 1, bgcolor: theme.palette.mode === 'dark' ? theme.palette.background.paper : '#fff' }}>
-          <MenuItem onClick={handleView} sx={menuItemSx('primary')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <User size={18} color={theme.palette.primary.main} />
-            </ListItemIcon>
-            <ListItemText primary="View" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
-          </MenuItem>
-
-          <MenuItem onClick={handleEdit} sx={menuItemSx('primary')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <Edit2 size={18} color={theme.palette.primary.main} />
-            </ListItemIcon>
-            <ListItemText primary="Edit" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
-          </MenuItem>
-
-          <MenuItem onClick={handleChangePassword} sx={menuItemSx('info')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <Lock size={18} color={theme.palette.info.main} />
-            </ListItemIcon>
-            <ListItemText primary="Change Password" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
-          </MenuItem>
-
-          <Divider sx={{ my: 0.8 }} />
-
-          <MenuItem onClick={handleLogout} sx={menuItemSx('error')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <Logout size={18} color={theme.palette.error.main} />
-            </ListItemIcon>
-            <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: '0.92rem', fontWeight: 800 }} />
-          </MenuItem>
-        </Box>
-      </Box>
+      {/* ✅ KEY: render card to body to escape table overflow/sticky layers */}
+      <Portal>{cardNode}</Portal>
 
       {/* dialogs */}
       <ViewUserDialog
@@ -367,11 +376,20 @@ export default function TabContent({ onRequestClose }) {
           autoHideDuration={4000}
           onClose={() => setSnackbarOpen(false)}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          sx={{
+            zIndex: (theme) => theme.zIndex.modal + 5000,
+            pointerEvents: 'auto'
+          }}
         >
           <Alert
             onClose={() => setSnackbarOpen(false)}
             severity={error ? 'error' : 'success'}
-            sx={{ width: '100%', fontSize: '0.9rem', py: 1 }}
+            sx={{
+              width: '100%',
+              fontSize: '0.9rem',
+              py: 1,
+              boxShadow: `0 18px 50px ${alpha('#000', 0.25)}`
+            }}
           >
             {error || success || 'Done'}
           </Alert>
