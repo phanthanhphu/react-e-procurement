@@ -1409,13 +1409,10 @@ export default function SummaryPage() {
                             cursor: isGroupCompleted ? 'default' : 'pointer',
                             color: isGroupCompleted ? 'text.secondary' : theme.palette.primary.main,
                           }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCurrencyClick(item.currency);
-                          }}
                         >
                           {item.currency || '-'}
                         </TableCell>
+
 
                         <TableCell align="center" sx={{ fontSize: '0.75rem', py: 0.4, px: 0.6 }}>
                           {item.amount ? formatCurrency(item.amount, item.currency) : '0'}

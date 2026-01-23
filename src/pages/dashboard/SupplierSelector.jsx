@@ -412,7 +412,7 @@ export default function SupplierSelector({
   const headerCellSx = { fontWeight: 'bold', bgcolor: '#f5f5f5', fontSize: 12.0 };
   const lastPurchaseHeaderSx = { fontWeight: 'bold', bgcolor: '#e3f2fd', fontSize: 12.0 };
   const lastPurchaseCellSx = { bgcolor: '#f6fbff' };
-  const colSpanCount = 14;
+  const colSpanCount = 15;
 
   return (
     <Paper
@@ -511,6 +511,7 @@ export default function SupplierSelector({
                 <TableCell sx={headerCellSx}>Description</TableCell>
                 <TableCell sx={headerCellSx}>Supplier</TableCell>
                 <TableCell sx={headerCellSx}>Price</TableCell>
+                <TableCell sx={headerCellSx}>Created At</TableCell>
                 <TableCell sx={headerCellSx}>Currency</TableCell>
                 <TableCell sx={headerCellSx}>Unit</TableCell>
                 <TableCell sx={lastPurchaseHeaderSx}>Last Purchase Date</TableCell>
@@ -550,6 +551,10 @@ export default function SupplierSelector({
 
                     <TableCell align="right" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
                       {formatMoneyNumber(opt.price, code)}
+                    </TableCell>
+
+                    <TableCell align="center">
+                      {opt.createdAt ? formatDateTime(opt.createdAt) : '-'}
                     </TableCell>
 
                     <TableCell align="center">{code}</TableCell>
