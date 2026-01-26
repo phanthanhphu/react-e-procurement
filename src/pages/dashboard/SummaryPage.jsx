@@ -784,7 +784,7 @@ export default function SummaryPage() {
       await axios.patch(
         `${API_BASE_URL}/api/summary-requisitions/mark-completed`,
         { requisitionIds: pendingCompleteIds },
-        { params: { email }, headers: { Accept: '*/*' } }
+        { params: { email, groupId }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });

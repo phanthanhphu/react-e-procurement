@@ -1,5 +1,5 @@
 // src/pages/ComparisonPage/RequestMonthlyComparisonPage.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Typography,
@@ -392,10 +392,14 @@ export default function RequestMonthlyComparisonPage() {
     departmentName: '',
   });
 
+  // ✅ optional: giữ ref để biết hiện có data hay không khi setError
+  const hasDataRef = useRef(false);
   useEffect(() => {
+    hasDataRef.current = data.length > 0;
     if (data.length > 0 && data[0]?.currency) setCurrency(data[0].currency);
   }, [data]);
 
+  // ✅ FIX: bỏ data.length khỏi deps để tránh tạo lại callback => useEffect chạy lại
   const fetchUnfilteredTotals = useCallback(async () => {
     if (!groupId) return;
     try {
@@ -410,10 +414,12 @@ export default function RequestMonthlyComparisonPage() {
         totalDifferencePercentage: response.data.totalDifferencePercentage || 0,
       });
     } catch (err) {
-      if (!data.length) setError('Failed to fetch unfiltered totals. Please try again.');
+      // nếu muốn: chỉ show lỗi totals khi chưa có data
+      if (!hasDataRef.current) setError('Failed to fetch unfiltered totals. Please try again.');
     }
-  }, [groupId, data.length]);
+  }, [groupId]);
 
+  // ✅ FIX: bỏ data.length khỏi deps
   const fetchData = useCallback(
     async (filters = {}) => {
       if (!groupId) {
@@ -453,18 +459,23 @@ export default function RequestMonthlyComparisonPage() {
         setData(mappedData);
         setTotalElements(mappedData.length);
       } catch (err) {
-        setError(!data.length ? 'Failed to fetch data from API. Please try again.' : 'Failed to fetch new data. Showing previously loaded data.');
+        setError(
+          hasDataRef.current
+            ? 'Failed to fetch new data. Showing previously loaded data.'
+            : 'Failed to fetch data from API. Please try again.'
+        );
       } finally {
         setLoading(false);
       }
     },
-    [groupId, data.length]
+    [groupId]
   );
 
+  // ✅ effect giờ sẽ chỉ chạy 1 lần theo groupId (dev StrictMode có thể vẫn 2 lần)
   useEffect(() => {
     fetchUnfilteredTotals();
     fetchData();
-  }, [fetchUnfilteredTotals, fetchData]);
+  }, [groupId, fetchUnfilteredTotals, fetchData]);
 
   // giữ page hợp lệ khi totalElements thay đổi
   useEffect(() => {

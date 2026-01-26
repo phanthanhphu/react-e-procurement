@@ -851,7 +851,7 @@ export default function RequisitionMonthlyPage() {
       await axios.patch(
         MARK_COMPLETED_URL,
         { requisitionIds: pendingCompleteIds },
-        { params: { email }, headers: { Accept: '*/*' } }
+        { params: { email, groupId }, headers: { Accept: '*/*' } }
       );
 
       setNotification({ open: true, severity: 'success', message: `Marked completed: ${pendingCompleteIds.length}` });

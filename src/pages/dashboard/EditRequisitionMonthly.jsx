@@ -946,6 +946,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
     const fd = new FormData();
 
     files.forEach((f) => fd.append('files', f));
+    fd.append('requisitionId', String(item.id)); 
     fd.append('imagesToDelete', JSON.stringify(imagesToDelete || []));
     fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
 
@@ -1256,6 +1257,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
                     prefillItemDescriptionVN={formData.itemDescriptionVN}
                     prefillItemDescriptionEN={formData.itemDescriptionEN}
                     prefillUnit={(requestUnit || '').trim()} // ✅ NEW
+                    requisitionId={item?.id || ''}// ✅ FIXED: pass real supplierId so filter-by-sapcode can use it
                   />
                 </Box>
               ) : selectedSupplier ? (

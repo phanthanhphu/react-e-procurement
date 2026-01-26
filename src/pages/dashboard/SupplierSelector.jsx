@@ -146,12 +146,15 @@ export default function SupplierSelector({
   currency = 'VND',
   disabled = false,
 
+  // ✅ CHANGE: receive requisitionId (id request đang edit)
+  requisitionId = '',
+
   // ✅ Prefill inputs from parent
   prefillSapCode = '',
   prefillHanaCode = '',
   prefillItemDescriptionVN = '',
   prefillItemDescriptionEN = '',
-  prefillUnit = '', // ✅ NEW: auto input Unit from parent
+  prefillUnit = '',
 
   productType1List = [],
   productType2List = [],
@@ -168,9 +171,6 @@ export default function SupplierSelector({
   const containerRef = useRef(null);
   const debounceRef = useRef(null);
 
-  /**
-   * ✅ Filters state
-   */
   const [filters, setFilters] = useState(() => {
     const picked = pickOneAutoFilter({
       prefillSapCode,
@@ -181,14 +181,11 @@ export default function SupplierSelector({
 
     return {
       ...picked,
-      unit: normalizeText(prefillUnit), // ✅ AUTO SET UNIT INIT
+      unit: normalizeText(prefillUnit),
       supplierName: '',
     };
   });
 
-  /**
-   * ✅ Track previous prefills
-   */
   const prevPrefillRef = useRef({
     prefillSapCode: undefined,
     prefillHanaCode: undefined,
@@ -197,9 +194,6 @@ export default function SupplierSelector({
     prefillUnit: undefined,
   });
 
-  /**
-   * ✅ SYNC PREFILL FROM PARENT (FORCE OVERWRITE)
-   */
   useEffect(() => {
     const prev = prevPrefillRef.current;
 
@@ -232,7 +226,7 @@ export default function SupplierSelector({
 
       return {
         ...picked,
-        unit: normalizeText(prefillUnit), // ✅ ALWAYS OVERWRITE UNIT FROM PARENT
+        unit: normalizeText(prefillUnit),
         supplierName: keepSupplierName,
       };
     });
@@ -243,7 +237,7 @@ export default function SupplierSelector({
     !!normalizeHanaInput(filters.hanaSapCode) ||
     !!normalizeText(filters.itemDescriptionVN) ||
     !!normalizeText(filters.itemDescriptionEN) ||
-    !!normalizeText(filters.unit) || // ✅ include unit
+    !!normalizeText(filters.unit) ||
     !!normalizeText(filters.supplierName);
 
   const queryKey = useMemo(() => {
@@ -252,11 +246,15 @@ export default function SupplierSelector({
       normalizeHanaInput(filters.hanaSapCode),
       normalizeText(filters.itemDescriptionVN),
       normalizeText(filters.itemDescriptionEN),
-      normalizeText(filters.unit), // ✅ include unit
+      normalizeText(filters.unit),
       normalizeText(filters.supplierName),
+
+      // ✅ CHANGE: include requisitionId in queryKey so it refetches when editing a different request
+      normalizeText(requisitionId),
+
       (currency || 'VND').trim().toUpperCase(),
     ].join('|');
-  }, [filters, currency]);
+  }, [filters, currency, requisitionId]);
 
   const getProductTypeName = (id, typeList) => {
     if (!typeList || !Array.isArray(typeList)) return '-';
@@ -290,15 +288,19 @@ export default function SupplierSelector({
       const unit = normalizeText(filters.unit);
       const supplierName = normalizeText(filters.supplierName);
 
+      // ✅ CHANGE: requisitionId (request đang edit)
+      const rid = normalizeText(requisitionId);
+
       if (sap) queryParams.append('sapCode', sap);
       if (hana) queryParams.append('hanaSapCode', hana);
       if (vn) queryParams.append('itemDescriptionVN', vn);
       if (en) queryParams.append('itemDescriptionEN', en);
-
-      // ✅ ALWAYS FILTER BY UNIT IF EXISTS
       if (unit) queryParams.append('unit', unit);
-
       if (supplierName) queryParams.append('supplierName', supplierName);
+
+      // ✅ IMPORTANT: pass request id to backend filter
+      // (Đổi key 'requisitionId' theo đúng backend nếu khác)
+      if (rid) queryParams.append('requisitionId', rid);
 
       queryParams.append('currency', (currency || 'VND').trim());
 
@@ -327,7 +329,6 @@ export default function SupplierSelector({
     }
   };
 
-  // ✅ debounce fetch when filters change
   useEffect(() => {
     setSupplierOptions([]);
     setPage(0);
@@ -359,12 +360,9 @@ export default function SupplierSelector({
     onSelectSupplier?.({
       oldSapCode: opt.sapCode || '',
       hanaSapCode: opt.hanaSapCode || '',
-
-      // ✅ ADD: pass VN/EN description back to parent (AddDialog)
       itemDescriptionVN: opt.itemDescriptionVN || '',
       itemDescriptionEN: opt.itemDescriptionEN || '',
-
-      supplierId: opt.id,
+      supplierId: String(opt.id ?? opt.supplierId ?? ''),
       unit: opt.unit || '',
       supplierPrice: opt.price || 0,
       productType1Id: opt.productType1Id || '',
@@ -385,7 +383,6 @@ export default function SupplierSelector({
   };
 
   const clearFilters = () => {
-    // ✅ keep Unit from parent even when user clears
     const unitKeep = normalizeText(prefillUnit);
 
     setFilters({
@@ -464,13 +461,12 @@ export default function SupplierSelector({
           disabled={disabled}
         />
 
-        {/* ✅ AUTO INPUT UNIT ON UI */}
         <TextField
           size="small"
           label="Unit (Auto)"
           value={filters.unit}
           fullWidth
-          disabled // ✅ lock so user cannot change and break filtering
+          disabled
           helperText="Auto-filled from item unit (used for filtering suppliers)."
         />
 
@@ -553,9 +549,7 @@ export default function SupplierSelector({
                       {formatMoneyNumber(opt.price, code)}
                     </TableCell>
 
-                    <TableCell align="center">
-                      {opt.createdAt ? formatDateTime(opt.createdAt) : '-'}
-                    </TableCell>
+                    <TableCell align="center">{opt.createdAt ? formatDateTime(opt.createdAt) : '-'}</TableCell>
 
                     <TableCell align="center">{code}</TableCell>
                     <TableCell align="center">{opt.unit || '-'}</TableCell>

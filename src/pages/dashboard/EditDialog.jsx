@@ -657,15 +657,15 @@ export default function EditDialog({ open, item, onClose, onRefresh }) {
       // user clear supplier
 
       // ✅ BLOCK: if requisition already completed, supplier cannot be empty
-        if (completedLockRef.current) {
-          const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
-          toast(
-            `Cannot leave the supplier blank because this requisition has been marked as Completed. 
+      if (completedLockRef.current) {
+        const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
+        toast(
+          `Cannot leave the supplier blank because this requisition has been marked as Completed. 
         Please keep ${oldName} or choose another supplier before saving.`,
-            'error'
-          );
-          return;
-        }
+          'error'
+        );
+        return;
+      }
 
       setSupplierChangeMode(true);
 
@@ -1099,7 +1099,8 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác.`
                     prefillHanaCode={formData.hanaSapCode}
                     prefillItemDescriptionVN={formData.itemDescriptionVN}
                     prefillItemDescriptionEN={formData.itemDescriptionEN}
-                    prefillUnit={unitForFilter} // ✅ ALWAYS filter by requestUnit
+                    prefillUnit={unitForFilter}
+                    requisitionId={item?.requisition?.id || ''}// ✅ FIXED: pass real supplierId so filter-by-sapcode can use it
                   />
                 </Box>
               ) : selectedSupplier ? (
