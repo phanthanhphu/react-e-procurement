@@ -1,5 +1,5 @@
 import { lazy, useEffect } from 'react';
-import { useNavigate, Outlet, Navigate } from 'react-router-dom';
+import { useNavigate, Outlet } from 'react-router-dom';
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
 import { Typography, Box, Button } from '@mui/material';
@@ -31,7 +31,9 @@ function NotFound() {
   const navigate = useNavigate();
   return (
     <Box sx={{ p: 3, textAlign: 'center' }}>
-      <Typography variant="h4" color="error">404 Not Found</Typography>
+      <Typography variant="h4" color="error">
+        404 Not Found
+      </Typography>
       <Button variant="contained" onClick={() => navigate('/dashboard')} sx={{ mt: 2 }}>
         Go to Dashboard
       </Button>
@@ -46,7 +48,9 @@ function ProtectedRoute() {
 
   useEffect(() => {
     if (!token) {
-      navigate('/react/login', { replace: true });
+      // ✅ Khi dùng basename, KHÔNG hard-code "/react/login"
+      // Login route nội bộ của app là "/"
+      navigate('/', { replace: true });
     }
   }, [navigate, token]);
 
@@ -62,7 +66,8 @@ function AdminRoute({ children }) {
 
   useEffect(() => {
     if (!token) {
-      navigate('/react/login', { replace: true });
+      // ✅ Khi dùng basename, KHÔNG hard-code "/react/login"
+      navigate('/', { replace: true });
     } else if (role !== 'Admin') {
       toast.error('Access denied. Admin only.');
       navigate('/dashboard', { replace: true });
@@ -80,7 +85,10 @@ function AdminRoute({ children }) {
 const MainRoutes = {
   path: '/',
   children: [
-    { path: '/react/login', element: <LoginPage /> },
+    // ✅ Login route nội bộ là "/"
+    // URL thực tế sẽ là: <basename> + "/"  (VD /react/login/)
+    { path: '/', element: <LoginPage /> },
+
     {
       path: '/',
       element: <ProtectedRoute />,

@@ -108,7 +108,11 @@ export default function TabContent({ onRequestClose }) {
       setSnackbarOpen(true);
       if (onRequestClose) onRequestClose();
 
-      setTimeout(() => (window.location.href = '/react/login'), 900);
+    setTimeout(() => {
+      window.location.href = window.location.origin + '/react/login/dashboard';
+    }, 900);
+
+
     } catch (err) {
       setSnackbarOpen(true);
       if (onRequestClose) onRequestClose();
