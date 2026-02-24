@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY . .
 
-ARG VITE_APP_BASE_NAME=/react/login/
+ARG VITE_APP_BASE_NAME=/react/login
 ENV VITE_APP_BASE_NAME=$VITE_APP_BASE_NAME
 
 RUN npm run build
