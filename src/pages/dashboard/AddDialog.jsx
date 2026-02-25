@@ -117,7 +117,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   const [formData, setFormData] = useState(defaultFormData);
 
-  // ✅ requestUnit để filter supplier + gửi API
+  // ✅ requestUnit used for supplier filtering + submitted unit
   const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ department: '', qty: '', buy: '' }]);
@@ -147,6 +147,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   const [isEnManuallyEdited, setIsEnManuallyEdited] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+
+  // ✅ NEW: confirm-unselect when editing supplier-driven fields
+  const [openUnselectConfirm, setOpenUnselectConfirm] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState(null);
+  // pendingEdit = { type: 'form' | 'requestUnit', field, value, label }
 
   const locked = saving;
   const mountedRef = useRef(false);
@@ -248,6 +253,66 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setErrorMessage(msg);
     setErrorOpen(true);
   }, []);
+
+  // ===== Confirm Unselect helpers =====
+  const doUnselectSupplier = useCallback(() => {
+    setFormData((prev) => ({
+      ...prev,
+      supplierId: '',
+      supplierPrice: 0,
+      productType1Id: '',
+      productType2Id: '',
+    }));
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1);
+  }, []);
+
+  const requestUnselectConfirm = useCallback(
+    ({ type, field, value, label }) => {
+      // Ask confirm only when supplier is selected
+      if (!formData.supplierId?.trim() && !selectedSupplier) {
+        if (type === 'requestUnit') {
+          setRequestUnit(value);
+          setFormData((prev) => ({ ...prev, unit: value }));
+        } else {
+          setFormData((prev) => ({ ...prev, [field]: value }));
+          if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
+          if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+        }
+        return;
+      }
+
+      setPendingEdit({ type, field, value, label });
+      setOpenUnselectConfirm(true);
+    },
+    [formData.supplierId, selectedSupplier]
+  );
+
+  const handleCancelUnselect = () => {
+    setOpenUnselectConfirm(false);
+    setPendingEdit(null);
+  };
+
+  const handleOkUnselect = () => {
+    setOpenUnselectConfirm(false);
+
+    doUnselectSupplier();
+
+    if (pendingEdit) {
+      if (pendingEdit.type === 'requestUnit') {
+        setRequestUnit(pendingEdit.value);
+        setFormData((prev) => ({ ...prev, unit: pendingEdit.value }));
+      } else {
+        setFormData((prev) => ({ ...prev, [pendingEdit.field]: pendingEdit.value }));
+        if (pendingEdit.field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
+        if (pendingEdit.field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+      }
+    }
+
+    setPendingEdit(null);
+    toastError('Supplier selection has been cleared. Please select a supplier again.');
+  };
 
   // ===== Calc =====
   const totalRequestQty = useMemo(
@@ -353,7 +418,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       console.error('fetchGroupCurrency error:', e);
       if (mountedRef.current) {
         setGroupCurrency('VND');
-        setCurrencyError('Cannot load currency, fallback to VND');
+        setCurrencyError('Cannot load currency. Falling back to VND.');
       }
     } finally {
       if (mountedRef.current) setLoadingCurrency(false);
@@ -389,7 +454,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     fetchDepartmentList();
 
     setFormData({ ...defaultFormData, groupId: groupId || '' });
-
     setRequestUnit('');
 
     const baseRows = [{ department: '', qty: '', buy: '' }];
@@ -410,6 +474,9 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setErrorOpen(false);
     setErrorMessage('');
     setOpenConfirmDialog(false);
+
+    setOpenUnselectConfirm(false);
+    setPendingEdit(null);
 
     return () => {
       mountedRef.current = false;
@@ -457,18 +524,16 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
 
   /**
    * ✅ Supplier = source of truth
-   * Selecting supplier -> auto-fill SAP/Hana + VN/EN + price/type
+   * Selecting supplier -> auto-fill SAP/Hana + VN/EN + price/type + unit
    */
   const handleSelectSupplier = (supplierData) => {
     if (!supplierData) {
-      // clear supplier but keep request unit
       setFormData((prev) => ({
         ...prev,
         supplierId: '',
         supplierPrice: 0,
         productType1Id: '',
         productType2Id: '',
-        unit: requestUnit || prev.unit || '',
       }));
 
       setSelectedSupplier(null);
@@ -476,8 +541,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       setSupplierSelectorKey((k) => k + 1);
       return;
     }
-
-    console.log('SUPPLIER DATA:', supplierData);
 
     const vn = pickFirst(
       supplierData.itemDescriptionVN,
@@ -498,7 +561,10 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       supplierData.nameEN
     );
 
-    // ✅ UPDATED: overwrite 4 fields always (SAP/Hana/VN/EN)
+    // ✅ overwrite unit ALWAYS (and sync into requestUnit input)
+    const nextUnit = (supplierData.unit || '').trim();
+    setRequestUnit(nextUnit);
+
     setFormData((prev) => ({
       ...prev,
       supplierId: supplierData.supplierId || '',
@@ -506,13 +572,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       productType1Id: supplierData.productType1Id || '',
       productType2Id: supplierData.productType2Id || '',
 
-      // ✅ overwrite always
       oldSapCode: supplierData.oldSapCode || '',
       hanaSapCode: supplierData.hanaSapCode || '',
       itemDescriptionVN: vn || '',
       itemDescriptionEN: en || '',
-
-      unit: requestUnit || prev.unit || '',
+      unit: nextUnit,
     }));
 
     setSelectedSupplier({
@@ -520,13 +584,11 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
       sapCode: supplierData.oldSapCode || '',
       hanaCode: supplierData.hanaSapCode || '',
       price: parseFloat(supplierData.supplierPrice) || 0,
-      unit: requestUnit || '',
+      unit: nextUnit,
     });
 
-    // ✅ EN now supplier-driven
     setIsEnManuallyEdited(false);
 
-    // ✅ if supplier no EN but has VN -> auto translate
     if (!en && vn) {
       debouncedTranslate(vn);
     }
@@ -534,8 +596,29 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     setShowSupplierSelector(false);
   };
 
+  // ✅ handleChange with confirm-unselect
   const handleChange = (field) => (e) => {
     const value = e.target.value;
+
+    const supplierDrivenFields = ['oldSapCode', 'hanaSapCode', 'itemDescriptionVN', 'itemDescriptionEN'];
+
+    if (supplierDrivenFields.includes(field) && (formData.supplierId?.trim() || selectedSupplier)) {
+      const labels = {
+        oldSapCode: 'Old SAP Code',
+        hanaSapCode: 'Hana SAP Code',
+        itemDescriptionVN: 'Item Description (VN)',
+        itemDescriptionEN: 'Item Description (EN)',
+      };
+
+      requestUnselectConfirm({
+        type: 'form',
+        field,
+        value,
+        label: labels[field] || field,
+      });
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (field === 'itemDescriptionEN') setIsEnManuallyEdited(true);
     if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
@@ -575,7 +658,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
     const selected = Array.from(e.target.files || []).slice(0, Math.max(0, remain));
     const valid = selected.filter((f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
 
-    if (valid.length < selected.length) toastError('Only images ≤ 5MB allowed');
+    if (valid.length < selected.length) toastError('Only images ≤ 5MB are allowed.');
 
     setFiles((prev) => [...prev, ...valid]);
     setPreviews((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
@@ -590,12 +673,12 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
   };
 
   const handleAddClick = () => {
-    if (!formData.oldSapCode?.trim()) return toastError('Old SAP Code is required');
-    if (!formData.itemDescriptionVN?.trim()) return toastError('Item Description (VN) is required');
+    if (!formData.oldSapCode?.trim()) return toastError('Old SAP Code is required.');
+    if (!formData.itemDescriptionVN?.trim()) return toastError('Item Description (VN) is required.');
 
-    if (totalRequestQty === 0) return toastError('At least one department must have request quantity');
+    if (totalRequestQty === 0) return toastError('At least one department must have request quantity.');
     if (orderQtyError) return toastError(orderQtyError);
-    if (deptErrors.some(Boolean)) return toastError('Duplicate departments are not allowed');
+    if (deptErrors.some(Boolean)) return toastError('Duplicate departments are not allowed.');
 
     setOpenConfirmDialog(true);
   };
@@ -655,13 +738,13 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         data = { message: txt };
       }
 
-      if (!res.ok) throw new Error(data?.message || 'Add failed');
+      if (!res.ok) throw new Error(data?.message || 'Add failed.');
 
       setOpenConfirmDialog(false);
       onClose?.('Added successfully!');
       onRefresh?.();
     } catch (err) {
-      toastError(err.message || 'Add failed');
+      toastError(err.message || 'Add failed.');
     } finally {
       setSaving(false);
     }
@@ -780,7 +863,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   required
                   disabled={locked}
                   sx={fieldSx}
-                  helperText="You can type manually or select supplier to auto-fill."
+                  helperText="You can type manually or select a supplier to auto-fill."
                 />
 
                 <TextField
@@ -794,13 +877,25 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                   helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
+                {/* Request Unit (confirm before unselect) */}
                 <TextField
                   label="Request Unit"
                   value={requestUnit}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setRequestUnit(v);
-                    setFormData((prev) => ({ ...prev, unit: v }));
+                    const next = e.target.value;
+
+                    if ((formData.supplierId?.trim() || selectedSupplier) && next !== requestUnit) {
+                      requestUnselectConfirm({
+                        type: 'requestUnit',
+                        field: 'requestUnit',
+                        value: next,
+                        label: 'Request Unit',
+                      });
+                      return;
+                    }
+
+                    setRequestUnit(next);
+                    setFormData((prev) => ({ ...prev, unit: next }));
                   }}
                   size="small"
                   fullWidth
@@ -854,7 +949,7 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                 <Box>
                   <Typography sx={{ fontWeight: 900, letterSpacing: 0.3 }}>Supplier (Optional)</Typography>
                   <Typography sx={{ color: 'text.secondary', fontSize: 12.5, mt: 0.2 }}>
-                    Supplier is optional. Selecting supplier auto-fills SAP + Hana + VN/EN + price/type.
+                    Selecting a supplier auto-fills SAP + Hana + VN/EN + price/type + unit.
                   </Typography>
                 </Box>
 
@@ -870,7 +965,6 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
                         supplierPrice: 0,
                         productType1Id: '',
                         productType2Id: '',
-                        unit: requestUnit || prev.unit || '',
                       }));
 
                       setSelectedSupplier(null);
@@ -1265,7 +1359,33 @@ export default function AddDialog({ open, onClose, onRefresh, groupId }) {
         </DialogActions>
       </Dialog>
 
-      {/* CONFIRM DIALOG */}
+      {/* ✅ CONFIRM: Unselect supplier when editing supplier-driven fields */}
+      <Dialog
+        open={openUnselectConfirm}
+        onClose={locked ? undefined : handleCancelUnselect}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm change</DialogTitle>
+        <DialogContent sx={{ pt: 0.5 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            You are editing <b>{pendingEdit?.label || 'this field'}</b>.
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 13.5, color: 'text.secondary' }}>
+            If you continue, the current <b>supplier selection will be cleared</b> and you must select a supplier again.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.6, gap: 1 }}>
+          <Button onClick={handleCancelUnselect} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+          <Button onClick={handleOkUnselect} disabled={locked} variant="contained" sx={gradientBtnSx}>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* CONFIRM ADD */}
       <Dialog
         open={openConfirmDialog}
         onClose={locked ? undefined : () => setOpenConfirmDialog(false)}

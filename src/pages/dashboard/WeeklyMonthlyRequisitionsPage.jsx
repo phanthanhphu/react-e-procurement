@@ -82,7 +82,7 @@ const formatCurrency = (value, currency) => {
   return n.toFixed(0);
 };
 
-const getTypeColor = (t) => (t === 'WEEKLY' ? '#2563eb' : '#16a34a');
+const getTypeColor = (t) => (t === 'WEEKLY' ? '#2563eb' : '#dc2626');
 
 const tagSx = {
   padding: '2px 8px',

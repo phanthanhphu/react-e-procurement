@@ -99,13 +99,8 @@ const unwrapData = (payload) => {
 
 /**
  * ✅ IMPORTANT:
- * Intl.NumberFormat / toLocaleString with { style:'currency' } chỉ chấp nhận ISO-4217 (EUR, USD, VND...)
- * Nếu backend trả "EURO" thì KHÔNG được dùng style:'currency' -> sẽ throw RangeError.
- *
- * Theo yêu cầu của bạn: "không map EURO -> EUR", ta sẽ:
- * - normalize: chỉ upper/trim, giữ nguyên EURO
- * - formatMoney: nếu là ISO -> dùng style currency
- *               nếu không (EURO) -> format số + " EURO" (fallback) để không crash UI
+ * Intl.NumberFormat / toLocaleString with { style:'currency' } only accepts ISO-4217 (EUR, USD, VND...)
+ * If backend returns "EURO", do NOT map -> EUR, instead fallback safe formatting.
  */
 const normalizeCurrencyCode = (code) => {
   if (!code) return 'VND';
@@ -140,7 +135,6 @@ const formatMoney = (value, currency, locale = 'vi-VN') => {
     }
   }
 
-  // Fallback for non-ISO currency code like "EURO"
   return `${safe.toLocaleString(locale)} ${cur}`;
 };
 
@@ -179,7 +173,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     supplierPrice: 0,
   });
 
-  // ✅ NEW: Request Unit (editable, stable when supplier changes)
+  // ✅ Request Unit (editable, stable when supplier changes)
   const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
@@ -211,14 +205,19 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const prevConfirmedRef = useRef('');
 
-  // ✅ NEW: Completed lock (cannot leave supplier empty once completed)
+  // ✅ Completed lock (cannot leave supplier empty once completed)
   const completedLockRef = useRef(false);
   const initialSupplierRef = useRef({ supplierId: '', supplierName: '' });
 
   const locked = saving;
 
+  // ✅ NEW: confirm-unselect when editing supplier-driven fields
+  const [openUnselectConfirm, setOpenUnselectConfirm] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState(null);
+  // pendingEdit = { type: 'form' | 'requestUnit', field, value, label }
+
   /* =========================
-     ✅ UI TOKENS (glass + gradient + compact)
+     ✅ UI TOKENS
   ========================= */
   const paperSx = useMemo(
     () => ({
@@ -325,6 +324,73 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     setSnackbarOpen(true);
   }, []);
 
+  // ===== Confirm Unselect helpers =====
+  const doUnselectSupplier = useCallback(() => {
+    // Clear supplier selection, keep user's edited fields intact
+    setFormData((prev) => ({
+      ...prev,
+      supplierId: '',
+      supplierPrice: 0,
+      productType1Id: '',
+      productType2Id: '',
+      // keep unit as requestUnit (this component rule)
+      unit: requestUnit || prev.unit || '',
+    }));
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1);
+  }, [requestUnit]);
+
+  const requestUnselectConfirm = useCallback(
+    ({ type, field, value, label }) => {
+      // Ask confirm only when supplier is selected
+      if (!formData.supplierId?.trim() && !selectedSupplier) {
+        if (type === 'requestUnit') {
+          setRequestUnit(value);
+          setFormData((prev) => ({ ...prev, unit: value }));
+        } else {
+          setFormData((prev) => ({ ...prev, [field]: value }));
+          if (field === 'itemDescriptionEN') setIsEnManuallyEdited((value || '').trim().length > 0);
+          if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+        }
+        return;
+      }
+
+      setPendingEdit({ type, field, value, label });
+      setOpenUnselectConfirm(true);
+    },
+    [formData.supplierId, selectedSupplier]
+  );
+
+  const handleCancelUnselect = () => {
+    setOpenUnselectConfirm(false);
+    setPendingEdit(null);
+  };
+
+  const handleOkUnselect = () => {
+    setOpenUnselectConfirm(false);
+
+    // 1) unselect supplier
+    doUnselectSupplier();
+
+    // 2) apply pending edit after unselect
+    if (pendingEdit) {
+      if (pendingEdit.type === 'requestUnit') {
+        setRequestUnit(pendingEdit.value);
+        setFormData((prev) => ({ ...prev, unit: pendingEdit.value }));
+      } else {
+        setFormData((prev) => ({ ...prev, [pendingEdit.field]: pendingEdit.value }));
+        if (pendingEdit.field === 'itemDescriptionEN') {
+          setIsEnManuallyEdited((pendingEdit.value || '').trim().length > 0);
+        }
+        if (pendingEdit.field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+      }
+    }
+
+    setPendingEdit(null);
+    toast('Supplier selection has been cleared. Please select a supplier again.', 'warning');
+  };
+
   /* =========================
      ✅ computed values
   ========================= */
@@ -357,12 +423,12 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
     return errors;
   }, []);
 
-  // ✅ Change supplier: keep requestUnit stable (DO NOT reset unit)
+  // ✅ Change supplier (manual button): keep requestUnit stable
   const changeSupplier = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
       supplierId: '',
-      unit: requestUnit || prev.unit || '', // ✅ keep requestUnit
+      unit: requestUnit || prev.unit || '',
       supplierPrice: 0,
       productType1Id: '',
       productType2Id: '',
@@ -504,7 +570,10 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
       setGroupCurrency('VND');
       setIsEnManuallyEdited(false);
 
-      // ✅ reset completed lock
+      setOpenUnselectConfirm(false);
+      setPendingEdit(null);
+
+      // reset completed lock
       completedLockRef.current = false;
       initialSupplierRef.current = { supplierId: '', supplierName: '' };
 
@@ -578,7 +647,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
         const rawReq = await readBodyByContentType(reqRes);
         const data = unwrapData(rawReq) || {};
 
-        // ✅ Completed lock detection (robust)
+        // Completed lock detection
         const wasCompleted =
           !!data?.completedDate ||
           data?.isCompleted === true ||
@@ -616,7 +685,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
           supplierPrice: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
         });
 
-        // ✅ NEW: stable requestUnit loaded from saved unit
         setRequestUnit(data.unit || '');
 
         prevConfirmedRef.current =
@@ -652,7 +720,6 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
             hanaSapCode: data.hanaSapCode || data.hanaSAPCode || '',
             price: Number.isFinite(parseFloat(data.price)) ? parseFloat(data.price) : 0,
             unit: data.unit || '',
-            // ✅ keep EURO as EURO (no mapping)
             currency: normalizeCurrencyCode(data.currency || groupCurrency),
           });
           setShowSupplierSelector(false);
@@ -679,7 +746,7 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
         setIsEnManuallyEdited(false);
 
-        // ✅ IMPORTANT: reset supplier selector filters with prefill values
+        // reset supplier selector filters with prefill values
         setSupplierSelectorKey((k) => k + 1);
       } catch (err) {
         console.error(err);
@@ -695,98 +762,120 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
   /* =========================
      ✅ UI handlers
   ========================= */
-  const handleSelectSupplier = (supplierData) => {
-    if (supplierData) {
-      const price = parseFloat(supplierData.supplierPrice) || 0;
-      const hana = pickHanaSAPCode(supplierData);
+const handleSelectSupplier = (supplierData) => {
+  if (supplierData) {
+    const price = parseFloat(supplierData.supplierPrice) || 0;
+    const hana = pickHanaSAPCode(supplierData);
 
-      // ✅ PATCH: lấy VN/EN từ supplierData (đa key cho chắc)
-      const vn = pickFirst(
-        supplierData.itemDescriptionVN,
-        supplierData.vietnameseName,
-        supplierData.descriptionVN,
-        supplierData.descriptionVn,
-        supplierData.vnDescription,
-        supplierData.nameVN,
-        supplierData.itemDescription
-      );
+    const vn = pickFirst(
+      supplierData.itemDescriptionVN,
+      supplierData.vietnameseName,
+      supplierData.descriptionVN,
+      supplierData.descriptionVn,
+      supplierData.vnDescription,
+      supplierData.nameVN,
+      supplierData.itemDescription
+    );
 
-      const en = pickFirst(
-        supplierData.itemDescriptionEN,
-        supplierData.englishName,
-        supplierData.descriptionEN,
-        supplierData.descriptionEn,
-        supplierData.enDescription,
-        supplierData.nameEN
-      );
+    const en = pickFirst(
+      supplierData.itemDescriptionEN,
+      supplierData.englishName,
+      supplierData.descriptionEN,
+      supplierData.descriptionEn,
+      supplierData.enDescription,
+      supplierData.nameEN
+    );
 
-      setFormData((prev) => ({
-        ...prev,
-        supplierId: supplierData.supplierId || '',
-        // ✅ IMPORTANT: unit NEVER overwritten by supplier -> keep requestUnit
-        unit: requestUnit || prev.unit || '',
-        supplierPrice: price,
-        productType1Id:
-          supplierData.productType1Id != null ? String(supplierData.productType1Id) : prev.productType1Id,
-        productType2Id:
-          supplierData.productType2Id != null ? String(supplierData.productType2Id) : prev.productType2Id,
+    // ✅ NEW: overwrite Request Unit from supplier (fix unit = '—')
+    const nextUnit = (supplierData.unit || '').trim();
+    setRequestUnit(nextUnit);
 
-        // ✅ PATCH: overwrite 4 fields giống CREATE
-        oldSAPCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
-        hanaSAPCode: hana || '',
-        itemDescriptionVN: vn || '',
-        itemDescriptionEN: en || '',
-      }));
+    setFormData((prev) => ({
+      ...prev,
+      supplierId: supplierData.supplierId || '',
+      // ✅ overwrite unit in formData too
+      unit: nextUnit,
+      supplierPrice: price,
+      productType1Id:
+        supplierData.productType1Id != null ? String(supplierData.productType1Id) : prev.productType1Id,
+      productType2Id:
+        supplierData.productType2Id != null ? String(supplierData.productType2Id) : prev.productType2Id,
 
-      setSelectedSupplier({
-        supplierName: supplierData.supplierName || 'Unknown',
-        sapCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
-        hanaSapCode: hana || '',
-        price,
-        unit: requestUnit || '',
-        // ✅ keep EURO as EURO (no mapping)
-        currency: normalizeCurrencyCode(supplierData.currency || groupCurrency),
-      });
+      // ✅ overwrite 4 fields
+      oldSAPCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
+      hanaSAPCode: hana || '',
+      itemDescriptionVN: vn || '',
+      itemDescriptionEN: en || '',
+    }));
 
-      // ✅ Supplier overwrite EN => reset manual flag
-      setIsEnManuallyEdited(false);
+    setSelectedSupplier({
+      supplierName: supplierData.supplierName || 'Unknown',
+      sapCode: supplierData.oldSapCode || supplierData.oldSAPCode || '',
+      hanaSapCode: hana || '',
+      price,
+      unit: nextUnit, // ✅ keep unit here
+      currency: normalizeCurrencyCode(supplierData.currency || groupCurrency),
+    });
 
-      // ✅ Nếu supplier có VN nhưng không có EN thì auto translate
-      if (!en && vn) {
-        debouncedTranslate(vn);
-      }
+    // ✅ Supplier overwrite EN => reset manual flag
+    setIsEnManuallyEdited(false);
 
-      setShowSupplierSelector(false);
-    } else {
-      // user cleared supplier inside selector
-
-      // ✅ BLOCK: if requisition already completed, supplier cannot be empty
-      if (completedLockRef.current) {
-        const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
-        toast(
-          `Cannot leave the supplier blank because this requisition has been marked as Completed. 
-      Please keep ${oldName} or choose another supplier before saving.`,
-          'error'
-        );
-        return;
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        supplierId: '',
-        unit: requestUnit || prev.unit || '',
-        supplierPrice: 0,
-        productType1Id: '',
-        productType2Id: '',
-      }));
-      setSelectedSupplier(null);
-      setShowSupplierSelector(true);
-      setSupplierSelectorKey((k) => k + 1);
+    // ✅ If supplier has VN but no EN -> auto translate
+    if (!en && vn) {
+      debouncedTranslate(vn);
     }
-  };
+
+    setShowSupplierSelector(false);
+    return;
+  }
+
+  // user cleared supplier inside selector
+  if (completedLockRef.current) {
+    const oldName = initialSupplierRef.current?.supplierName || 'selected supplier';
+    toast(
+      `Cannot leave the supplier blank because this requisition has been marked as Completed. Please keep ${oldName} or choose another supplier before saving.`,
+      'error'
+    );
+    return;
+  }
+
+  setFormData((prev) => ({
+    ...prev,
+    supplierId: '',
+    unit: '', // ✅ clear unit
+    supplierPrice: 0,
+    productType1Id: '',
+    productType2Id: '',
+  }));
+
+  setRequestUnit(''); // ✅ clear Request Unit
+
+  setSelectedSupplier(null);
+  setShowSupplierSelector(true);
+  setSupplierSelectorKey((k) => k + 1);
+};
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
+
+    // ✅ CONFIRM before unselect if supplier selected and user edits supplier-driven fields
+    const supplierDrivenFields = ['oldSAPCode', 'hanaSAPCode', 'itemDescriptionVN', 'itemDescriptionEN'];
+    if (supplierDrivenFields.includes(field) && (formData.supplierId?.trim() || selectedSupplier)) {
+      const labels = {
+        oldSAPCode: 'Old SAP Code',
+        hanaSAPCode: 'Hana SAP Code',
+        itemDescriptionVN: 'Item Description (VN)',
+        itemDescriptionEN: 'Item Description (EN)',
+      };
+
+      requestUnselectConfirm({
+        type: 'form',
+        field,
+        value: raw,
+        label: labels[field] || field,
+      });
+      return;
+    }
 
     if (
       field === 'dailyMedInventory' ||
@@ -907,10 +996,9 @@ export default function EditRequisitionMonthly({ open, item, onClose, onRefresh 
 
     // ✅ BLOCK SAVE: completed requisition cannot have empty supplier
     if (completedLockRef.current && !formData.supplierId?.trim()) {
-      const oldName = initialSupplierRef.current?.supplierName || 'nhà cung cấp';
+      const oldName = initialSupplierRef.current?.supplierName || 'the current supplier';
       return toast(
-        `Requisition này đã Completed nên không thể lưu khi thiếu nhà cung cấp.
-Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm Save.`,
+        `This requisition is marked as Completed, so it cannot be saved without a supplier. Please keep ${oldName} or choose another supplier before saving.`,
         'error'
       );
     }
@@ -946,7 +1034,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
     const fd = new FormData();
 
     files.forEach((f) => fd.append('files', f));
-    fd.append('requisitionId', String(item.id)); 
+    fd.append('requisitionId', String(item.id));
     fd.append('imagesToDelete', JSON.stringify(imagesToDelete || []));
     fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
 
@@ -961,7 +1049,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
     fd.append('itemDescriptionEN', formData.itemDescriptionEN || '');
     fd.append('groupId', formData.groupId || '');
 
-    // ✅ IMPORTANT: Always send requestUnit as unit
+    // Always send requestUnit as unit
     fd.append('unit', requestUnit || '');
 
     if (!formData.supplierId) {
@@ -987,10 +1075,8 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
       ];
 
       let res = null;
-      let usedUrl = '';
 
       for (const u of urls) {
-        usedUrl = u;
         res = await fetch(u, {
           method: 'PUT',
           headers: {
@@ -1009,7 +1095,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
       const body = unwrapData(raw);
 
       if (!res.ok) {
-        console.error('Update monthly failed:', { usedUrl, status: res.status, raw, body });
+        console.error('Update monthly failed:', { status: res.status, raw, body });
         throw new Error(raw?.message || `Update failed (${res.status})`);
       }
 
@@ -1100,7 +1186,6 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
 
               <Divider sx={{ my: 1.2 }} />
 
-              {/* ✅ 3 columns: Old SAP | Hana | Request Unit */}
               <Box
                 sx={{
                   display: 'grid',
@@ -1130,14 +1215,25 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
                   helperText="Auto-filled when selecting supplier, but you can edit it."
                 />
 
-                {/* ✅ NEW: Request Unit editable */}
+                {/* Request Unit (confirm before unselect) */}
                 <TextField
                   label="Request Unit"
                   value={requestUnit}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setRequestUnit(v);
-                    setFormData((prev) => ({ ...prev, unit: v }));
+                    const next = e.target.value;
+
+                    if ((formData.supplierId?.trim() || selectedSupplier) && next !== requestUnit) {
+                      requestUnselectConfirm({
+                        type: 'requestUnit',
+                        field: 'requestUnit',
+                        value: next,
+                        label: 'Request Unit',
+                      });
+                      return;
+                    }
+
+                    setRequestUnit(next);
+                    setFormData((prev) => ({ ...prev, unit: next }));
                   }}
                   size="small"
                   fullWidth
@@ -1197,7 +1293,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
                 <Stack direction="row" spacing={1} alignItems="flex-start">
                   <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    <b>Tip:</b> If you override EN manually, auto-translate will stop. If you clear EN, it can translate again.
+                    <b>Tip:</b> If you manually edit EN, auto-translate will stop. If you clear EN, it can translate again.
                   </Typography>
                 </Stack>
               </Box>
@@ -1256,8 +1352,8 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
                     prefillHanaCode={formData.hanaSAPCode}
                     prefillItemDescriptionVN={formData.itemDescriptionVN}
                     prefillItemDescriptionEN={formData.itemDescriptionEN}
-                    prefillUnit={(requestUnit || '').trim()} // ✅ NEW
-                    requisitionId={item?.id || ''}// ✅ FIXED: pass real supplierId so filter-by-sapcode can use it
+                    prefillUnit={(requestUnit || '').trim()}
+                    requisitionId={item?.id || ''}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -1293,13 +1389,7 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
                     </Typography>
                     <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
                       Price:{' '}
-                      <b>
-                        {formatMoney(
-                          selectedSupplier.price || 0,
-                          selectedSupplier.currency || groupCurrency,
-                          'vi-VN'
-                        )}
-                      </b>
+                      <b>{formatMoney(selectedSupplier.price || 0, selectedSupplier.currency || groupCurrency, 'vi-VN')}</b>
                     </Typography>
                   </Box>
                 </Box>
@@ -1613,6 +1703,32 @@ Hãy giữ ${oldName} hoặc chọn một nhà cung cấp khác rồi hãy bấm
             sx={gradientBtnSx}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ✅ CONFIRM: Unselect supplier when editing supplier-driven fields */}
+      <Dialog
+        open={openUnselectConfirm}
+        onClose={locked ? undefined : handleCancelUnselect}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm change</DialogTitle>
+        <DialogContent sx={{ pt: 0.5 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            You are editing <b>{pendingEdit?.label || 'this field'}</b>.
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 13.5, color: 'text.secondary' }}>
+            If you continue, the current <b>supplier selection will be cleared</b> and you must select a supplier again.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.6, gap: 1 }}>
+          <Button onClick={handleCancelUnselect} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+          <Button onClick={handleOkUnselect} disabled={locked} variant="contained" sx={gradientBtnSx}>
+            OK
           </Button>
         </DialogActions>
       </Dialog>

@@ -555,25 +555,6 @@ const ProfileEditDialog = ({ open, onClose, onUpdate, user }) => {
                       fullWidth
                       sx={fieldSx}
                     />
-
-                    <TextField
-                      label="Role"
-                      value={formData.role}
-                      onChange={handleChange('role')}
-                      disabled={saving}
-                      size="small"
-                      fullWidth
-                      select
-                      sx={fieldSx}
-                      helperText="If your backend validates roles strictly, update ROLE_PRESET at the top."
-                    >
-                      {roleOptions.map((r) => (
-                        <MenuItem key={r} value={r}>
-                          {r}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <FormControlLabel
                         sx={{ m: 0 }}

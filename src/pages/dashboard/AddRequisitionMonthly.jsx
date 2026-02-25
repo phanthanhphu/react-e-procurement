@@ -94,11 +94,11 @@ const pickHanaSAPCode = (supplierData) =>
   supplierData?.hana ||
   '';
 
-// ✅ PATCH: helper pick first non-empty string
+// helper pick first non-empty string
 const pickFirst = (...vals) =>
   vals.find((v) => typeof v === 'string' && v.trim() !== '') || '';
 
-/** ✅ NEW: prefill target enum */
+/** prefill target enum */
 const PREFILL = {
   SAP: 'sap',
   HANA: 'hana',
@@ -133,7 +133,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
   const [formData, setFormData] = useState(defaultFormData);
 
-  // ✅ NEW: Request Unit editable (stable, not overwritten by supplier)
+  // Request Unit editable (stable, not overwritten by supplier)
   const [requestUnit, setRequestUnit] = useState('');
 
   const [deptRows, setDeptRows] = useState([{ id: '', name: '', qty: '', buy: '' }]);
@@ -164,9 +164,14 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  /** ✅ NEW: event-driven prefill (ONLY 1 input auto) */
+  /** event-driven prefill (ONLY 1 input auto) */
   const [prefillTarget, setPrefillTarget] = useState(PREFILL.SAP);
   const [prefillValue, setPrefillValue] = useState('');
+
+  // ✅ NEW: confirm-unselect when editing supplier-driven fields
+  const [openUnselectConfirm, setOpenUnselectConfirm] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState(null);
+  // pendingEdit = { type: 'form' | 'requestUnit', field, value, label }
 
   const locked = saving;
 
@@ -265,6 +270,69 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     setSnackbarSeverity(severity);
     setSnackbarOpen(true);
   }, []);
+
+  // ===== Confirm Unselect helpers =====
+  const doUnselectSupplier = useCallback(() => {
+    setFormData((prev) => ({
+      ...prev,
+      supplierId: '',
+      supplierPrice: 0,
+      productType1Id: '',
+      productType2Id: '',
+      unit: requestUnit || prev.unit || '',
+    }));
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1);
+  }, [requestUnit]);
+
+  const requestUnselectConfirm = useCallback(
+    ({ type, field, value, label }) => {
+      // Ask confirm only when supplier is selected
+      if (!formData.supplierId?.trim() && !selectedSupplier) {
+        if (type === 'requestUnit') {
+          setRequestUnit(value);
+          setFormData((prev) => ({ ...prev, unit: value }));
+        } else {
+          setFormData((prev) => ({ ...prev, [field]: value }));
+          if (field === 'itemDescriptionEN') setIsEnManuallyEdited((value || '').trim().length > 0);
+          if (field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+        }
+        return;
+      }
+
+      setPendingEdit({ type, field, value, label });
+      setOpenUnselectConfirm(true);
+    },
+    [formData.supplierId, selectedSupplier]
+  );
+
+  const handleCancelUnselect = () => {
+    setOpenUnselectConfirm(false);
+    setPendingEdit(null);
+  };
+
+  const handleOkUnselect = () => {
+    setOpenUnselectConfirm(false);
+
+    doUnselectSupplier();
+
+    if (pendingEdit) {
+      if (pendingEdit.type === 'requestUnit') {
+        setRequestUnit(pendingEdit.value);
+        setFormData((prev) => ({ ...prev, unit: pendingEdit.value }));
+      } else {
+        setFormData((prev) => ({ ...prev, [pendingEdit.field]: pendingEdit.value }));
+        if (pendingEdit.field === 'itemDescriptionEN') {
+          setIsEnManuallyEdited((pendingEdit.value || '').trim().length > 0);
+        }
+        if (pendingEdit.field === 'itemDescriptionVN') setIsEnManuallyEdited(false);
+      }
+    }
+
+    setPendingEdit(null);
+    toast('Supplier selection has been cleared. Please select a supplier again.', 'warning');
+  };
 
   // ====== calc totals ======
   const totalRequestQty = useMemo(
@@ -425,7 +493,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
     setFormData({ ...defaultFormData, groupId: groupId || '' });
 
-    // ✅ reset requestUnit
+    // reset requestUnit
     setRequestUnit('');
     setFormData((prev) => ({ ...prev, unit: '' }));
 
@@ -438,6 +506,9 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
     setIsEnManuallyEdited(false);
     setConfirmOpen(false);
+
+    setOpenUnselectConfirm(false);
+    setPendingEdit(null);
 
     // reset files
     setFiles([]);
@@ -541,92 +612,113 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   /**
    * Selecting supplier:
    * - auto fill SAP/Hana + price + product type
-   * - ✅ IMPORTANT: unit ALWAYS keep requestUnit (DO NOT overwrite)
-   * - ✅ PATCH: overwrite 4 UI fields (SAP/Hana/VN/EN)
+   * - unit ALWAYS keep requestUnit
+   * - overwrite 4 UI fields (SAP/Hana/VN/EN)
    */
-  const handleSelectSupplier = (supplierData) => {
-    if (!supplierData) {
-      setFormData((prev) => ({
-        ...prev,
-        oldSAPCode: '',
-        hanaSAPCode: '',
-        supplierId: '',
-        unit: requestUnit || '',
-        supplierPrice: 0,
-        productType1Id: '',
-        productType2Id: '',
-      }));
-      setSelectedSupplier(null);
-      setShowSupplierSelector(true);
-      setSupplierSelectorKey((k) => k + 1);
-      return;
-    }
-
-    const price = parseFloat(supplierData.supplierPrice) || 0;
-    const hana = pickHanaSAPCode(supplierData);
-
-    // ✅ PATCH: lấy VN/EN từ supplierData (đa key cho chắc)
-    const vn = pickFirst(
-      supplierData.itemDescriptionVN,
-      supplierData.vietnameseName,
-      supplierData.descriptionVN,
-      supplierData.descriptionVn,
-      supplierData.vnDescription,
-      supplierData.nameVN,
-      supplierData.itemDescription
-    );
-
-    const en = pickFirst(
-      supplierData.itemDescriptionEN,
-      supplierData.englishName,
-      supplierData.descriptionEN,
-      supplierData.descriptionEn,
-      supplierData.enDescription,
-      supplierData.nameEN
-    );
-
+const handleSelectSupplier = (supplierData) => {
+  if (!supplierData) {
     setFormData((prev) => ({
       ...prev,
-      supplierId: supplierData.supplierId || '',
-      supplierPrice: price,
-      productType1Id: supplierData.productType1Id || '',
-      productType2Id: supplierData.productType2Id || '',
-
-      // ✅ PATCH: overwrite 4 fields giống EditDialog
-      oldSAPCode: supplierData.oldSapCode || '',
-      hanaSAPCode: hana || '',
-      itemDescriptionVN: vn || '',
-      itemDescriptionEN: en || '',
-
-      // ✅ keep requestUnit as unit
-      unit: requestUnit || prev.unit || '',
+      oldSAPCode: '',
+      hanaSAPCode: '',
+      supplierId: '',
+      unit: '',                 // clear unit
+      supplierPrice: 0,
+      productType1Id: '',
+      productType2Id: '',
     }));
+    setRequestUnit('');         // clear Request Unit
+    setSelectedSupplier(null);
+    setShowSupplierSelector(true);
+    setSupplierSelectorKey((k) => k + 1);
+    return;
+  }
 
-    setSelectedSupplier({
-      supplierName: supplierData.supplierName || 'Unknown',
-      sapCode: supplierData.oldSapCode || '',
-      hanaSapCode: hana || '',
-      price,
-      unit: requestUnit || '',
-      currency: supplierData.currency || groupCurrency,
-    });
+  const price = parseFloat(supplierData.supplierPrice) || 0;
+  const hana = pickHanaSAPCode(supplierData);
 
-    // ✅ Supplier overwrite EN => reset manual flag
-    setIsEnManuallyEdited(false);
+  const vn = pickFirst(
+    supplierData.itemDescriptionVN,
+    supplierData.vietnameseName,
+    supplierData.descriptionVN,
+    supplierData.descriptionVn,
+    supplierData.vnDescription,
+    supplierData.nameVN,
+    supplierData.itemDescription
+  );
 
-    // ✅ Nếu supplier có VN nhưng không có EN thì auto translate
-    if (!en && vn) {
-      debouncedTranslate(vn, '');
-    }
+  const en = pickFirst(
+    supplierData.itemDescriptionEN,
+    supplierData.englishName,
+    supplierData.descriptionEN,
+    supplierData.descriptionEn,
+    supplierData.enDescription,
+    supplierData.nameEN
+  );
 
-    setShowSupplierSelector(false);
-  };
+  // ✅ NEW: overwrite Request Unit from supplier
+  const nextUnit = (supplierData.unit || '').trim();
+  setRequestUnit(nextUnit);
+
+  setFormData((prev) => ({
+    ...prev,
+    supplierId: supplierData.supplierId || '',
+    supplierPrice: price,
+    productType1Id: supplierData.productType1Id || '',
+    productType2Id: supplierData.productType2Id || '',
+
+    // overwrite 4 fields
+    oldSAPCode: supplierData.oldSapCode || '',
+    hanaSAPCode: hana || '',
+    itemDescriptionVN: vn || '',
+    itemDescriptionEN: en || '',
+
+    // ✅ overwrite unit into formData too
+    unit: nextUnit,
+  }));
+
+  setSelectedSupplier({
+    supplierName: supplierData.supplierName || 'Unknown',
+    sapCode: supplierData.oldSapCode || '',
+    hanaSapCode: hana || '',
+    price,
+    unit: nextUnit, // ✅ keep unit here
+    currency: supplierData.currency || groupCurrency,
+  });
+
+  setIsEnManuallyEdited(false);
+
+  if (!en && vn) {
+    debouncedTranslate(vn, '');
+  }
+
+  setShowSupplierSelector(false);
+};
 
   /**
    * handleChange + push prefill
+   * ✅ ADD: confirm-unselect if supplier already selected and user edits supplier-driven fields
    */
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
+
+    const supplierDrivenFields = ['oldSAPCode', 'hanaSAPCode', 'itemDescriptionVN', 'itemDescriptionEN'];
+    if (supplierDrivenFields.includes(field) && (formData.supplierId?.trim() || selectedSupplier)) {
+      const labels = {
+        oldSAPCode: 'Old SAP Code',
+        hanaSAPCode: 'Hana SAP Code',
+        itemDescriptionVN: 'Item Description (VN)',
+        itemDescriptionEN: 'Item Description (EN)',
+      };
+
+      requestUnselectConfirm({
+        type: 'form',
+        field,
+        value: raw,
+        label: labels[field] || field,
+      });
+      return;
+    }
 
     const numberFields = new Set(['dailyMedInventory', 'supplierPrice']);
     let val = raw;
@@ -649,7 +741,6 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
       setIsEnManuallyEdited(false);
     }
 
-    // event-driven prefill for SupplierSelector
     if (showSupplierSelector) {
       const v = (raw ?? '').toString();
 
@@ -718,7 +809,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
   };
 
   /**
-   * ✅ Supplier NOT REQUIRED anymore
+   * Supplier NOT REQUIRED
    */
   const handleAddClick = () => {
     if (!String(formData.oldSAPCode || '').trim()) return toast('Old SAP Code is required', 'error');
@@ -777,16 +868,13 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
     fd.append('productType1Id', formData.productType1Id || '');
     fd.append('productType2Id', formData.productType2Id || '');
 
-    // ✅ IMPORTANT: always send requestUnit as unit
     fd.append('unit', requestUnit || '');
 
-    // NOTE: supplierPrice only meaningful if supplier selected
     fd.append('supplierPrice', Number.isFinite(+formData.supplierPrice) ? String(formData.supplierPrice) : '0');
 
     fd.append('departmentRequisitions', JSON.stringify(departmentRequisitions));
     files.forEach((f) => fd.append('files', f));
 
-    // ✅ if supplier not selected, keep BE happy
     if (!formData.supplierId) {
       fd.append('supplierName', '');
       fd.append('price', '0');
@@ -944,7 +1032,6 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
 
               <Divider sx={{ my: 1.2 }} />
 
-              {/* ✅ 3 columns: Old SAP | Hana | Request Unit */}
               <Box
                 sx={{
                   display: 'grid',
@@ -975,14 +1062,25 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                   helperText="Typing here will auto-fill Supplier search (Hana) if selector is open."
                 />
 
-                {/* ✅ NEW: Request Unit */}
+                {/* Request Unit (confirm before unselect) */}
                 <TextField
                   label="Request Unit"
                   value={requestUnit}
                   onChange={(e) => {
-                    const v = e.target.value;
-                    setRequestUnit(v);
-                    setFormData((prev) => ({ ...prev, unit: v }));
+                    const next = e.target.value;
+
+                    if ((formData.supplierId?.trim() || selectedSupplier) && next !== requestUnit) {
+                      requestUnselectConfirm({
+                        type: 'requestUnit',
+                        field: 'requestUnit',
+                        value: next,
+                        label: 'Request Unit',
+                      });
+                      return;
+                    }
+
+                    setRequestUnit(next);
+                    setFormData((prev) => ({ ...prev, unit: next }));
                   }}
                   size="small"
                   fullWidth
@@ -1042,7 +1140,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                 <Stack direction="row" spacing={1} alignItems="flex-start">
                   <InfoRoundedIcon sx={{ fontSize: 18, mt: '2px', color: alpha(theme.palette.primary.main, 0.8) }} />
                   <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    <b>Tip:</b> Khi SupplierSelector đang mở, field bạn gõ cuối cùng sẽ là field được “auto input vào search”.
+                    <b>Tip:</b> When SupplierSelector is open, the last field you typed will be used as the auto search field.
                   </Typography>
                 </Stack>
               </Box>
@@ -1108,7 +1206,7 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
                     prefillHanaCode={formData.hanaSAPCode}
                     prefillItemDescriptionVN={formData.itemDescriptionVN}
                     prefillItemDescriptionEN={formData.itemDescriptionEN}
-                    prefillUnit={(requestUnit || '').trim()} // ✅ NEW
+                    prefillUnit={(requestUnit || '').trim()}
                   />
                 </Box>
               ) : selectedSupplier ? (
@@ -1425,6 +1523,32 @@ export default function AddRequisitionMonthly({ open, onClose, onRefresh, groupI
             sx={gradientBtnSx}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ✅ CONFIRM: Unselect supplier when editing supplier-driven fields */}
+      <Dialog
+        open={openUnselectConfirm}
+        onClose={locked ? undefined : handleCancelUnselect}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Confirm change</DialogTitle>
+        <DialogContent sx={{ pt: 0.5 }}>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            You are editing <b>{pendingEdit?.label || 'this field'}</b>.
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: 13.5, color: 'text.secondary' }}>
+            If you continue, the current <b>supplier selection will be cleared</b> and you must select a supplier again.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, py: 1.6, gap: 1 }}>
+          <Button onClick={handleCancelUnselect} disabled={locked} variant="outlined" sx={outlineBtnSx}>
+            Cancel
+          </Button>
+          <Button onClick={handleOkUnselect} disabled={locked} variant="contained" sx={gradientBtnSx}>
+            OK
           </Button>
         </DialogActions>
       </Dialog>
